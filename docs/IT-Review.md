@@ -12,8 +12,9 @@ Unofficial tool - not an official KEYENCE or InnovMetric product. License: MIT.
 
 | File | Runs | Purpose |
 |---|---|---|
-| `app\VLConnector.ps1` | when the user opens it (Start menu) | Settings window and Scan window (WPF). |
-| `app\VLReplay.ps1` | started by the PolyWorks Measure macro or the Scan window | Drives AI Replay in the VL Application and exports the STL. |
+| `app\VLConnector.ps1` | when the user opens it (Start menu) | Settings window (WPF). |
+| `app\Agent.ps1` | scenario B, scanner PC: at logon (only if switched on) or from the Start menu | Notification-area agent: starts the launcher in watch mode, sends STL files to the shared folder, opens the user's reports. |
+| `app\VLReplay.ps1` | started by the PolyWorks Measure macro or by the agent (`-Watch`) | Drives AI Replay in the VL Application (or follows a replay the operator started) and exports the STL. |
 | `app\polyworks\*.pwmacro` | inside PolyWorks, when the user presses the button | Evaluation, report, network station loop. |
 | `app\polyworks\Get-MacroContext.ps1`, `Station-Step.ps1` | started by the macros | Read settings, move job files (PolyWorks macros cannot read JSON). |
 | `app\polyworks\Make-ReportLayouts.ps1` | installer / settings window | Builds the report layouts from the installed PolyWorks A4 layout. |
@@ -21,7 +22,10 @@ Unofficial tool - not an official KEYENCE or InnovMetric product. License: MIT.
 | `Install.ps1`, `Uninstall.ps1` | once, by the user | Installation, removal. |
 | `tools\Sign-Scripts.ps1` | by IT, optional | Signs the scripts with your certificate (AllSigned environments). |
 
-No service, scheduled task, driver, browser extension or autostart entry is installed.
+No service, scheduled task, driver or browser extension is installed. The only autostart is the optional
+Startup-folder shortcut of the agent (per user, switched on in the settings window). While it waits for AI
+Replay, the agent's launcher looks at the VL windows of the user's session about every 0.25 s (window list and
+texts only).
 
 ## 2. PowerShell requirements
 
@@ -61,11 +65,11 @@ It **never writes** KEYENCE files and never terminates VL.
 | `C:\ProgramData\VLConnector\` | The program (read and execute for all users; write only for administrators, SYSTEM and the installing user), `layouts\` (report layouts, writable for all users), the PolyWorks button files, `install-info.txt`. |
 | `C:\ProgramData\VLConnector\machine.json` | Optional, created by IT: settings for all users of the PC. |
 | `%APPDATA%\VLConnector\settings.json` | Settings of the user (settings window). |
-| `%LOCALAPPDATA%\VLConnector\` | `logs\` (30 days), Scan window history and outbox, station work files. |
+| `%LOCALAPPDATA%\VLConnector\` | `logs\` (30 days), agent outbox and pending list, station work files. |
 | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\VL Connector\` | Start menu entries. |
 | `Documents\VL Connector\` | Scans (STL) and, in scenario B, the received reports. |
 | PolyWorks workspace of the part | Measured pieces (copies of the template) and, by default, `Reports`/`Scans` folders next to the workspace. Templates are never modified. Pieces are removed only when the user chose to keep fewer pieces, and only pieces created by VL Connector in the same run. |
-| Shared folder (scenario B) | `jobs`, `work`, `reports`, `processed`, `failed`, `status`, `parts.csv` - see [Protocol](Protocol.md). |
+| Shared folder (scenario B) | `jobs`, `work`, `reports`, `processed`, `failed`, `status`, `programs.csv` - see [Protocol](Protocol.md). |
 
 No registry keys are written. There is no internet access and no telemetry; the only network access is the
 shared folder that the user configures for scenario B.

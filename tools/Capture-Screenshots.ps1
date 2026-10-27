@@ -25,7 +25,9 @@ $c.OpenPdf.IsChecked = $true
 $c.SharePath.Text = '\\fileserver\metrology\VLConnector'
 $c.ShareStatus.Text = 'Connected - jobs, reports and status folders are writable.'
 $c.AutoOpenReports.IsChecked = $true
-$c.PartsSummary.Text = '3 parts: ABC, BCD, Housing-12'
+$c.ProgramsSummary.Text = '3 program(s): ABC, BCD, Housing-12'
+$c.AgentAutostart.IsChecked = $true
+$c.AgentStatus.Text = 'The agent is running.'
 $c.LogFolder.Text = 'C:\Users\Operator\AppData\Local\VLConnector\logs'
 $c.Versions.Text = "VL Connector        1.0.0`nVL Application      4.6.1.6002`nPolyWorks|Inspector 26.5.0.3238 (2026 IR5)`nWindows             11 Pro 10.0.26300`nPowerShell          5.1.26100"
 $c.AboutVersion.Text = 'Version 1.0.0  -  MIT License'
@@ -49,29 +51,3 @@ foreach ($p in $pages) {
     Save-WindowImage $ui.Window $file
     $file
 }
-
-# scan window (network scenario) with sample values
-$k = Import-Window 'ScanWindow.xaml'
-$kc = $k.Controls
-$kc.AppIcon.Source = Get-AppImage 'VLC_icon_256.png'
-$kc.ShareText.Text = 'Shared folder: \\fileserver\metrology\VLConnector'
-$kc.PartList.ItemsSource = @('ABC', 'Housing-12', 'Bracket-7')
-$kc.PartList.SelectedIndex = 0
-$kc.PartInfo.Text = 'VL program: ABC.vld4    Template: ABC'
-$kc.StateText.Text = 'Position 2 of 3: place the part and press Measure in VL.'
-$kc.StartScan.IsEnabled = $false
-$kc.CancelScan.IsEnabled = $true
-$kc.StationDot.Fill = Get-Brush 'SuccessBrush'
-$kc.StationText.Text = 'Station online: PW-STATION'
-$row = { param($t, $p, $s, $sum, $tone, $pdf) [pscustomobject]@{ Time = $t; Part = $p; State = $s; Summary = $sum; Pdf = 'x'
-    PdfVisibility = $(if ($pdf) { 'Visible' } else { 'Collapsed' }); Fore = Get-Brush "${tone}Brush"; Back = $(if ($tone -eq 'Accent') { Get-Brush 'AccentLightBrush' } else { Get-Brush "${tone}BackBrush" }) } }
-$kc.History.ItemsSource = @(
-    (& $row '10:42' 'ABC' 'Scanning' 'VL program ABC.vld4' 'Accent' $false),
-    (& $row '10:37' 'ABC' 'OK' 'all 13 controls within tolerance' 'Success' $true),
-    (& $row '10:31' 'Housing-12' 'NOK' '2 of 21 controls out of tolerance, 0 not measured' 'Error' $true),
-    (& $row '10:24' 'ABC' 'OK' 'all 13 controls within tolerance (1 in the warning zone)' 'Success' $true)
-)
-$kc.HistoryEmpty.Visibility = 'Collapsed'
-$file = Join-Path $OutDir 'scan-window.png'
-Save-WindowImage $k.Window $file 980 700
-$file

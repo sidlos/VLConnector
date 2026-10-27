@@ -68,13 +68,14 @@ Describe 'network job protocol' {
         $id | Should Match '_Part-A-1-left_'
         Test-VlcJobId '..\evil_job' | Should Be $false
     }
-    It 'prepares the shared folder' {
+    It 'prepares the shared folder and the programs list' {
         (Test-VlcShare $share).Ok | Should Be $true
-        Save-VlcParts $share @([pscustomobject]@{ Part = 'ABC'; Workspace = $workspace; Template = 'ABC'; VlProgram = 'abc.vld4'; Options = '-Mode Standard' })
-        (Get-VlcParts $share)[0].Options | Should Be '-Mode Standard'
+        Save-VlcPrograms $share @([pscustomobject]@{ Program = 'ABC'; Workspace = $workspace; Template = 'ABC template' })
+        (Find-VlcProgram $share 'C:\VL\Programs\abc.vld4').Template | Should Be 'ABC template'
+        Find-VlcProgram $share 'other.vld4' | Should Be $null
     }
-    It 'refuses parts list values with separators' {
-        { Save-VlcParts $share @([pscustomobject]@{ Part = 'A;B'; Workspace = $workspace; Template = 'T'; VlProgram = ''; Options = '' }) } | Should Throw
+    It 'refuses programs list values with separators' {
+        { Save-VlcPrograms $share @([pscustomobject]@{ Program = 'A;B'; Workspace = $workspace; Template = 'T' }) } | Should Throw
     }
 
     $id = New-VlcJobId 'ABC'
@@ -96,7 +97,7 @@ Describe 'network job protocol' {
     It 'lets the station claim and check the job' {
         $next = Get-VlcNextJob $share
         $next.JobId | Should Be $id
-        $next.Part.Template | Should Be 'ABC'
+        $next.Map.Template | Should Be 'ABC template'
         Test-Path (Join-Path $share "work\$id.stl") | Should Be $true
         Test-Path (Join-Path $share "jobs\$id.job") | Should Be $false
     }
@@ -124,11 +125,11 @@ Describe 'network job protocol' {
         Test-Path (Join-Path $share "failed\$id3.job") | Should Be $true
         (Read-KeyValueFile (Join-Path $share "reports\$id3.result")).MESSAGE | Should Match 'differs'
     }
-    It 'sends a job of an unknown part to failed' {
+    It 'sends a job of an unknown VL program to failed' {
         $id4 = New-VlcJobId 'XYZ'
         [void](New-VlcOutboxJob $id4 'XYZ' $stl 'xyz.vld4'); [void](Send-VlcOutbox $share)
         Get-VlcNextJob $share | Should Be $null
-        (Read-KeyValueFile (Join-Path $share "reports\$id4.result")).MESSAGE | Should Match 'not in the parts list'
+        (Read-KeyValueFile (Join-Path $share "reports\$id4.result")).MESSAGE | Should Match 'not in the programs list'
     }
     It 'recognizes complete and truncated PDF and STL files' {
         $p1 = Join-Path $root 'ok.pdf'; New-TestPdf $p1

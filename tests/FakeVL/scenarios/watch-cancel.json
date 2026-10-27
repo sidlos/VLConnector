@@ -1,0 +1,12 @@
+{
+    "prestartFakeVl":  true,
+    "launcher":  { "watch":  true },
+    "cancelAfterSec":  4,
+    "flavors":  [ "en" ],
+    "expect":  {
+                   "state":  "CANCELLED",
+                   "exitCode":  2,
+                   "maxSeconds":  15,
+                   "eventsExclude":  [ "click:ai-replay" ]
+               }
+}

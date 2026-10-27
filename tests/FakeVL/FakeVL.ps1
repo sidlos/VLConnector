@@ -1,4 +1,4 @@
-<#
+﻿<#
   FakeVL.ps1 - test stand-in for the KEYENCE VL-800 "VL Application" (tests only, never shipped).
 
   It shows WinForms windows with the window titles and WinForms control names the launcher drives
@@ -89,14 +89,53 @@ namespace FakeVlNative
     // A real Open / Save As dialog on its own STA thread.
     public class AsyncFileDialog
     {
+        delegate bool EnumProc(IntPtr h, IntPtr l);
+        [DllImport("user32.dll")] static extern bool EnumThreadWindows(uint tid, EnumProc cb, IntPtr l);
+        [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumProc cb, IntPtr l);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
+        [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr h);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, string l);
+        [DllImport("user32.dll")] static extern IntPtr GetDlgItem(IntPtr h, int id);
+        [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+        [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+
         public volatile bool Done;
         public volatile bool Ok;
         public volatile string FileName = "";
+        private volatile uint threadId;
+
+        static string ClassOf(IntPtr h) { var sb = new System.Text.StringBuilder(64); GetClassName(h, sb, 64); return sb.ToString(); }
+
+        // Simulated operator: types the file name into the File name box (press: also presses Open).
+        public bool Fill(string path, bool press)
+        {
+            if (threadId == 0 || Done) return false;
+            bool hit = false;
+            EnumThreadWindows(threadId, delegate(IntPtr dlg, IntPtr l)
+            {
+                if (ClassOf(dlg) != "#32770" || !IsWindowVisible(dlg)) return true;
+                IntPtr edit = IntPtr.Zero;
+                EnumChildWindows(dlg, delegate(IntPtr c, IntPtr l2)
+                {
+                    if (edit == IntPtr.Zero && ClassOf(c) == "Edit" && IsWindowVisible(c) && ClassOf(GetParent(c)) == "ComboBox") edit = c;
+                    return true;
+                }, IntPtr.Zero);
+                if (edit == IntPtr.Zero) return true;
+                if (!string.IsNullOrEmpty(path)) SendMessage(edit, 0x000C, IntPtr.Zero, path);
+                IntPtr ok = GetDlgItem(dlg, 1);
+                if (!press) { hit = true; return true; }
+                if (ok != IntPtr.Zero) { PostMessage(ok, 0x00F5, IntPtr.Zero, IntPtr.Zero); hit = true; }
+                return true;
+            }, IntPtr.Zero);
+            return hit;
+        }
 
         public AsyncFileDialog(IntPtr owner, bool save, string title, string filter)
         {
             Thread t = new Thread(delegate()
             {
+                threadId = GetCurrentThreadId();
                 FileDialog d = save ? (FileDialog)new SaveFileDialog() : (FileDialog)new OpenFileDialog();
                 d.Title = title;
                 d.Filter = filter;
@@ -134,6 +173,7 @@ $defaults = [ordered]@{
     exportFailCount     = 0       # the first N STL exports fail with an error message box
     operatorModeSec     = 0       # simulated operator picks the replay mode after this delay; 0 = never
     operatorMode        = 'Standard'
+    operatorStartSec    = 0       # simulated operator starts AI Replay himself after this delay (watch mode); 0 = never
     corruptStlAfterSec  = 0       # truncate the exported STL after this delay (tests the check before closing)
     triangles           = 2000
     dataName            = 'demo'
@@ -312,6 +352,21 @@ function Select-Mode([string]$Mode) {
     Write-Event "mode:$Mode"
     $script:chosenMode = $Mode
     $script:openDialog = New-Object FakeVlNative.AsyncFileDialog($script:main.Handle, $false, 'Open File', 'VL program (*.vld4)|*.vld4|All files (*.*)|*.*')
+    if ($script:operatorStarted -and $env:FAKEVL_PROGRAM) {
+        $script:fillTries = 0
+        # like an operator: type the program, look at it for a second, press Open
+        $script:fillProgram = {
+            if ($script:openDialog.Fill($env:FAKEVL_PROGRAM, $false)) {
+                Write-Event "operator:program:$env:FAKEVL_PROGRAM"
+                Invoke-After 1.0 { [void]$script:openDialog.Fill($null, $true) }
+            }
+            else {
+                $script:fillTries++
+                if ($script:fillTries -lt 20) { Invoke-After 0.5 $script:fillProgram }
+            }
+        }
+        Invoke-After 1.5 $script:fillProgram
+    }
     Invoke-WhenDone $script:openDialog {
         if ($script:openDialog.Ok) { Open-Program $script:openDialog.FileName }
         else { Set-StartScreen 'open-cancelled' }
@@ -488,7 +543,9 @@ function Complete-StlExport {
         Invoke-WhenDone $script:failBox { $script:main.Enabled = $true; $script:exportBusy = $false }
         return
     }
-    if ($script:exportBinary) { Write-BinaryStl $path ([int]$cfg.triangles) }
+    # FAKEVL_STL: "export" a copy of a real scan (end-to-end tests with PolyWorks)
+    if ($script:exportBinary -and $env:FAKEVL_STL -and (Test-Path -LiteralPath $env:FAKEVL_STL)) { Copy-Item -LiteralPath $env:FAKEVL_STL -Destination $path -Force }
+    elseif ($script:exportBinary) { Write-BinaryStl $path ([int]$cfg.triangles) }
     else { [IO.File]::WriteAllText($path, "solid fakevl`r`nendsolid fakevl`r`n") }
     Write-OperationLog 'Finish STL Export'
     Write-Event "exported:$path"
@@ -567,6 +624,14 @@ else {
     $script:stlItem.Enabled = $false
     $script:saveAsItem.Enabled = $false
     Invoke-After ([double]$cfg.startupSec) { $script:replayButton.Visible = $true; Write-Event 'start-screen:ready' }
+    $script:operatorStarted = $false
+    if ([double]$cfg.operatorStartSec -gt 0) {
+        Invoke-After ([double]$cfg.startupSec + [double]$cfg.operatorStartSec) {
+            $script:operatorStarted = $true
+            Write-Event 'operator:start-replay'
+            $script:replayButton.PerformClick()
+        }
+    }
 }
 $timer.Start()
 [Windows.Forms.Application]::Run($script:main)

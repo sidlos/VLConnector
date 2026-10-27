@@ -10,9 +10,9 @@ press one button, scan the part in VL as usual, and get an A4 PDF report with a 
 
 | | Scenario A: PolyWorks on the scanner PC | Scenario B: PolyWorks on another PC |
 |---|---|---|
-| Start | **Measure** button in PolyWorks | **Scan** window on the scanner PC |
-| Scan | AI Replay in VL, STL exported automatically | the same |
-| Evaluation | in the same PolyWorks | a PolyWorks **station** takes the STL from a shared network folder |
+| Start | **Measure** button in PolyWorks (the template knows its VL program) | AI Replay in VL as usual - the **VL Connector agent** waits in the background |
+| Scan | AI Replay in VL, STL exported automatically | the same; the STL is named after the .vld4 program plus date and time |
+| Evaluation | in the same PolyWorks | a PolyWorks **station** takes the STL from a shared network folder and picks the template by the VL program |
 | Report | PDF and CSV, opened automatically | the PDF comes back and opens only on the PC that scanned the part |
 
 For each part, a PolyWorks template holds the CAD, alignment and controls. VL Connector copies the template into a
@@ -32,7 +32,8 @@ is never changed.
 1. Check the download: the SHA-256 of the ZIP must match `SHA256SUMS.txt` (PowerShell: `Get-FileHash <zip>`).
 2. Extract the ZIP and run **Install.cmd**. It checks every file, shows the package fingerprint (compare it
    with the one you received), installs to `C:\ProgramData\VLConnector` and creates the Start menu entries.
-3. Open **VL Connector** from the Start menu, choose the scenario and follow the Setup page.
+3. Open **VL Connector** from the Start menu, choose the scenario and follow the Setup page. The settings
+   window only holds settings (modes, options, start with Windows); scanning stays in VL and evaluating in PolyWorks.
 
 Update: run Install.cmd of the new version (settings, report layouts and the PolyWorks buttons stay).
 Uninstall: Start menu > Uninstall VL Connector.

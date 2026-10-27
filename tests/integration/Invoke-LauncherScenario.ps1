@@ -96,6 +96,7 @@ function New-StartInfo([string]$File, [string]$Arguments) {
     $psi.CreateNoWindow = $true
     $psi.EnvironmentVariables['APPDATA'] = $appData
     $psi.EnvironmentVariables['LOCALAPPDATA'] = $localData
+    $psi.EnvironmentVariables['FAKEVL_PROGRAM'] = $program
     return $psi
 }
 
@@ -103,7 +104,7 @@ function New-StartInfo([string]$File, [string]$Arguments) {
 if ($scenario.prestartFakeVl) {
     [void][Diagnostics.Process]::Start((New-StartInfo $fakeExe $fakeArgs))
     $deadline = (Get-Date).AddSeconds(30)
-    while ((Get-Date) -lt $deadline -and -not ((Test-Path -LiteralPath $events) -and (Get-Content -LiteralPath $events -Raw) -match 'data-loaded')) { Start-Sleep -Milliseconds 200 }
+    while ((Get-Date) -lt $deadline -and -not ((Test-Path -LiteralPath $events) -and (Get-Content -LiteralPath $events -Raw) -match 'data-loaded|start-screen:ready')) { Start-Sleep -Milliseconds 200 }
     Start-Sleep -Seconds 1
 }
 
@@ -117,7 +118,8 @@ if ($scenario.holdMutex) {
 
 $a = $fl.Args
 $launcherArgs = New-Object Collections.Generic.List[string]
-if (-not ($scenario.launcher -and $scenario.launcher.exportOnly)) { $launcherArgs.Add($program) }
+if (-not ($scenario.launcher -and ($scenario.launcher.exportOnly -or $scenario.launcher.watch))) { $launcherArgs.Add($program) }
+if ($scenario.launcher -and $scenario.launcher.watch) { $launcherArgs.Add('-Watch') }
 $launcherArgs.AddRange([string[]]@($a.Out, $out, $a.Marker, $marker, $a.Timeout, '3', '-VlExe', $fakeExe))
 $opt = $scenario.launcher
 if ($Flavor -eq 'en') {

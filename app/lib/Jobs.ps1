@@ -1,4 +1,5 @@
-# Jobs of the network scenario (scanner PC -> shared folder -> PolyWorks station -> PDF back).
+# Jobs of the network scenario (scanner PC -> shared folder -> PolyWorks station -> PDF back). The job
+# carries the VL program of the scan; the station finds the template for it in programs.csv.
 # Dot-source this file; it needs lib\Settings.ps1, lib\KeyValueFile.ps1 and lib\Share.ps1. See docs\Protocol.md.
 #
 # Scanner PC: the STL goes to the local outbox first, then to <share>\jobs (<JobId>.stl, then <JobId>.job,
@@ -206,10 +207,11 @@ function Get-VlcNextJob([string]$Share) {
                 throw 'The STL differs from the one the scanner PC sent.'
             }
             if (-not (Test-BinaryStlFile $stlWork)) { throw 'The STL is not a complete binary STL.' }
-            $part = @(Get-VlcParts $Share | Where-Object { $_.Part -eq $j.PART })[0]
-            if (-not $part) { throw "The part '$($j.PART)' is not in the parts list (parts.csv)." }
-            if (-not (Test-Path -LiteralPath $part.Workspace)) { throw "The workspace $($part.Workspace) of part '$($j.PART)' was not found on this station." }
-            return [pscustomobject]@{ JobId = $id; Job = $j; Part = $part; Stl = $stlWork; JobFile = $claimed }
+            $program = [IO.Path]::GetFileNameWithoutExtension([string]$j.PROGRAM)
+            $map = Find-VlcProgram $Share $program
+            if (-not $map) { throw "The VL program '$program' is not in the programs list of the shared folder (programs.csv)." }
+            if (-not (Test-Path -LiteralPath $map.Workspace)) { throw "The workspace $($map.Workspace) of VL program '$program' was not found on this station." }
+            return [pscustomobject]@{ JobId = $id; Job = $j; Map = $map; Stl = $stlWork; JobFile = $claimed }
         }
         catch {
             Complete-VlcJob $Share $id ([ordered]@{ STATE = 'ERROR'; VERDICT = ''; SUMMARY = ''; MESSAGE = $_.Exception.Message }) '' ''

@@ -54,9 +54,18 @@ function Get-VlcStatusItems($Settings) {
             $level = if ($test.Ok) { 'Ok' } else { 'Error' }
             $items.Add((New-VlcStatusItem 'share' $level "Shared folder $share" $test.Text $(if ($test.Ok) { '' } else { 'Set up' })))
             if ($test.Ok) {
-                $parts = @(Get-VlcParts $share)
-                if ($parts.Count) { $items.Add((New-VlcStatusItem 'parts' 'Ok' "$($parts.Count) part(s) in the parts list" (($parts | Select-Object -First 4 | ForEach-Object Part) -join ', '))) }
-                else { $items.Add((New-VlcStatusItem 'parts' 'Warning' 'Parts list is empty' 'Add the parts on the Network page.' 'Edit list')) }
+                $programs = @(Get-VlcPrograms $share)
+                if ($programs.Count) { $items.Add((New-VlcStatusItem 'programs' 'Ok' "$($programs.Count) VL program(s) in the programs list" (($programs | Select-Object -First 4 | ForEach-Object Program) -join ', '))) }
+                else { $items.Add((New-VlcStatusItem 'programs' 'Warning' 'Programs list is empty' 'Add which PolyWorks template evaluates each VL program (page Network).' 'Edit list')) }
+            }
+            if (-not $station) {
+                $auto = Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('Startup')) 'VL Connector agent.lnk')
+                $running = $false
+                $m = $null
+                if ([System.Threading.Mutex]::TryOpenExisting('Local\VLConnector_Agent', [ref]$m)) { $m.Dispose(); $running = $true }
+                if ($running -and $auto) { $items.Add((New-VlcStatusItem 'agent' 'Ok' 'Agent running' 'It exports the STL after each AI Replay and opens the report. Starts with Windows.')) }
+                elseif ($running) { $items.Add((New-VlcStatusItem 'agent' 'Warning' 'Agent running, but not started with Windows' 'Switch on "Start with Windows" on the Network page.' 'Set up')) }
+                else { $items.Add((New-VlcStatusItem 'agent' 'Warning' 'Agent not running' 'Without the agent no STL is exported after AI Replay. Start it on the Network page.' 'Set up')) }
             }
         }
     }

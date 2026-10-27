@@ -16,8 +16,8 @@
     3. limits write access to the install folder to administrators, SYSTEM and the installing user
        (all users may only read and run it; the report layouts folder stays writable for all users),
     4. creates the PolyWorks button files (Measure, Station) and, when PolyWorks is installed, the report layouts,
-    5. creates the Start menu entries VL Connector (settings), VL Connector - Scan (network scenario) and
-       Uninstall VL Connector.
+    5. creates the Start menu entries VL Connector (settings), VL Connector agent (network scenario) and
+       Uninstall VL Connector. The agent starts with Windows only when you switch it on in the settings.
 #>
 param(
     [string]$InstallDir = (Join-Path $env:ProgramData 'VLConnector'),
@@ -93,8 +93,14 @@ if (-not $Quiet) {
     if ($answer -and $answer -notmatch '^[YyAa]') { Say 'Cancelled. Nothing was installed.'; exit 2 }
 }
 
-# 2) copy
+# 2) copy (a running agent of this user is stopped first and started again at the end)
 Say "2/5  Copying to $InstallDir ..."
+$agentWasRunning = $false
+$stopAgent = $null
+if ([System.Threading.EventWaitHandle]::TryOpenExisting('Local\VLConnector_AgentStop', [ref]$stopAgent)) {
+    [void]$stopAgent.Set(); $stopAgent.Dispose(); $agentWasRunning = $true; Start-Sleep -Seconds 3
+    Say '     The running agent was stopped for the update.'
+}
 try {
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     foreach ($old in 'app', 'docs', 'tools') {
@@ -150,7 +156,7 @@ $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $icon = Join-Path $app 'assets\VLC_icon.ico'
 $entries = [ordered]@{
     'VL Connector'           = @{ Args = "-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File `"$app\VLConnector.ps1`""; Description = 'VL Connector for PolyWorks - settings' }
-    'VL Connector - Scan'    = @{ Args = "-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File `"$app\VLConnector.ps1`" -Show Scan"; Description = 'VL Connector - scan window (network scenario, scanner PC)' }
+    'VL Connector agent'     = @{ Args = "-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File `"$app\Agent.ps1`""; Description = 'VL Connector agent - exports the STL after AI Replay and opens the reports (network scenario, scanner PC)' }
 }
 foreach ($name in $entries.Keys) {
     $lnk = $shell.CreateShortcut((Join-Path $menu "$name.lnk"))
@@ -170,6 +176,7 @@ $lnk.Description = 'Removes VL Connector for PolyWorks from this PC'
 $lnk.Save()
 Say "     $menu" Green
 
+if ($agentWasRunning) { Start-Process -FilePath $ps -ArgumentList $entries['VL Connector agent'].Args -WindowStyle Hidden; Say '     Agent started again.' Green }
 [IO.File]::WriteAllText((Join-Path $InstallDir 'install-info.txt'), ("VERSION={0}`r`nINSTALLED={1:yyyy-MM-dd HH:mm:ss}`r`nUSER={2}`r`nCOMPUTER={3}`r`nFINGERPRINT={4}`r`n" -f $version, (Get-Date), $env:USERNAME, $env:COMPUTERNAME, $check.Fingerprint))
 Say ''
 Say "VL Connector $version is installed." Green

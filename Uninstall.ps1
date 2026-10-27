@@ -23,6 +23,9 @@ if (-not $Quiet) {
     if ($answer -notmatch '^[YyAa]') { Write-Host 'Cancelled.'; exit 2 }
 }
 
+# stop a running agent of this user first (it runs from the program folder)
+$stopAgent = $null
+if ([System.Threading.EventWaitHandle]::TryOpenExisting('Local\VLConnector_AgentStop', [ref]$stopAgent)) { [void]$stopAgent.Set(); $stopAgent.Dispose(); Start-Sleep -Seconds 3; Write-Host 'Agent stopped.' }
 foreach ($root in [Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('CommonPrograms')) {
     $menu = Join-Path $root 'VL Connector'
     if (Test-Path -LiteralPath $menu) {

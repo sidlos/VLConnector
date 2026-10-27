@@ -90,14 +90,47 @@ function Update-PolyWorksPage {
     }
 }
 
-function Update-PartsSummary([string]$Share) {
+function Update-ProgramsSummary([string]$Share) {
     $c = $script:sc
-    if (-not $Share) { $c.PartsSummary.Text = 'Which VL program and which PolyWorks template belong to each part.'; return }
+    if (-not $Share) { $c.ProgramsSummary.Text = 'Which PolyWorks template evaluates the scans of each VL program (.vld4).'; return }
     try {
-        $parts = @(Get-VlcParts $Share)
-        $c.PartsSummary.Text = if ($parts.Count) { "$($parts.Count) part(s): " + (($parts | Select-Object -First 5 | ForEach-Object Part) -join ', ') } else { 'No parts yet.' }
+        $programs = @(Get-VlcPrograms $Share)
+        $c.ProgramsSummary.Text = if ($programs.Count) { "$($programs.Count) program(s): " + (($programs | Select-Object -First 5 | ForEach-Object Program) -join ', ') } else { 'No programs yet.' }
     }
-    catch { $c.PartsSummary.Text = "The parts list cannot be read: $($_.Exception.Message)" }
+    catch { $c.ProgramsSummary.Text = "The programs list cannot be read: $($_.Exception.Message)" }
+}
+
+function Get-AgentShortcutPath { return Join-Path ([Environment]::GetFolderPath('Startup')) 'VL Connector agent.lnk' }
+
+function Test-AgentRunning {
+    $m = $null
+    if ([System.Threading.Mutex]::TryOpenExisting('Local\VLConnector_Agent', [ref]$m)) { $m.Dispose(); return $true }
+    return $false
+}
+
+function Update-AgentStatus {
+    $script:sc.AgentStatus.Text = if (Test-AgentRunning) { 'The agent is running.' } else { 'The agent is not running.' }
+}
+
+function Start-VlcAgent {
+    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    Start-Process -FilePath $ps -ArgumentList '-NoProfile', '-STA', '-ExecutionPolicy', 'RemoteSigned', '-WindowStyle', 'Hidden', '-File', "`"$(Join-Path (Get-VlcPaths).AppDir 'Agent.ps1')`"" -WindowStyle Hidden
+}
+
+# Startup folder entry of the agent (no administrator rights, current user only).
+function Set-AgentAutostart([bool]$On) {
+    $lnk = Get-AgentShortcutPath
+    if (-not $On) { if (Test-Path -LiteralPath $lnk) { Remove-Item -LiteralPath $lnk -Force }; return }
+    $app = (Get-VlcPaths).AppDir
+    $shell = New-Object -ComObject WScript.Shell
+    $s = $shell.CreateShortcut($lnk)
+    $s.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $s.Arguments = "-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File `"$app\Agent.ps1`""
+    $s.WorkingDirectory = $app
+    $s.IconLocation = "$app\assets\VLC_icon.ico,0"
+    $s.Description = 'VL Connector agent - exports the STL after AI Replay and opens the reports'
+    $s.WindowStyle = 7
+    $s.Save()
 }
 
 function Invoke-StatusAction([string]$Id) {
@@ -110,7 +143,8 @@ function Invoke-StatusAction([string]$Id) {
         'layouts' { Show-SettingsPage 'PolyWorks' }
         'button' { Show-SettingsPage 'PolyWorks' }
         'share' { Show-SettingsPage 'Network' }
-        'parts' { Show-SettingsPage 'Network' }
+        'programs' { Show-SettingsPage 'Network' }
+        'agent' { Show-SettingsPage 'Network' }
     }
 }
 
@@ -154,7 +188,9 @@ function Show-SettingsWindow {
     $c.LogFolder.Text = $paths.LogDir
     $c.Versions.Text = Get-VlcVersionsText $cfg
     Update-PolyWorksPage
-    Update-PartsSummary ([string]$cfg.network.share)
+    Update-ProgramsSummary ([string]$cfg.network.share)
+    $c.AgentAutostart.IsChecked = Test-Path -LiteralPath (Get-AgentShortcutPath)
+    Update-AgentStatus
 
     # --- navigation -----------------------------------------------------------------------------
     foreach ($p in $script:SettingsPages) { $c["Nav$p"].Add_Checked({ Show-SettingsPage ($this.Name -replace '^Nav', '') }) }
@@ -230,11 +266,11 @@ function Show-SettingsWindow {
     # --- Network --------------------------------------------------------------------------------
     $c.SharePath.Add_LostFocus({
         $path = $this.Text.Trim()
-        if ($path -ne [string](Read-VlcSettings).network.share) { Save-SettingValue 'network.share' $path; Update-PartsSummary $path }
+        if ($path -ne [string](Read-VlcSettings).network.share) { Save-SettingValue 'network.share' $path; Update-ProgramsSummary $path }
     })
     $c.ShareBrowse.Add_Click({
         $f = Select-VlcFolder $script:sc.SharePath.Text
-        if ($f) { $script:sc.SharePath.Text = $f; Save-SettingValue 'network.share' $f; Update-PartsSummary $f }
+        if ($f) { $script:sc.SharePath.Text = $f; Save-SettingValue 'network.share' $f; Update-ProgramsSummary $f }
     })
     $c.ShareTest.Add_Click({
         $path = $script:sc.SharePath.Text.Trim()
@@ -246,16 +282,27 @@ function Show-SettingsWindow {
             $script:sc.ShareStatus.Text = if ($ErrorText) { $ErrorText } else { $r.Text }
             $script:sc.ShareStatus.Foreground = if ($r -and $r.Ok) { Get-Brush 'SuccessBrush' } else { Get-Brush 'ErrorBrush' }
             $script:sc.ShareTest.IsEnabled = $true
-            Update-PartsSummary $script:sc.SharePath.Text.Trim()
+            Update-ProgramsSummary $script:sc.SharePath.Text.Trim()
         }
     })
     $c.AutoOpenReports.Add_Checked({ Save-SettingValue 'network.autoOpenReports' $true }); $c.AutoOpenReports.Add_Unchecked({ Save-SettingValue 'network.autoOpenReports' $false })
-    $c.EditParts.Add_Click({
+    $c.AgentAutostart.Add_Checked({ try { Set-AgentAutostart $true; Show-SettingsToast 'The agent starts with Windows' } catch { Show-SettingsToast "Not saved: $($_.Exception.Message)" } })
+    $c.AgentAutostart.Add_Unchecked({ try { Set-AgentAutostart $false; Show-SettingsToast 'The agent no longer starts with Windows' } catch { Show-SettingsToast "Not saved: $($_.Exception.Message)" } })
+    $c.StartAgent.Add_Click({
+        if (Test-AgentRunning) { Show-SettingsToast 'The agent is already running'; return }
+        Start-VlcAgent
+        Show-SettingsToast 'Agent started'
+        $t = New-Object System.Windows.Threading.DispatcherTimer
+        $t.Interval = [TimeSpan]::FromSeconds(3)
+        $t.Add_Tick({ $this.Stop(); Update-AgentStatus })
+        $t.Start()
+    })
+    $c.EditPrograms.Add_Click({
         $share = $script:sc.SharePath.Text.Trim()
         if (-not $share) { Show-SettingsToast 'Enter the shared folder first'; return }
-        $file = Get-VlcPartsFile $share
+        $file = Get-VlcProgramsFile $share
         try {
-            if (-not (Test-Path -LiteralPath $file)) { Save-VlcParts $share @() }
+            if (-not (Test-Path -LiteralPath $file)) { Save-VlcPrograms $share @() }
             Start-Process -FilePath 'notepad.exe' -ArgumentList "`"$file`""
         }
         catch { [void][System.Windows.MessageBox]::Show($script:sw, $_.Exception.Message, 'VL Connector', 'OK', 'Warning') }

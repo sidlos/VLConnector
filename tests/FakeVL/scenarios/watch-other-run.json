@@ -1,0 +1,14 @@
+{
+    "prestartFakeVl":  true,
+    "holdMutex":  true,
+    "launcher":  { "watch":  true },
+    "fakevl":  { "operatorStartSec":  2, "operatorModeSec":  0.8, "operatorMode":  "Standard" },
+    "cancelAfterSec":  30,
+    "flavors":  [ "en" ],
+    "expect":  {
+                   "state":  "CANCELLED",
+                   "exitCode":  2,
+                   "eventsExclude":  [ "exported:" ],
+                   "logIncludes":  [ "belongs to another VL Connector run" ]
+               }
+}

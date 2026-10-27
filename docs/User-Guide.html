@@ -35,21 +35,21 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <li><a href="#3-the-settings-window">The settings window</a></li>
 <li><a href="#4-part-templates-in-polyworks">Part templates in PolyWorks</a></li>
 <li><a href="#5-scenario-a-the-measure-button">Scenario A: the Measure button</a></li>
-<li><a href="#6-scenario-b-network-folder-station-and-scan-window">Scenario B: network folder, station and Scan window</a></li>
+<li><a href="#6-scenario-b-network-folder-station-and-agent">Scenario B: network folder, station and agent</a></li>
 <li><a href="#7-options-per-part">Options per part</a></li>
 <li><a href="#8-troubleshooting">Troubleshooting</a></li>
 <li><a href="#9-support">Support</a></li>
 </ol>
 <h2 id="1-scenarios">1. Scenarios</h2>
 <p><strong>A - PolyWorks on the scanner PC.</strong> The operator opens the part template in PolyWorks|Inspector and presses <strong>Measure</strong>. VL starts AI Replay for the part; the operator scans as usual. After the last position the STL goes straight to PolyWorks, which evaluates it and shows the verdict and the report.</p>
-<p><strong>B - PolyWorks on another PC.</strong> The scanner PC has only VL and VL Connector. The operator picks the part in the <strong>Scan</strong> window and presses <strong>Start scan</strong>. The STL goes to a shared network folder, a <strong>PolyWorks station</strong> evaluates it, and the PDF report comes back and opens on the scanner PC - only the reports of scans made on that PC.</p>
+<p><strong>B - PolyWorks on another PC.</strong> The scanner PC has only VL and VL Connector. The operator scans with AI Replay in VL as usual; the VL Connector <strong>agent</strong> in the background exports the STL and sends it to a shared network folder. A <strong>PolyWorks station</strong> evaluates it with the template of the VL program, and the PDF report comes back and opens on the scanner PC - only the reports of scans made on that PC.</p>
 <h2 id="2-installation">2. Installation</h2>
 <p>You need Windows 10 or 11, the VL Application 4.6 with its <strong>English</strong> user interface (scanner PC) and PolyWorks Metrology Suite 2026 (evaluating PC). No administrator rights are needed.</p>
 <ol>
 <li>Check that the SHA-256 of the downloaded ZIP matches <code>SHA256SUMS.txt</code>: <code>Get-FileHash .\VLConnector-1.0.0.zip</code> in PowerShell.</li>
 <li>Extract the ZIP (right click &gt; Extract All) and double-click <strong>Install.cmd</strong>.</li>
 <li>The installer checks every file against its manifest and shows the <strong>package fingerprint</strong>. Compare it with the fingerprint you received with the package, then confirm.</li>
-<li>It installs to <code>C:\ProgramData\VLConnector</code> (another folder: <code>Install.cmd -InstallDir D:\VLConnector</code>), builds the report layouts from your PolyWorks installation, creates the PolyWorks button files and the Start menu entries <strong>VL Connector</strong> (settings), <strong>VL Connector - Scan</strong> and <strong>Uninstall VL Connector</strong>.</li>
+<li>It installs to <code>C:\ProgramData\VLConnector</code> (another folder: <code>Install.cmd -InstallDir D:\VLConnector</code>), builds the report layouts from your PolyWorks installation, creates the PolyWorks button files and the Start menu entries <strong>VL Connector</strong> (settings), <strong>VL Connector agent</strong> and <strong>Uninstall VL Connector</strong>.</li>
 </ol>
 <p><strong>Update:</strong> run Install.cmd of the new version. Settings, report layouts and the imported PolyWorks buttons stay. <strong>Check an installation:</strong> <code>Install.cmd -Verify</code> (in the program folder) compares all files with the manifest and shows the status of the PC. <strong>Uninstall:</strong> Start menu &gt; Uninstall VL Connector. Scans, reports and PolyWorks projects are never removed.</p>
 <h2 id="3-the-settings-window">3. The settings window</h2>
@@ -60,7 +60,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <tr><td><strong>Setup</strong></td><td>Scenario A or B; in scenario B whether this PC is the scanner PC or the PolyWorks station. The status list checks this PC and offers the next step (for example <em>Build</em> for missing report layouts).</td></tr>
 <tr><td><strong>Scanning</strong></td><td>AI Replay mode (High speed, Standard, or let the operator choose in VL), export right after the scan, automatic confirmation of the stage movement, what happens to the VL window after the export, where VL programs are.</td></tr>
 <tr><td><strong>PolyWorks</strong></td><td>Report layouts, which measured pieces to keep, opening the PDF, the Measure (or Station) button.</td></tr>
-<tr><td><strong>Network</strong></td><td>The shared folder (scenario B), opening reports automatically, the parts list.</td></tr>
+<tr><td><strong>Network</strong></td><td>The shared folder (scenario B), opening reports automatically, the agent (start with Windows), the programs list.</td></tr>
 <tr><td><strong>Diagnostics</strong></td><td>Log folder, a support ZIP, versions.</td></tr>
 </table>
 <h3 id="scanning-options-in-detail">Scanning options in detail</h3>
@@ -69,7 +69,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <li><strong>Export the STL right after the scan</strong> - about 20 s faster: the STL is exported in scanner coordinates and PolyWorks pre-aligns it automatically. Switch it off to export after VL&#39;s own CAD alignment.</li>
 <li><strong>Confirm stage movement automatically</strong> - answers <em>The stage will rotate. Continue?</em> and <em>Return the stage to the origin?</em> with OK. <strong>Safety:</strong> the stage then moves without asking; make sure nothing blocks it and nobody reaches into the scanner.</li>
 <li><strong>VL window after the export</strong> - <em>Leave VL open</em>, <em>Minimize VL</em>, <em>Close VL without saving</em> or <em>Save VL data (.vld4), then close</em>. VL is closed only after the exported STL has been checked again (complete binary STL with the exported number of triangles); otherwise VL stays open and the log says why. VL is never terminated forcibly.</li>
-<li><strong>Bring the evaluation to the front</strong> - after the export the PolyWorks (or Scan) window comes to the front.</li>
+<li><strong>Bring the evaluation to the front</strong> - scenario A: after the export the PolyWorks window comes to the front.</li>
 </ul>
 <p><img src="images/settings-scanning.png" alt="Scanning page"></p>
 <h2 id="4-part-templates-in-polyworks">4. Part templates in PolyWorks</h2>
@@ -102,33 +102,34 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <li>After the last position the STL is exported, PolyWorks evaluates it (about 15-30 s) and shows the verdict. The PDF opens if this is switched on.</li>
 </ol>
 <p><strong>Keep measured pieces</strong> (page PolyWorks): <em>Every piece</em>, <em>Only NOK pieces</em> or <em>None</em> - the PDF and CSV are always kept. Pieces that are not kept are removed from the workspace after the report is created.</p>
-<h2 id="6-scenario-b-network-folder-station-and-scan-window">6. Scenario B: network folder, station and Scan window</h2>
+<h2 id="6-scenario-b-network-folder-station-and-agent">6. Scenario B: network folder, station and agent</h2>
+<p>The operator on the scanner PC works <strong>in VL as usual</strong>: AI Replay, choose the program (.vld4) in VL, scan. The <strong>VL Connector agent</strong> waits in the background and does the rest: after the last position it exports the STL (named <code>&lt;program&gt;_&lt;date&gt;_&lt;time&gt;.stl</code>), sends it to a shared folder, and opens the PDF report when the PolyWorks station has evaluated it.</p>
 <h3 id="shared-folder">Shared folder</h3>
 <p>Create a folder on a file server, e.g. <code>\\fileserver\metrology\VLConnector</code>, that the Windows users of the scanner PCs and of the station can <strong>read, create, change and delete files</strong> in. In the settings window of every PC: page <strong>Setup</strong> &gt; <em>PolyWorks on another PC</em>, page <strong>Network</strong> &gt; enter the folder &gt; <strong>Test</strong>. VL Connector creates the subfolders <code>jobs</code>, <code>work</code>, <code>reports</code>, <code>processed</code>, <code>failed</code> and <code>status</code>.</p>
-<h3 id="parts-list">Parts list</h3>
-<p>Page <strong>Network</strong> &gt; <strong>Edit list</strong> opens <code>parts.csv</code> in the shared folder. One line per part, separated by semicolons; the first line is the header:</p>
-<pre><code>Part;Workspace;Template;VlProgram;Options
-ABC;D:\PolyWorks\Parts\Parts.pwk;ABC;C:\VL\Programs\ABC.vld4;
-Housing-12;D:\PolyWorks\Parts\Parts.pwk;Housing12;Housing12.vld4;-Mode Standard</code></pre>
+<h3 id="programs-list">Programs list</h3>
+<p>The station finds the PolyWorks template of a scan by its <strong>VL program</strong>. Page <strong>Network</strong> &gt; <strong>Edit list</strong> opens <code>programs.csv</code> in the shared folder. One line per VL program, separated by semicolons; the first line is the header:</p>
+<pre><code>Program;Workspace;Template
+ABC;D:\PolyWorks\Parts\Parts.pwk;ABC
+Housing-12;D:\PolyWorks\Parts\Parts.pwk;Housing12</code></pre>
 <ul>
+<li><code>Program</code>: the name of the AI Replay program, i.e. the <code>.vld4</code> file name without <code>.vld4</code>.</li>
 <li><code>Workspace</code> and <code>Template</code>: the PolyWorks workspace on the <strong>station</strong> and the template project in it.</li>
-<li><code>VlProgram</code>: the AI Replay program on the <strong>scanner PC</strong> (a full path, or a name searched in the program folder of the settings).</li>
-<li><code>Options</code>: optional, see <a href="#7-options-per-part">Options per part</a>.</li>
 </ul>
+<h3 id="the-agent-scanner-pc">The agent (scanner PC)</h3>
+<p>On the scanner PC set the role <strong>Scanner PC</strong> (page Setup). On page <strong>Network</strong>, switch on <strong>Start the agent with Windows</strong> and press <strong>Start now</strong> once. The agent shows the VL Connector icon in the notification area; its menu shows the state (waiting for AI Replay, station online or offline), opens the last report or the reports folder, and can pause or end the agent.</p>
+<p><img src="images/settings-network.png" alt="Network page"></p>
+<p>Then scan as usual. After each AI Replay the agent:</p>
+<ol>
+<li>exports the STL (with the options of page <strong>Scanning</strong>: right after the scan or after VL&#39;s alignment, and what happens to the VL window),</li>
+<li>saves it in <code>Documents\VL Connector\Scans</code> and sends it to the shared folder - if the folder is not reachable, it waits in a local outbox and is sent automatically later,</li>
+<li>shows a notification when the station has evaluated it (<strong>OK</strong> / <strong>NOK</strong>) and opens the PDF (setting <em>Open my PDF reports automatically</em>). Reports are saved in <code>Documents\VL Connector\Reports</code>.</li>
+</ol>
+<p>Only reports of scans made on this PC are opened. An AI Replay started by the Measure button of scenario A is never exported twice.</p>
 <h3 id="the-polyworks-station">The PolyWorks station</h3>
 <p>On the station PC set the role <strong>PolyWorks station</strong> (page Setup). Then, once: import the station button into PolyWorks like the Measure button (page PolyWorks &gt; Copy macro path copies <code>VLC_Station_Button.pwmacro</code>).</p>
-<p>To run the station, open a PolyWorks|Inspector <strong>used only for the station</strong> (from the Workspace Manager as usual) and press <strong>VL Station</strong>. A small window shows the shared folder, the last job and a <strong>Stop</strong> button. The station takes the jobs one by one, evaluates each with the template from the parts list and sends the report back; it uses the PolyWorks settings of the station PC (keep pieces, report layouts, color scale). Keep the station PC logged on (a locked screen is fine) while scanning.</p>
-<h3 id="the-scan-window-scanner-pc">The Scan window (scanner PC)</h3>
-<p>Start menu &gt; <strong>VL Connector - Scan</strong>.</p>
-<p><img src="images/scan-window.png" alt="Scan window"></p>
-<ol>
-<li>Choose the part and press <strong>Start scan</strong>. VL starts AI Replay; the bar shows what VL is doing.</li>
-<li>After the last position the STL goes to the shared folder (if it is unreachable, it waits in a local outbox and is sent automatically later).</li>
-<li>The list shows each scan: <em>Sending</em>, <em>Waiting</em>, then <strong>OK</strong> / <strong>NOK</strong> / <em>Error</em>. When the report arrives it opens automatically (setting <em>Open my PDF reports automatically</em>); <strong>Open PDF</strong> opens it again. Reports are also saved in <code>Documents\VL Connector\Reports</code>.</li>
-</ol>
-<p>The dot at the top right shows whether a station is online.</p>
+<p>To run the station, open a PolyWorks|Inspector <strong>used only for the station</strong> (from the Workspace Manager as usual) and press <strong>VL Station</strong>. A small window shows the shared folder, the last job and a <strong>Stop</strong> button. The station takes the scans one by one, opens the template of the VL program from the programs list, evaluates the scan and sends the report back; it uses the PolyWorks settings of the station PC (keep pieces, report layouts, color scale). Keep the station PC logged on (a locked screen is fine) while scanning.</p>
 <h2 id="7-options-per-part">7. Options per part</h2>
-<p>The template property <code>VL options</code> (scenario A) or the <code>Options</code> column of the parts list (scenario B) overrides the settings for one part. Use any of:</p>
+<p>The template property <code>VL options</code> (scenario A) overrides the settings for one part. (In scenario B the operator starts AI Replay in VL, so the settings of the scanner PC apply.) Use any of:</p>
 <table>
 <tr><th>Option</th><th>Values</th></tr>
 <tr><td><code>-Mode</code></td><td><code>HighSpeed</code>, <code>Standard</code>, <code>Ask</code></td></tr>
@@ -151,9 +152,10 @@ Housing-12;D:\PolyWorks\Parts\Parts.pwk;Housing12;Housing12.vld4;-Mode Standard<
 <tr><td><em>PowerShell runs in ConstrainedLanguage mode</em></td><td>Ask IT: VL Connector needs FullLanguage mode (see Notes for IT).</td></tr>
 <tr><td><em>Template ... could not be opened</em></td><td>The template name or workspace is wrong, or the template is open in another PolyWorks.</td></tr>
 <tr><td>The report uses the plain PolyWorks layout</td><td>Page PolyWorks &gt; Report layouts &gt; <strong>Build</strong>.</td></tr>
-<tr><td>Scenario B: <em>Station offline</em></td><td>Start the station (VL Station button) and check the shared folder on the station PC.</td></tr>
-<tr><td>Scenario B: a scan stays <em>Waiting</em></td><td>The station is busy or stopped; the job is evaluated as soon as it runs.</td></tr>
-<tr><td>Scenario B: <em>not in the parts list</em></td><td>Add the part to <code>parts.csv</code> exactly as it is named in the Scan window.</td></tr>
+<tr><td>Scenario B: no STL after AI Replay</td><td>Is the agent running (icon in the notification area)? Settings &gt; page Network &gt; Start now.</td></tr>
+<tr><td>Scenario B: <em>station offline</em> in the agent menu</td><td>Start the station (VL Station button) and check the shared folder on the station PC.</td></tr>
+<tr><td>Scenario B: no report arrives</td><td>The station is busy or stopped; the scan is evaluated as soon as it runs.</td></tr>
+<tr><td>Scenario B: <em>not in the programs list</em></td><td>Add the VL program (the .vld4 name without extension) to <code>programs.csv</code>.</td></tr>
 <tr><td>VL does not react to VL Connector</td><td>VL must show its English user interface; close extra dialogs in VL.</td></tr>
 </table>
 <p>Logs: <code>%LOCALAPPDATA%\VLConnector\logs</code> (page Diagnostics &gt; Open folder), one file per day and part of VL Connector, kept for 30 days.</p>

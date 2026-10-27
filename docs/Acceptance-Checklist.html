@@ -53,15 +53,16 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <h2 id="scenario-b-polyworks-on-another-pc">Scenario B (PolyWorks on another PC)</h2>
 <ul>
 <li class="task">&#9744; Shared folder entered on both PCs; <strong>Test</strong> is green on both.</li>
-<li class="task">&#9744; <code>parts.csv</code> filled; the part appears in the Scan window.</li>
+<li class="task">&#9744; <code>programs.csv</code> filled (VL program -&gt; workspace and template on the station).</li>
 <li class="task">&#9744; Station button imported on the station PC; <strong>VL Station</strong> runs and shows the shared folder.</li>
-<li class="task">&#9744; Scan window shows <em>Station online</em>.</li>
-<li class="task">&#9744; <strong>Start scan</strong>: VL starts AI Replay; the bar shows the VL steps.</li>
-<li class="task">&#9744; After the scan: <em>Sending</em> -&gt; <em>Waiting</em> -&gt; OK/NOK; the PDF opens on the scanner PC.</li>
+<li class="task">&#9744; Scanner PC: agent switched on (<em>Start with Windows</em>), icon in the notification area; after a Windows logon it starts by itself.</li>
+<li class="task">&#9744; Agent menu shows <em>station online</em>.</li>
+<li class="task">&#9744; AI Replay started <strong>in VL</strong> with a program from the list: after the last position the STL is exported (<code>Documents\VL Connector\Scans\&lt;program&gt;_&lt;date&gt;_&lt;time&gt;.stl</code>) and a notification says it was sent.</li>
+<li class="task">&#9744; The station evaluates it with the right template; the notification shows OK/NOK and the PDF opens.</li>
 <li class="task">&#9744; A second scanner PC (if any) does <strong>not</strong> open the reports of the first one.</li>
 <li class="task">&#9744; Shared folder unreachable during a scan: the STL waits in the outbox and is sent later.</li>
-<li class="task">&#9744; Station stopped: Scan window shows <em>Station offline</em>; the job is evaluated after the station starts.</li>
-<li class="task">&#9744; Part missing in <code>parts.csv</code> on the station: the scan ends with a clear error in the Scan window.</li>
+<li class="task">&#9744; Station stopped: agent menu shows <em>station offline</em>; the scan is evaluated after the station starts.</li>
+<li class="task">&#9744; VL program missing in <code>programs.csv</code>: a notification &quot;not evaluated&quot; with the reason.</li>
 </ul>
 <h2 id="result">Result</h2>
 <table>

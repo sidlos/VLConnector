@@ -43,7 +43,7 @@ switch ($Action) {
             $next = Get-VlcNextJob $share
             if ($next) {
                 $id = $next.JobId
-                $o.STATE = 'JOB'; $o.JOBID = $id; $o.PART = $next.Job.PART
+                $o.STATE = 'JOB'; $o.JOBID = $id; $o.PART = $next.Map.Program
                 $reports = Join-Path $work 'reports'
                 New-Item -ItemType Directory -Force -Path $reports | Out-Null
                 $layouts = (Get-VlcPaths).LayoutDir
@@ -52,7 +52,7 @@ switch ($Action) {
                 if (Test-Path -LiteralPath $resultFile) { Remove-Item -LiteralPath $resultFile -Force }
                 $run = ($id -split '_', 3)[2]   # yyyyMMdd-HHmmss_hhhh: unique piece name per job
                 $params = [ordered]@{
-                    PWK = $next.Part.Workspace; TEMPLATE = $next.Part.Template; STL = $next.Stl; RUN = $run; REPORT_DIR = $reports
+                    PWK = $next.Map.Workspace; TEMPLATE = $next.Map.Template; STL = $next.Stl; RUN = $run; REPORT_DIR = $reports
                     LAYOUT_DIR = $(if ($hasLayouts) { $layouts } else { '' }); OPERATOR = "$($next.Job.USER) ($($next.Job.COMPUTER))"
                     PROGRAM = $next.Job.PROGRAM; UTC = $next.Job.CREATED_UTC; KEEP_PIECES = [string]$cfg.polyworks.keepPieces
                     COLOR_SCALE = ([double]$cfg.polyworks.colorScaleMm).ToString([Globalization.CultureInfo]::InvariantCulture)

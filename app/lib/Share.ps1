@@ -5,7 +5,7 @@
 #   work\        jobs the station is evaluating
 #   reports\     results for the scanner PCs (<JobId>.pdf, .csv, .result)
 #   processed\   finished jobs        failed\   jobs that could not be evaluated
-#   status\      station heartbeat    parts.csv   part -> PolyWorks workspace and template, VL program
+#   status\      station heartbeat    programs.csv   VL program -> PolyWorks workspace and template
 # See docs\Protocol.md.
 
 $script:ShareFolders = 'jobs', 'work', 'reports', 'processed', 'failed', 'status'
@@ -31,30 +31,37 @@ function Test-VlcShare([string]$Path) {
     catch { return [pscustomobject]@{ Ok = $false; Text = "Not usable: $($_.Exception.Message)" } }
 }
 
-function Get-VlcPartsFile([string]$Share) { return Join-Path $Share 'parts.csv' }
+function Get-VlcProgramsFile([string]$Share) { return Join-Path $Share 'programs.csv' }
 
-# parts.csv: Part;Workspace;Template;VlProgram;Options (semicolon separated, UTF-8 with BOM, first line = header).
-#   Workspace and Template: the PolyWorks workspace file (path on the station) and the template project in it.
-#   VlProgram: the AI Replay program (.vld4 name or path on the scanner PC). Options: like the "VL options" property.
-function Get-VlcParts([string]$Share) {
-    $file = Get-VlcPartsFile $Share
+# programs.csv: Program;Workspace;Template (semicolon separated, UTF-8 with BOM, first line = header).
+#   Program: the AI Replay program, i.e. the .vld4 file name without extension. The STL of a scan is named
+#            after it (<program>_<date>_<time>.stl) and the job carries it.
+#   Workspace, Template: the PolyWorks workspace file (path on the station) and the template project in it.
+function Get-VlcPrograms([string]$Share) {
+    $file = Get-VlcProgramsFile $Share
     if (-not (Test-Path -LiteralPath $file)) { return @() }
     $rows = @(Import-Csv -LiteralPath $file -Delimiter ';' -Encoding UTF8)
-    return @($rows | Where-Object { $_.Part -and $_.Template } | ForEach-Object {
-        [pscustomobject]@{ Part = $_.Part.Trim(); Workspace = ([string]$_.Workspace).Trim(); Template = $_.Template.Trim()
-            VlProgram = ([string]$_.VlProgram).Trim(); Options = ([string]$_.Options).Trim() }
+    return @($rows | Where-Object { $_.Program -and $_.Template } | ForEach-Object {
+        [pscustomobject]@{ Program = ([IO.Path]::GetFileNameWithoutExtension($_.Program.Trim())); Workspace = ([string]$_.Workspace).Trim(); Template = $_.Template.Trim() }
     })
 }
 
-function Save-VlcParts([string]$Share, $Parts) {
-    $file = Get-VlcPartsFile $Share
+# The row of a VL program (path, file name or name; case does not matter), $null if there is none.
+function Find-VlcProgram([string]$Share, [string]$Program) {
+    $name = [IO.Path]::GetFileNameWithoutExtension($Program)
+    if (-not $name) { return $null }
+    return @(Get-VlcPrograms $Share | Where-Object { $_.Program -eq $name })[0]
+}
+
+function Save-VlcPrograms([string]$Share, $Programs) {
+    $file = Get-VlcProgramsFile $Share
     $lines = New-Object Collections.Generic.List[string]
-    $lines.Add('Part;Workspace;Template;VlProgram;Options')
-    foreach ($p in $Parts) {
-        foreach ($v in $p.Part, $p.Workspace, $p.Template, $p.VlProgram, $p.Options) {
+    $lines.Add('Program;Workspace;Template')
+    foreach ($p in $Programs) {
+        foreach ($v in $p.Program, $p.Workspace, $p.Template) {
             if ([string]$v -match '[;\r\n"=]') { throw "The value '$v' must not contain ; = or quotes." }
         }
-        $lines.Add(('{0};{1};{2};{3};{4}' -f $p.Part, $p.Workspace, $p.Template, $p.VlProgram, $p.Options))
+        $lines.Add(('{0};{1};{2}' -f $p.Program, $p.Workspace, $p.Template))
     }
     $temp = "$file.part"
     [IO.File]::WriteAllLines($temp, [string[]]$lines, (New-Object Text.UTF8Encoding($true)))

@@ -393,7 +393,28 @@
                                 </Grid>
                             </Border>
 
-                            <TextBlock Text="Parts" Style="{StaticResource SectionText}"/>
+                            <TextBlock Text="Agent (scanner PC)" Style="{StaticResource SectionText}"/>
+                            <Border Style="{StaticResource Card}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="44"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="&#xE7F4;" Style="{StaticResource IconText}"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                        <TextBlock Text="Start the agent with Windows" Style="{StaticResource BodyText}"/>
+                                        <TextBlock Text="The agent waits in the notification area. After each AI Replay in VL it exports the STL, sends it to the PolyWorks station and opens the report." Style="{StaticResource CaptionText}"/>
+                                        <TextBlock x:Name="AgentStatus" Style="{StaticResource CaptionText}" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="StartAgent" Content="Start now" Margin="0,0,14,0"/>
+                                        <CheckBox x:Name="AgentAutostart" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <TextBlock Text="Programs" Style="{StaticResource SectionText}"/>
                             <Border Style="{StaticResource Card}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -403,10 +424,10 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="&#xE8FD;" Style="{StaticResource IconText}"/>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
-                                        <TextBlock Text="Parts list" Style="{StaticResource BodyText}"/>
-                                        <TextBlock x:Name="PartsSummary" Text="Which VL program and which PolyWorks template belong to each part." Style="{StaticResource CaptionText}"/>
+                                        <TextBlock Text="Programs list" Style="{StaticResource BodyText}"/>
+                                        <TextBlock x:Name="ProgramsSummary" Text="Which PolyWorks template evaluates the scans of each VL program (.vld4)." Style="{StaticResource CaptionText}"/>
                                     </StackPanel>
-                                    <Button x:Name="EditParts" Grid.Column="2" Content="Edit list" VerticalAlignment="Center"/>
+                                    <Button x:Name="EditPrograms" Grid.Column="2" Content="Edit list" VerticalAlignment="Center"/>
                                 </Grid>
                             </Border>
                         </StackPanel>

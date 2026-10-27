@@ -1,6 +1,6 @@
 # VL Connector for PolyWorks - Protocol
 
-Files exchanged between the launcher, the PolyWorks macros, the Scan window and the PolyWorks station.
+Files exchanged between the launcher, the PolyWorks macros, the agent and the PolyWorks station.
 
 **Format of all KEY=value files:** one `KEY=value` per line, keys in the fixed order given below (the
 PolyWorks macros read them by line number), UTF-8 **with BOM** (files written by PolyWorks are UTF-16; readers
@@ -21,7 +21,7 @@ written under a temporary name (`.part`) and renamed, so a reader never sees hal
 | 6 | MESSAGE | Error or cancel reason, empty on OK |
 | 7 | USER | Windows user |
 | 8 | COMPUTER | Computer name |
-| 9 | JOBID | `-JobId` (Scan window) or empty |
+| 9 | JOBID | `-JobId` or empty |
 | 10 | VERSION | VL Connector version |
 | 11 | START_UTC | Start time, UTC |
 
@@ -30,6 +30,11 @@ written under a temporary name (`.part`) and renamed, so a reader never sees hal
 ends with `STATE=CANCELLED`. Both files are removed at the end.
 
 **Exit codes:** 0 OK, 1 error, 2 cancelled, 3 bad parameters or program not found, 4 another scan running.
+
+**Watch mode** (`-Watch`, used by the agent): the launcher waits until the operator starts AI Replay in VL,
+takes the program from VL's program dialog (else from the VL window title or VL's recent programs), follows
+the run like a normal one and names the STL `<program>_<yyyy-MM-dd_HH-mm-ss>.stl`. A replay started by
+another VL Connector run (the run mutex is taken) is left alone.
 
 ## 2. PolyWorks macros
 
@@ -46,18 +51,18 @@ workspace after reopening the template.
 
 ## 3. Network scenario
 
-**Shared folder:** `jobs\`, `work\`, `reports\`, `processed\`, `failed\`, `status\`, `parts.csv`.
+**Shared folder:** `jobs\`, `work\`, `reports\`, `processed\`, `failed\`, `status\`, `programs.csv`.
 
-**JobId:** `<COMPUTER>_<PART>_<yyyyMMdd-HHmmss>_<4 hex>`, characters `A-Z a-z 0-9 -` and `_` as separator
-only (other characters in computer and part names become `-`). Files: `<JobId>.job`, `.stl`, `.pdf`, `.csv`,
+**JobId:** `<COMPUTER>_<PROGRAM>_<yyyyMMdd-HHmmss>_<4 hex>`, characters `A-Z a-z 0-9 -` and `_` as
+separator only (other characters in computer and program names become `-`). Files: `<JobId>.job`, `.stl`, `.pdf`, `.csv`,
 `.result`.
 
-**Job** `jobs\<JobId>.job` (written after the STL): `PROTOCOL (1), JOBID, PART, PROGRAM, COMPUTER, USER,
-CREATED_UTC, STL, STL_SIZE, STL_SHA256, VERSION`.
+**Job** `jobs\<JobId>.job` (written after the STL): `PROTOCOL (1), JOBID, PART (program name), PROGRAM
+(.vld4 file name), COMPUTER, USER, CREATED_UTC, STL, STL_SIZE, STL_SHA256, VERSION`.
 
 **Station:** claims the oldest job by moving `<JobId>.job` to `work\` (a station that loses the race skips
-it), moves the STL, checks protocol, JobId, STL size, SHA-256 and binary STL format, and that the part is in
-`parts.csv` with an existing workspace. It then evaluates with VLC_Evaluate and publishes
+it), moves the STL, checks protocol, JobId, STL size, SHA-256 and binary STL format, and that the VL program is in
+`programs.csv` with an existing workspace. It then evaluates with VLC_Evaluate and publishes
 `reports\<JobId>.pdf` and `.csv`, then **`reports\<JobId>.result` last**:
 `PROTOCOL, JOBID, STATE, VERDICT, SUMMARY, PDF, CSV, STATION, FINISHED_UTC, MESSAGE`.
 The job and STL move to `processed\` (STATE=OK) or `failed\` (with a result STATE=ERROR and the reason).
@@ -66,11 +71,12 @@ The job and STL move to `processed\` (STATE=OK) or `failed\` (with a result STAT
 those JobIds. A PDF is copied and opened only when it starts with `%PDF-` and ends with `%%EOF`.
 
 **Heartbeat** `status\<COMPUTER>.station`: `STATION, STATE (Idle/Busy/Stopped), JOB, VERSION, UPDATED_UTC`,
-updated about every 30 s and at each job; the Scan window shows a station as online when the file is newer
+updated about every 30 s and at each job; the agent shows a station as online when the file is newer
 than 2 minutes and the state is not `Stopped`.
 
-**parts.csv** (UTF-8 with BOM, `;`-separated, header line): `Part;Workspace;Template;VlProgram;Options`.
+**programs.csv** (UTF-8 with BOM, `;`-separated, header line): `Program;Workspace;Template` - the program
+is the .vld4 file name without extension (case does not matter).
 
 Both sides treat each other's files as untrusted input: names are checked against the JobId pattern, paths
 are built locally, the STL is checked by hash and format, and the station takes the template only from its
-own parts list.
+own programs list.

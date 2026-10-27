@@ -26,6 +26,8 @@
     VLReplay.cmd ABC -Options "-Mode Standard -AfterExport Minimize"
                                              the same options as one text (the PolyWorks project property
                                              "VL options"); options given directly win
+    VLReplay.cmd -Watch -MarkerFile <file>   waits until the operator starts AI Replay in VL himself, then
+                                             follows that run and exports the STL (network scenario agent)
 
   Files next to the marker while the run is active: <marker>.status (current step, read by the callers)
   and <marker>.cancel (created by a caller to cancel the run).
@@ -55,7 +57,8 @@ param(
     [string]$Menu = '',
     [string]$VlExe = '',
     [string]$VlArgs,
-    [string]$Options = ''
+    [string]$Options = '',
+    [switch]$Watch
 )
 
 $ErrorActionPreference = 'Stop'
@@ -566,6 +569,72 @@ function Wait-ReplayFinished($Proc) {
     }
 }
 
+# --- Watch mode: follow an AI Replay that the operator starts in VL ---------------------------------------
+
+# Program file name in VL's program dialog (File name box) while it is open; '' otherwise.
+function Get-OpenDialogFileName([int]$ProcId) {
+    foreach ($w in @(Get-Tops $ProcId | Where-Object { $_.Class -eq '#32770' })) {
+        $edit = Find-FileNameEdit $w.Handle
+        if ($edit) { $t = [string][Vl]::GetText($edit); if ($t.Trim()) { return $t.Trim() } }
+    }
+    return ''
+}
+
+function Test-ReplayRunning($State) {
+    return [bool]@($State.Tops | Where-Object { $_.Name -eq 'ReplayForm' -or $_.Title -match '^AI Replay\s*\(' }).Count
+}
+
+# Waits (without a time limit, until the .cancel file) until AI Replay runs in a VL window of this session.
+# Remembers the program the operator chose in VL's program dialog. A replay that another VL Connector run
+# started (the Measure button holds the run mutex) is left to that run.
+function Wait-WatchedReplay {
+    $program = ''
+    $modeDialogs = @{}
+    Write-Status 'watching' 'Waiting for AI Replay in VL.'
+    while ($true) {
+        Test-CancelRequested
+        $procs = @(Get-VlProcesses)
+        if (-not $procs.Count) { Start-Sleep -Milliseconds 1000; continue }
+        foreach ($p in $procs) {
+            $state = Get-VlState $p.Id
+            foreach ($d in @($state.Tops | Where-Object { $_.Name -eq 'SelectReplayModeDialog' })) {
+                if (-not $modeDialogs.ContainsKey([string]$d.Handle)) {
+                    $modeDialogs[[string]$d.Handle] = $true; $program = ''
+                    Write-Log "AI Replay started in VL (PID $($p.Id)), waiting for the program."
+                }
+            }
+            $name = Get-OpenDialogFileName $p.Id
+            if ($name -and $name -ne $program) { $program = $name; Write-Log "Program seen in VL: $program" }
+            if (Test-ReplayRunning $state) {
+                $mutex = New-Object System.Threading.Mutex($false, 'Local\VLConnector_VLReplay')
+                $owned = $false
+                try { $owned = $mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
+                if ($owned) { $script:mutex = $mutex; return @{ Proc = $p; Program = $program } }
+                $mutex.Dispose()
+                Write-Log 'This AI Replay belongs to another VL Connector run (Measure button), not exported here.'
+                [void](Wait-Until 86400 { Test-CancelRequested; $p.HasExited -or -not (Test-ReplayRunning (Get-VlState $p.Id)) } 1000)
+                $program = ''
+            }
+        }
+        Start-Sleep -Milliseconds 250
+    }
+}
+
+# Program of a watched run: the name seen in VL's program dialog (looked up like a program given to the
+# launcher), else the data name in the VL window title (VL names the data after the .vld4), else the most
+# recently used program of VL.
+function Resolve-WatchedProgram([string]$Seen, $Proc) {
+    if ($Seen) {
+        try { $path = Resolve-Program $Seen; if ($path) { return $path } } catch { }
+        return $Seen
+    }
+    $main = (Get-VlState $Proc.Id).Main
+    if ($main -and $main.Title -match '^\W*(.+?)\W*\s-\sVL-800') { Write-Log "Program taken from the VL window title: $($Matches[1])" Yellow; return $Matches[1] }
+    $recent = @(Get-RecentTemplatePaths)
+    if ($recent.Count) { Write-Log "No program seen in VL, using VL's most recent program: $($recent[0])" Yellow; return $recent[0] }
+    return ''
+}
+
 # --- Menu commands (File > Export > STL..., File > Save As...) -----------------------------------------
 
 # Targeted menu search: items of the main menu bar, then the children of the expanded item (~0.07 s).
@@ -856,6 +925,8 @@ try {
     $script:closeWaitSec = [int]$cfg.vl.closeWaitSec
     $script:dialogRules = @($cfg.vl.dialogRules)
     $script:testedVersions = @($cfg.vl.testedVersions)
+    # in watch mode nobody waits for the STL in front of a window: the operator stays in VL
+    if ($Watch) { $ReturnFocus = 'Off' }
 }
 catch { Exit-Run $EXIT_ARGS 'ERROR' "Settings: $($_.Exception.Message)" }
 $checks = @(
@@ -870,15 +941,17 @@ foreach ($c in $checks) {
 
 # --- Start -----------------------------------------------------------------------------
 
-$script:mutex = New-Object System.Threading.Mutex($false, 'Local\VLConnector_VLReplay')
-try { $owned = $script:mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
-if (-not $owned) {
-    $script:mutex = $null
-    Exit-Run $EXIT_BUSY 'BUSY' 'Another scan is running on this PC. Finish it in VL first.'
+if (-not $Watch) {
+    $script:mutex = New-Object System.Threading.Mutex($false, 'Local\VLConnector_VLReplay')
+    try { $owned = $script:mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
+    if (-not $owned) {
+        $script:mutex = $null
+        Exit-Run $EXIT_BUSY 'BUSY' 'Another scan is running on this PC. Finish it in VL first.'
+    }
 }
 
 $Host.UI.RawUI.WindowTitle = 'VL Connector - AI Replay'
-$what = if ($ExportOnly) { "export only $Program".Trim() } else { $Program }
+$what = if ($ExportOnly) { "export only $Program".Trim() } elseif ($Watch) { 'watching for AI Replay' } else { $Program }
 $flags = @($(if ($DryRun) { 'DRY RUN' }), $(if ($NewWindow) { 'new window' })) | Where-Object { $_ }
 Write-Log ("=== VLReplay $(Get-VlcVersion) $what | account $env:USERNAME | mode $Mode | export immediately $ExportImmediately | confirm stage $ConfirmStageMotion | after export $AfterExport " + ($flags -join ' | ')).Trim() Cyan
 if (Test-Path -LiteralPath $VlExe) {
@@ -890,7 +963,7 @@ if (Test-Path -LiteralPath $VlExe) {
 if ($script:cancelPath -and (Test-Path -LiteralPath $script:cancelPath)) { Remove-Item -LiteralPath $script:cancelPath -Force }
 
 $runName = ''
-if (-not $ExportOnly) {
+if (-not $ExportOnly -and -not $Watch) {
     if (-not $Program) { Exit-Run $EXIT_ARGS 'ERROR' 'Give the program: VLReplay.cmd <program or path to the .vld4>' }
     $runName = '{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName ([IO.Path]::GetFileNameWithoutExtension($Program))), $startTime
     # A dry run writes a marker (STATE=DRYRUN) only with -MarkerFile, so that calls from PolyWorks can be tested.
@@ -934,18 +1007,31 @@ try {
         exit $EXIT_OK
     }
 
-    Write-Status 'starting' 'Opening VL...'
-    $proc = Get-StartScreenVl
-    $started = Start-AiReplay $proc $script:programPath
-    if ($DryRun) {
-        if ($started) {
-            $dryRunText = 'AI Replay -> mode -> program entered -> Cancel. VL is back on its start screen.'
-            if ($script:markerPath) { Exit-Run $EXIT_OK 'DRYRUN' $dryRunText }
-            Write-Log "DRY RUN: $dryRunText" Green; $script:mutex.ReleaseMutex(); exit $EXIT_OK
-        }
-        throw 'DRY RUN: the program selection dialog did not close.'
+    if ($Watch) {
+        if (-not $script:markerPath) { Exit-Run $EXIT_ARGS 'ERROR' 'Watch mode needs -MarkerFile.' }
+        New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+        $watched = Wait-WatchedReplay
+        $proc = $watched.Proc
+        $startTime = Get-Date
+        $script:opOffset = 0L; $script:opPending = ''
+        if (Test-Path -LiteralPath $operationLog) { $script:opOffset = (Get-Item -LiteralPath $operationLog).Length }
+        $script:watchedProgram = $watched.Program
+        Write-Log "AI Replay is running in VL (PID $($proc.Id))." Green
     }
-    Write-Log 'AI Replay is running - the operator continues in VL as usual.' Green
+    else {
+        Write-Status 'starting' 'Opening VL...'
+        $proc = Get-StartScreenVl
+        $started = Start-AiReplay $proc $script:programPath
+        if ($DryRun) {
+            if ($started) {
+                $dryRunText = 'AI Replay -> mode -> program entered -> Cancel. VL is back on its start screen.'
+                if ($script:markerPath) { Exit-Run $EXIT_OK 'DRYRUN' $dryRunText }
+                Write-Log "DRY RUN: $dryRunText" Green; $script:mutex.ReleaseMutex(); exit $EXIT_OK
+            }
+            throw 'DRY RUN: the program selection dialog did not close.'
+        }
+        Write-Log 'AI Replay is running - the operator continues in VL as usual.' Green
+    }
     Write-Status 'replay' 'AI Replay is running. Follow the steps in VL.'
 
     $finish = Wait-ReplayFinished $proc
@@ -954,6 +1040,13 @@ try {
         'Error'     { Exit-Run $EXIT_ERROR 'ERROR' $finish.Message }
     }
     if ($finish.Message) { Write-Log $finish.Message Yellow }
+    if ($Watch) {
+        # the STL is named after the .vld4 program (+ date and time); the PolyWorks station finds the template by it
+        $script:programPath = Resolve-WatchedProgram $script:watchedProgram $proc
+        $programName = if ($script:programPath) { [IO.Path]::GetFileNameWithoutExtension($script:programPath) } else { 'VL' }
+        $runName = '{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName $programName), $startTime
+        Write-Log "Program: $script:programPath"
+    }
 
     $target = Get-TargetPath $runName
     $triangles = $null

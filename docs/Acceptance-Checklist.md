@@ -29,15 +29,18 @@ AI Replay program. Tick each line; note deviations.
 ## Scenario B (PolyWorks on another PC)
 
 - [ ] Shared folder entered on both PCs; **Test** is green on both.
-- [ ] `parts.csv` filled; the part appears in the Scan window.
+- [ ] `programs.csv` filled (VL program -> workspace and template on the station).
 - [ ] Station button imported on the station PC; **VL Station** runs and shows the shared folder.
-- [ ] Scan window shows *Station online*.
-- [ ] **Start scan**: VL starts AI Replay; the bar shows the VL steps.
-- [ ] After the scan: *Sending* -> *Waiting* -> OK/NOK; the PDF opens on the scanner PC.
+- [ ] Scanner PC: agent switched on (*Start with Windows*), icon in the notification area; after a Windows
+      logon it starts by itself.
+- [ ] Agent menu shows *station online*.
+- [ ] AI Replay started **in VL** with a program from the list: after the last position the STL is exported
+      (`Documents\VL Connector\Scans\<program>_<date>_<time>.stl`) and a notification says it was sent.
+- [ ] The station evaluates it with the right template; the notification shows OK/NOK and the PDF opens.
 - [ ] A second scanner PC (if any) does **not** open the reports of the first one.
 - [ ] Shared folder unreachable during a scan: the STL waits in the outbox and is sent later.
-- [ ] Station stopped: Scan window shows *Station offline*; the job is evaluated after the station starts.
-- [ ] Part missing in `parts.csv` on the station: the scan ends with a clear error in the Scan window.
+- [ ] Station stopped: agent menu shows *station offline*; the scan is evaluated after the station starts.
+- [ ] VL program missing in `programs.csv`: a notification "not evaluated" with the reason.
 
 ## Result
 
