@@ -1,45 +1,46 @@
 <#
-  vl_replay.ps1 - AI Replay ve VL-800 spusteny zvenku (napr. z PolyWorks), STL do PolyWorks.
+  VLReplay.ps1 - starts AI Replay in the VL-800 from outside (e.g. from PolyWorks) and hands the STL over.
 
-  Postup:
-    1. najde okno VL s volnou uvodni obrazovkou (tlacitko AI Replay), jinak otevre nove okno VL,
-    2. klikne na AI Replay, zvoli rezim (Standard / Rychly) a do dialogu vlozi program .vld4,
-    3. operator dal pracuje jako dnes (polozi dil, potvrdi polohu...),
-    4. kdyz VL po skenu aplikuje program a okno je volne, vyexportuje STL pres menu
-       File > Export > STL... (Binary, bez prorezeni) primo do vystupni slozky,
-    5. zkontroluje STL a zapise znacku <program>.hotovo (STAV=OK/CHYBA/ZRUSENO, STL=cesta).
+  Steps:
+    1. finds a VL window on its start screen (AI Replay button), otherwise opens a new VL window,
+    2. clicks AI Replay, picks the mode (Standard / HighSpeed) and puts the .vld4 program into the dialog,
+    3. the operator works as usual (places the part, confirms the position...),
+    4. when VL has applied the program after the scan and the window is idle, exports the STL via the
+       menu File > Export > STL... (Binary, no thinning) straight into the output folder,
+    5. checks the STL and writes the marker <program>.done (STATE=OK/ERROR/CANCELLED, STL=path).
 
-  VL se ovlada jen zpravami Windows a UI Automation (bez mysi a klavesnice). Do souboru
-  Keyence nic nezapisuje, patch ani hlidac export_stl.ps1 nejsou potreba.
+  VL is driven only by Windows messages and UI Automation (no mouse or keyboard input). Nothing is
+  written to KEYENCE files.
 
-  Pouziti:
-    vl_replay.cmd ABC                         program ABC.vld4 se hleda v Dokumentech / naposledy pouzitych
-    vl_replay.cmd "C:\Programy\ABC.vld4" -Rezim Standard   rezim se schvalovanim skladani (vychozi je Rychly)
-    vl_replay.cmd ABC -Nanecisto              jen projde dialogy a vybrani programu zrusi (nic se neskenuje)
-    vl_replay.cmd -JenExport                  jen vyexportuje STL z dat, ktera uz jsou ve VL otevrena
-    vl_replay.cmd ABC -HnedPoSkenu            STL hned po slozeni skenu, bez cekani na zarovnani na program (~20 s);
-                                              STL je pak v souradnicich skeneru (PolyWorks si ho zarovna sam)
-    vl_replay.cmd ABC -VlDoPozadi             po exportu STL minimalizuje VL a do popredi da okno PolyWorks,
-                                              ze ktereho byl spoustec spusten (dalsi beh VL zase obnovi)
+  Usage:
+    VLReplay.cmd ABC                          program ABC.vld4 is searched in Documents / recently used programs
+    VLReplay.cmd "C:\Programs\ABC.vld4" -Mode Standard   mode with stitching confirmation (default is HighSpeed)
+    VLReplay.cmd ABC -DryRun                  only walks through the dialogs and cancels the program selection (no scan)
+    VLReplay.cmd -ExportOnly                  only exports the STL from the data already open in VL
+    VLReplay.cmd ABC -ExportImmediately       STL right after the scan is composed, without waiting for the alignment
+                                              to the program (~20 s); the STL is then in scanner coordinates
+                                              (PolyWorks aligns it itself)
+    VLReplay.cmd ABC -VlToBackground          after the STL export minimizes VL and brings the PolyWorks window
+                                              that started the launcher to the front (the next run restores VL)
 
-  Navratovy kod: 0 OK, 1 chyba, 2 zruseno ve VL, 3 spatne parametry / program nenalezen, 4 uz bezi.
-  Log: vl_replay_<uzivatel>.log vedle skriptu.
+  Exit code: 0 OK, 1 error, 2 cancelled in VL, 3 bad parameters / program not found, 4 already running.
+  Log: VLReplay_<user>.log next to the script.
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)] [string]$Program,
-    [ValidateSet('Standard', 'Rychly')] [string]$Rezim = 'Rychly',
-    [string]$Vystup = 'C:\PolyWorks\Vstup',
-    [string]$StlSoubor,
-    [string]$Znacka,
+    [ValidateSet('Standard', 'HighSpeed')] [string]$Mode = 'HighSpeed',
+    [string]$OutputDir = 'C:\PolyWorks\Vstup',
+    [string]$StlFile,
+    [string]$MarkerFile,
     [string[]]$ProgramDir = @([Environment]::GetFolderPath('MyDocuments')),
-    [int]$CasovacMin = 45,
-    [double]$KlidSec = 2,
-    [switch]$HnedPoSkenu,
-    [switch]$NoveOkno,
-    [switch]$Nanecisto,
-    [switch]$JenExport,
-    [switch]$VlDoPozadi,
+    [int]$TimeoutMin = 45,
+    [double]$SettleSec = 2,
+    [switch]$ExportImmediately,
+    [switch]$NewWindow,
+    [switch]$DryRun,
+    [switch]$ExportOnly,
+    [switch]$VlToBackground,
     [string]$Menu = 'File>Export>STL',
     [string]$VlExe = 'C:\Program Files\KEYENCE\VL-800 Series\VL Application\VLApplication4.exe',
     [string]$VlArgs
@@ -90,7 +91,7 @@ public static class Vl
     const uint SMTO_ABORTIFHUNG = 2;
     static readonly uint WM_GETCONTROLNAME = RegisterWindowMessage("WM_GETCONTROLNAME");
 
-    // Viditelna okna nejvyssi urovne zadaneho procesu.
+    // Visible top-level windows of the given process.
     public static IntPtr[] TopWindows(int pid)
     {
         var list = new List<IntPtr>();
@@ -112,10 +113,10 @@ public static class Vl
 
     public static string ClassOf(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, s.Capacity); return s.ToString(); }
 
-    // Titulek okna (u cizich procesu jen titulek, ne obsah editu).
+    // Window title (for windows of other processes only the title, not the content of an edit box).
     public static string Title(IntPtr h) { var s = new StringBuilder(1024); GetWindowText(h, s, s.Capacity); return s.ToString(); }
 
-    // Text jakehokoli okna vcetne editu v cizim procesu (WM_GETTEXT system prenese).
+    // Text of any window including edit boxes in another process (the system marshals WM_GETTEXT).
     public static string GetText(IntPtr h)
     {
         var s = new StringBuilder(2048); IntPtr r;
@@ -136,18 +137,18 @@ public static class Vl
         return (long)r;
     }
 
-    // VL zpracovava zpravy (vlakno oken neni zaneprazdnene): prazdna zprava WM_NULL do 1 s.
+    // VL is processing messages (its window thread is not busy): an empty WM_NULL message within 1 s.
     public static bool IsResponsive(IntPtr h)
     {
         IntPtr r;
         return SendMessageTimeout(h, 0x0000, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 1000, out r) != IntPtr.Zero;
     }
 
-    // Kliknuti na tlacitko bez mysi; PostMessage necha VL otevrit pripadny modalni dialog.
+    // Button click without the mouse; PostMessage lets VL open a modal dialog if it needs to.
     public static void Click(IntPtr h) { PostMessage(h, 0x00F5, IntPtr.Zero, IntPtr.Zero); }
     public static void Close(IntPtr h) { PostMessage(h, 0x0010, IntPtr.Zero, IntPtr.Zero); }
 
-    // Jmeno ovladaciho prvku WinForms (Control.Name), nezavisle na jazyku VL.
+    // WinForms control name (Control.Name), independent of the VL user interface language.
     public static string WinFormsName(IntPtr hwnd)
     {
         uint pid; GetWindowThreadProcessId(hwnd, out pid);
@@ -174,8 +175,8 @@ public static class Vl
         return IntPtr.Zero;
     }
 
-    // Stejne jako v export_stl.ps1: Windows pusti okno do popredi jen procesu s poslednim
-    // vstupem; pohyb mysi o 0 px to splni bez vedlejsich ucinku.
+    // Windows lets a window come to the foreground only for the process with the last input;
+    // a mouse move by 0 px satisfies that without side effects.
     public static void BringToFront(IntPtr hwnd)
     {
         if (IsIconic(hwnd)) ShowWindow(hwnd, 9);
@@ -192,8 +193,8 @@ public static class Vl
 
     public static void Minimize(IntPtr hwnd) { ShowWindow(hwnd, 6); }
 
-    // Invoke na polozce menu, ktera otevre modalni dialog, se vrati az po jeho zavreni,
-    // proto bezi ve vlastnim vlakne.
+    // Invoke on a menu item that opens a modal dialog returns only after the dialog closes,
+    // so it runs on its own thread.
     public static void InvokeAsync(AutomationElement e)
     {
         var t = new Thread(delegate() { try { ((InvokePattern)e.GetCurrentPattern(InvokePattern.Pattern)).Invoke(); } catch { } });
@@ -205,18 +206,18 @@ public static class Vl
 
 $EXIT_OK = 0; $EXIT_ERROR = 1; $EXIT_CANCELLED = 2; $EXIT_ARGS = 3; $EXIT_BUSY = 4
 
-$logFile      = Join-Path $PSScriptRoot ('vl_replay_{0}.log' -f $env:USERNAME)
+$logFile      = Join-Path $PSScriptRoot ('VLReplay_{0}.log' -f $env:USERNAME)
 $operationLog = Join-Path $env:APPDATA 'KEYENCE\VL-800 Series\VL Application\VLOperation.log'
 $templateList = Join-Path $env:LOCALAPPDATA 'KEYENCE\VL-800 Series\VL Application\RecentUsedTemplateFiles.xml'
 $mySession    = [Diagnostics.Process]::GetCurrentProcess().SessionId
 $startTime    = Get-Date
 
-# --- Pomocne funkce -------------------------------------------------------------------
+# --- Helper functions -----------------------------------------------------------------
 
 function Write-Log([string]$Text, [string]$Color = 'Gray') {
     $line = '{0:yyyy-MM-dd HH:mm:ss.fff}  {1}' -f (Get-Date), $Text
     Write-Host $line -ForegroundColor $Color
-    # Sdileny zapis: log jde psat, i kdyz ho ma nekdo otevreny (prohlizec, tail).
+    # Shared write: the log can be written even while someone has it open (viewer, tail).
     try {
         $fs = [IO.File]::Open($logFile, 'Append', 'Write', 'ReadWrite, Delete')
         try { $bytes = [Text.Encoding]::UTF8.GetBytes($line + "`r`n"); $fs.Write($bytes, 0, $bytes.Length) }
@@ -229,25 +230,25 @@ function Get-SafeName([string]$Name) {
     return ($Name.Split([IO.Path]::GetInvalidFileNameChars()) -join '_').Trim()
 }
 
-# Znacka pro PolyWorks: zapise se pod docasnym nazvem a prejmenuje, aby nikdy nebyla rozepsana.
+# Marker for PolyWorks: written under a temporary name and renamed, so it is never half-written.
 function Write-Marker([string]$State, [string]$StlPath, [string]$Message) {
     if (-not $script:markerPath) { return }
     $lines = @(
-        "STAV=$State"
+        "STATE=$State"
         "STL=$StlPath"
         "PROGRAM=$script:programPath"
-        ('ZACATEK={0:yyyy-MM-dd HH:mm:ss}' -f $startTime)
-        ('KONEC={0:yyyy-MM-dd HH:mm:ss}' -f (Get-Date))
-        "ZPRAVA=$($Message -replace '\r?\n', ' ')"
+        ('START={0:yyyy-MM-dd HH:mm:ss}' -f $startTime)
+        ('END={0:yyyy-MM-dd HH:mm:ss}' -f (Get-Date))
+        "MESSAGE=$($Message -replace '\r?\n', ' ')"
     )
     try {
         $temp = "$script:markerPath.part"
         [IO.File]::WriteAllLines($temp, [string[]]$lines, (New-Object Text.UTF8Encoding($false)))
         if (Test-Path -LiteralPath $script:markerPath) { [IO.File]::Delete($script:markerPath) }
         [IO.File]::Move($temp, $script:markerPath)
-        Write-Log "Znacka: $script:markerPath ($State)"
+        Write-Log "Marker: $script:markerPath ($State)"
     }
-    catch { Write-Log "Znacku se nepodarilo zapsat: $($_.Exception.Message)" Red }
+    catch { Write-Log "The marker could not be written: $($_.Exception.Message)" Red }
 }
 
 function Exit-Run([int]$Code, [string]$State, [string]$Message, [string]$StlPath = '') {
@@ -264,7 +265,7 @@ function Get-FileStamp([string]$Path) {
     return ''
 }
 
-# Cesty programu ze seznamu naposledy pouzitych programu VL (stejne jako export_stl.ps1).
+# Program paths from the VL list of recently used programs.
 function Get-RecentTemplatePaths {
     try {
         $fs = [IO.File]::Open($templateList, 'Open', 'Read', 'ReadWrite, Delete')
@@ -277,7 +278,7 @@ function Get-RecentTemplatePaths {
         Where-Object { $_ -match '^([A-Za-z]:\\|\\\\)' })
 }
 
-# Program: plna cesta, nebo nazev hledany v naposledy pouzitych programech a v -ProgramDir.
+# Program: full path, or a name searched in the recently used programs and in -ProgramDir.
 function Resolve-Program([string]$Name) {
     foreach ($candidate in @($Name, "$Name.vld4")) {
         if ([IO.Path]::IsPathRooted($candidate) -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
@@ -301,12 +302,12 @@ function Resolve-Program([string]$Name) {
     }) + $recent | Select-Object -Unique)
     if ($found.Count -eq 1) { return $found[0] }
     if ($found.Count -gt 1) {
-        throw "Program '$Name' je na vice mistech, zadejte plnou cestu:`n  " + ($found -join "`n  ")
+        throw "Program '$Name' exists in several places, give the full path:`n  " + ($found -join "`n  ")
     }
     return $null
 }
 
-# Nove cele radky ve VLOperation.log (jen do logu, pomaha pri ladeni).
+# New complete lines in VLOperation.log (only for the log, helps with debugging).
 function Read-OperationLog {
     if (-not (Test-Path -LiteralPath $operationLog)) { return @() }
     $fs = [IO.File]::Open($operationLog, 'Open', 'Read', 'ReadWrite, Delete')
@@ -334,7 +335,7 @@ function Get-FinishedLength([string]$Path) {
     catch { return -1 }
 }
 
-# Binarni STL: 80 B hlavicka + pocet trojuhelniku + 50 B na trojuhelnik.
+# Binary STL: 80 byte header + triangle count + 50 bytes per triangle.
 function Test-BinaryStl([string]$Path) {
     $fs = [IO.File]::OpenRead($Path)
     try {
@@ -348,11 +349,11 @@ function Test-BinaryStl([string]$Path) {
     finally { $fs.Dispose() }
 }
 
-# --- Stav oken VL ----------------------------------------------------------------------
+# --- VL window state --------------------------------------------------------------------
 
 $script:replayButtons = @{}
 
-# Okna procesu s titulkem (dialogy, progress); menu a tooltipy titulek nemaji.
+# Windows of the process that have a title (dialogs, progress); menus and tooltips have none.
 function Get-Tops([int]$ProcId) {
     return @([Vl]::TopWindows($ProcId) | ForEach-Object {
         $title = [Vl]::Title($_)
@@ -380,7 +381,7 @@ function Get-VlState([int]$ProcId) {
         Button      = $button
         Idle        = [bool]($main -and $tops.Count -eq 1 -and $main.Enabled -and [Vl]::IsResponsive($main.Handle))
         StartScreen = [bool]($hasButton -and [Vl]::IsWindowVisible($button))
-        Signature   = (($tops | ForEach-Object { if ($_.Enabled) { $_.Title } else { "$($_.Title) [blok]" } }) -join ' | ')
+        Signature   = (($tops | ForEach-Object { if ($_.Enabled) { $_.Title } else { "$($_.Title) [blocked]" } }) -join ' | ')
     }
 }
 
@@ -405,7 +406,7 @@ function Wait-NewWindow([int]$ProcId, $Before, [int]$TimeoutSec, [scriptblock]$F
     } $StepMs
 }
 
-# Pole "Nazev souboru" v dialogu Otevrit / Ulozit jako: viditelny Edit uvnitr ComboBoxu.
+# "File name" box in the Open / Save As dialog: a visible Edit inside a ComboBox.
 function Find-FileNameEdit([IntPtr]$Dialog) {
     return @([Vl]::Children($Dialog) | Where-Object {
         [Vl]::ClassOf($_) -eq 'Edit' -and [Vl]::IsWindowVisible($_) -and [Vl]::ClassOf([Vl]::GetParent($_)) -eq 'ComboBox' }) |
@@ -416,41 +417,41 @@ function Find-DialogButton([IntPtr]$Dialog, [int]$Id) {
     return @([Vl]::Children($Dialog) | Where-Object { [Vl]::ClassOf($_) -eq 'Button' -and [Vl]::GetDlgCtrlID($_) -eq $Id }) | Select-Object -First 1
 }
 
-# Texty v hlaseni (MessageBox) - do logu a do znacky.
+# Texts of a message box (MessageBox) - for the log and the marker.
 function Get-DialogText([IntPtr]$Dialog) {
     return (@([Vl]::Children($Dialog) | Where-Object { [Vl]::ClassOf($_) -match 'Static' } |
         ForEach-Object { [Vl]::Title($_) } | Where-Object { $_ }) -join ' / ')
 }
 
-# --- Okno VL s uvodni obrazovkou ---------------------------------------------------------
+# --- VL window on its start screen -------------------------------------------------------
 
 function Get-StartScreenVl {
-    if (-not $NoveOkno) {
+    if (-not $NewWindow) {
         foreach ($p in Get-VlProcesses) {
             $state = Get-VlState $p.Id
             if ($state.StartScreen -and $state.Idle -and [Vl]::IsWindowEnabled($state.Button)) {
-                Write-Log "Pouziju otevrene okno VL (PID $($p.Id))."
+                Write-Log "Using the open VL window (PID $($p.Id))."
                 return $p
             }
         }
     }
-    if (-not (Test-Path -LiteralPath $VlExe)) { throw "VL neni nainstalovane: $VlExe" }
-    Write-Log 'Volne okno VL s uvodni obrazovkou neni, oteviram nove okno VL...'
+    if (-not (Test-Path -LiteralPath $VlExe)) { throw "VL is not installed: $VlExe" }
+    Write-Log 'No idle VL window on its start screen, opening a new VL window...'
     $p = if ($VlArgs) { Start-Process -FilePath $VlExe -ArgumentList $VlArgs -WorkingDirectory (Split-Path $VlExe) -PassThru }
          else { Start-Process -FilePath $VlExe -WorkingDirectory (Split-Path $VlExe) -PassThru }
     $script:lastStartSig = ''
     $ready = Wait-Until 240 {
-        if ($p.HasExited) { throw "VL se hned ukoncilo (kod $($p.ExitCode))." }
+        if ($p.HasExited) { throw "VL exited right away (code $($p.ExitCode))." }
         $state = Get-VlState $p.Id
-        if ($state.Signature -ne $script:lastStartSig) { $script:lastStartSig = $state.Signature; if ($state.Signature) { Write-Log "  okna VL: $($state.Signature)" DarkGray } }
+        if ($state.Signature -ne $script:lastStartSig) { $script:lastStartSig = $state.Signature; if ($state.Signature) { Write-Log "  VL windows: $($state.Signature)" DarkGray } }
         $state.StartScreen -and $state.Idle -and [Vl]::IsWindowEnabled($state.Button)
     } 500
-    if (-not $ready) { throw 'Nove okno VL se do 4 min nedostalo na uvodni obrazovku (viz okna v logu).' }
-    Write-Log "VL pripraveno (PID $($p.Id))."
+    if (-not $ready) { throw 'The new VL window did not reach its start screen within 4 min (see the windows in the log).' }
+    Write-Log "VL ready (PID $($p.Id))."
     return $p
 }
 
-# --- AI Replay: tlacitko -> rezim -> vyber programu ------------------------------------------
+# --- AI Replay: button -> mode -> program selection ------------------------------------------
 
 function Start-AiReplay($Proc, [string]$ProgramPath) {
     $state = Get-VlState $Proc.Id
@@ -459,29 +460,29 @@ function Start-AiReplay($Proc, [string]$ProgramPath) {
     $before = @(Get-Tops $Proc.Id | ForEach-Object { $_.Handle })
     [Vl]::Click($state.Button)
     $modeDialog = Wait-NewWindow $Proc.Id $before 15 { $_.Name -eq 'SelectReplayModeDialog' }
-    if (-not $modeDialog) { throw 'Po kliknuti na AI Replay se neotevrelo okno volby rezimu.' }
+    if (-not $modeDialog) { throw 'The mode selection window did not open after clicking AI Replay.' }
 
-    $buttonName = if ($Rezim -eq 'Rychly') { '_highSpeedModeButton' } else { '_normalModeButton' }
+    $buttonName = if ($Mode -eq 'HighSpeed') { '_highSpeedModeButton' } else { '_normalModeButton' }
     $modeButton = [Vl]::FindChild($modeDialog.Handle, $buttonName)
-    if ($Rezim -eq 'Rychly' -and ($modeButton -eq [IntPtr]::Zero -or -not [Vl]::IsWindowEnabled($modeButton))) {
-        Write-Log 'Rychly rezim je ve VL vypnuty (omezeni zateze GPU), pouziju Standard.' Yellow
+    if ($Mode -eq 'HighSpeed' -and ($modeButton -eq [IntPtr]::Zero -or -not [Vl]::IsWindowEnabled($modeButton))) {
+        Write-Log 'High-speed mode is disabled in VL (GPU load limit), using Standard.' Yellow
         $modeButton = [Vl]::FindChild($modeDialog.Handle, '_normalModeButton')
     }
-    if ($modeButton -eq [IntPtr]::Zero) { [Vl]::Close($modeDialog.Handle); throw 'V okne volby rezimu chybi tlacitko rezimu.' }
+    if ($modeButton -eq [IntPtr]::Zero) { [Vl]::Close($modeDialog.Handle); throw 'The mode button is missing in the mode selection window.' }
 
     $before = @(Get-Tops $Proc.Id | ForEach-Object { $_.Handle })
     [Vl]::Click($modeButton)
     $openDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Class -eq '#32770' }
-    if (-not $openDialog) { throw 'Neotevrel se dialog pro vyber programu AI Replay.' }
-    Write-Log "Dialog '$($openDialog.Title)', vkladam program."
+    if (-not $openDialog) { throw 'The AI Replay program selection dialog did not open.' }
+    Write-Log "Dialog '$($openDialog.Title)', entering the program."
 
     $edit = Find-FileNameEdit $openDialog.Handle
-    if (-not $edit) { throw 'V dialogu pro vyber programu chybi pole Nazev souboru.' }
+    if (-not $edit) { throw 'The File name box is missing in the program selection dialog.' }
     [void][Vl]::SetText($edit, $ProgramPath)
     $typed = [Vl]::GetText($edit)
-    if ($typed -ne $ProgramPath) { throw "Cestu se nepodarilo vlozit (v poli je '$typed')." }
+    if ($typed -ne $ProgramPath) { throw "The path could not be entered (the box contains '$typed')." }
 
-    if ($Nanecisto) {
+    if ($DryRun) {
         [Vl]::Click((Find-DialogButton $openDialog.Handle 2))
         $closed = Wait-Until 10 { -not [Vl]::IsWindow($openDialog.Handle) -or -not [Vl]::IsWindowVisible($openDialog.Handle) }
         return [bool]$closed
@@ -492,46 +493,47 @@ function Start-AiReplay($Proc, [string]$ProgramPath) {
     if (-not $closed) {
         $reason = (@(Get-Tops $Proc.Id | Where-Object { $_.Class -eq '#32770' -and $_.Handle -ne $openDialog.Handle } |
             ForEach-Object { Get-DialogText $_.Handle }) -join ' / ')
-        throw "VL program neprijalo, dialog zustal otevreny. $reason"
+        throw "VL did not accept the program, the dialog stayed open. $reason"
     }
     return $true
 }
 
-# --- Cekani na konec dilu ----------------------------------------------------------------------
+# --- Waiting for the end of the part ------------------------------------------------------------
 
-# Hotovo: data ve VL, VL zacalo aplikovat program (prepise seznam programu az po zarovnani
-# skenu na referenci programu, tedy po poslednim skenu), byla videt posledni poloha
-# "AI Replay (n/n)" a pak je hlavni okno 5 s volne a odpovida. Kdyz posledni poloha videt
-# nebyla, staci 30 s klidu po aplikaci programu. Kdyz se program neaplikuje, ale VL uz sken
-# prevzalo (STL Ready) a posledni poloha probehla, export po 120 s klidu.
-# Zruseno: zpet uvodni obrazovka a 30 s klid.
+# Done: data in VL, VL started applying the program (it rewrites the program list only after the
+# scan has been aligned to the program reference, i.e. after the last scan), the last position
+# "AI Replay (n/n)" was seen and then the main window is idle and responsive for SettleSec. If the
+# last position was not seen, 30 s of quiet after the program was applied are enough. If the
+# program is not applied but VL has taken the scan over (STL Ready) and the last position ran,
+# export after 120 s of quiet.
+# Cancelled: back on the start screen and 30 s of quiet.
 function Wait-ReplayFinished($Proc) {
     $templateStamp = Get-FileStamp $templateList
     $templateApplied = $false
-    $deadline = $startTime.AddMinutes($CasovacMin)
+    $deadline = $startTime.AddMinutes($TimeoutMin)
     $idleSince = $null
     $lastChange = Get-Date
     $lastSignature = $null
     $lastMessage = ''
     $seenDialogs = @{}
     $stlReady = 0
-    $finalScan = $false    # 'STL Ready' prislo az po posledni poloze n/n = slozeny sken je ve VL
-    $position = $null      # posledni "AI Replay (k/n)" z titulku okna pred polohou
+    $finalScan = $false    # 'STL Ready' came only after the last position n/n = the composed scan is in VL
+    $position = $null      # last "AI Replay (k/n)" from the title of the window before a position
     $appliedWaitLogged = $false
 
     while ($true) {
         Start-Sleep -Milliseconds 500
         $now = Get-Date
-        if ($Proc.HasExited) { return @{ Result = 'Error'; Message = "Okno VL se zavrelo (PID $($Proc.Id)). $lastMessage" } }
-        if ($now -gt $deadline) { return @{ Result = 'Error'; Message = "Dil nebyl hotovy do $CasovacMin min." } }
+        if ($Proc.HasExited) { return @{ Result = 'Error'; Message = "The VL window closed (PID $($Proc.Id)). $lastMessage" } }
+        if ($now -gt $deadline) { return @{ Result = 'Error'; Message = "The part was not finished within $TimeoutMin min." } }
 
-        # VLOperation.log: 'STL Ready' = VL prevzalo sken (po 1. poloze a po slozeni vsech poloh).
+        # VLOperation.log: 'STL Ready' = VL has taken the scan over (after position 1 and after composing all positions).
         foreach ($line in @(Read-OperationLog)) {
             Write-Log "  VL: $($line.Trim())" DarkGray
             $lastChange = $now
             if ($line -match 'STL Ready') {
                 $stlReady++
-                if ($position -and $position.K -ge $position.N) { $finalScan = $true; Write-Log 'Slozeny sken je ve VL (STL Ready po posledni poloze).' }
+                if ($position -and $position.K -ge $position.N) { $finalScan = $true; Write-Log 'The composed scan is in VL (STL Ready after the last position).' }
             }
         }
 
@@ -539,62 +541,62 @@ function Wait-ReplayFinished($Proc) {
         if ($state.Signature -ne $lastSignature) {
             $lastSignature = $state.Signature
             $lastChange = $now
-            Write-Log "  okna VL: $($state.Signature)" DarkGray
+            Write-Log "  VL windows: $($state.Signature)" DarkGray
             foreach ($d in $state.Tops | Where-Object { $_.Class -eq '#32770' -and -not $seenDialogs.ContainsKey($_.Handle) }) {
                 $seenDialogs[$d.Handle] = $true
                 $text = Get-DialogText $d.Handle
-                if ($text) { $lastMessage = "Hlaseni VL '$($d.Title)': $text"; Write-Log "  $lastMessage" Yellow }
+                if ($text) { $lastMessage = "VL message '$($d.Title)': $text"; Write-Log "  $lastMessage" Yellow }
             }
         }
 
-        # Okno pred kazdou polohou (ReplayForm) ma v titulku "AI Replay (k/n)".
+        # The window before each position (ReplayForm) has "AI Replay (k/n)" in its title.
         foreach ($w in $state.Tops) {
             if (($w.Name -eq 'ReplayForm' -or $w.Title -match '^AI Replay') -and $w.Title -match '\((\d+)\s*/\s*(\d+)\)') {
                 $k = [int]$Matches[1]; $n = [int]$Matches[2]
                 if (-not $position -or $position.K -ne $k -or $position.N -ne $n) {
                     $position = @{ K = $k; N = $n }
-                    Write-Log "AI Replay: poloha $k/$n"
+                    Write-Log "AI Replay: position $k/$n"
                 }
             }
         }
-        # Bez titulku k/n (jiny jazyk, jina verze VL) se na posledni polohu neceka.
+        # Without a k/n title (other language, other VL version) there is no wait for the last position.
         $lastPosition = (-not $position) -or ($position.K -ge $position.N)
 
         $stamp = Get-FileStamp $templateList
         if (-not $templateApplied -and $stamp -ne $templateStamp) {
             $templateApplied = $true
-            Write-Log 'VL aplikovalo program (seznam programu prepsan).'
+            Write-Log 'VL applied the program (program list rewritten).'
             $idleSince = $null
         }
 
         if ($state.Idle) { if (-not $idleSince) { $idleSince = $now } } else { $idleSince = $null }
         $idleFor = if ($idleSince) { ($now - $idleSince).TotalSeconds } else { 0 }
 
-        # -HnedPoSkenu: export hned po slozeni skenu, bez cekani na zarovnani na program
-        # (VL zarovnava ~20 s na pozadi; STL je pak v souradnicich skeneru, ne programu).
-        if ($HnedPoSkenu -and $finalScan -and $state.Idle -and -not $state.StartScreen -and $idleFor -ge 1) {
-            return @{ Result = 'Done'; Message = 'STL hned po skenu (pred zarovnanim na program, souradnice skeneru).' }
+        # -ExportImmediately: export right after the scan is composed, without waiting for the alignment to the program
+        # (VL aligns for ~20 s in the background; the STL is then in scanner coordinates, not program coordinates).
+        if ($ExportImmediately -and $finalScan -and $state.Idle -and -not $state.StartScreen -and $idleFor -ge 1) {
+            return @{ Result = 'Done'; Message = 'STL right after the scan (before the alignment to the program, scanner coordinates).' }
         }
         if ($state.Idle -and -not $state.StartScreen) {
-            if ($templateApplied -and $idleFor -ge $KlidSec -and -not $lastPosition -and -not $appliedWaitLogged) {
+            if ($templateApplied -and $idleFor -ge $SettleSec -and -not $lastPosition -and -not $appliedWaitLogged) {
                 $appliedWaitLogged = $true
-                Write-Log "Program aplikovan, ale posledni poloha nebyla videt (naposledy $($position.K)/$($position.N)) - cekam." Yellow
+                Write-Log "Program applied, but the last position was not seen (last $($position.K)/$($position.N)) - waiting." Yellow
             }
-            if ($templateApplied -and (($lastPosition -and $idleFor -ge $KlidSec) -or $idleFor -ge 30)) {
-                if (-not $stlReady) { Write-Log 'Ve VLOperation.log nebylo STL Ready - pokracuji podle aplikace programu.' Yellow }
+            if ($templateApplied -and (($lastPosition -and $idleFor -ge $SettleSec) -or $idleFor -ge 30)) {
+                if (-not $stlReady) { Write-Log 'There was no STL Ready in VLOperation.log - continuing because the program was applied.' Yellow }
                 return @{ Result = 'Done'; Message = '' }
             }
             if (-not $templateApplied -and $stlReady -and $lastPosition -and $idleFor -ge 120 -and ($now - $lastChange).TotalSeconds -ge 120) {
-                return @{ Result = 'Done'; Message = 'VL po skenu neaplikovalo program, STL je bez vyhodnoceni VL.' }
+                return @{ Result = 'Done'; Message = 'VL did not apply the program after the scan, the STL has no VL evaluation.' }
             }
         }
         if ($state.Idle -and $state.StartScreen -and $idleFor -ge 30 -and ($now - $lastChange).TotalSeconds -ge 30) {
-            return @{ Result = 'Cancelled'; Message = "AI Replay byl zrusen nebo selhal, VL je zpet na uvodni obrazovce. $lastMessage".Trim() }
+            return @{ Result = 'Cancelled'; Message = "AI Replay was cancelled or failed, VL is back on its start screen. $lastMessage".Trim() }
         }
     }
 }
 
-# --- Export STL pres menu File > Export > STL... -----------------------------------------------------
+# --- STL export via the menu File > Export > STL... -----------------------------------------------------
 
 function Get-MenuItems([int]$ProcId) {
     $byPid = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $ProcId)
@@ -609,8 +611,8 @@ function Find-MenuItem([int]$ProcId, [string]$Name, [int]$TimeoutSec = 5) {
     }
 }
 
-# Cilene hledani v menu: polozky hlavni listy menu, pak deti rozbalene polozky (~0.07 s).
-# Prohledavani vsech UIA potomku vsech oken VL (Find-MenuItem) trvalo ~1.2 s na polozku.
+# Targeted menu search: items of the main menu bar, then the children of the expanded item (~0.07 s).
+# Searching all UIA descendants of all VL windows (Find-MenuItem) took ~1.2 s per item.
 function Find-ChildMenuItem($Parent, [string]$Name, [int]$TimeoutMs = 3000) {
     $isItem = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::MenuItem)
     $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
@@ -627,7 +629,7 @@ $script:menuStrips = @{}
 function Export-StlFile($Proc, [string]$Target) {
     $parts = @($Menu -split '>' | ForEach-Object { $_.Trim() })
     $state = Get-VlState $Proc.Id
-    if (-not $state.Idle) { throw "Okno VL neni volne: $($state.Signature)" }
+    if (-not $state.Idle) { throw "The VL window is not idle: $($state.Signature)" }
     [Vl]::BringToFront($state.Main.Handle)
     Start-Sleep -Milliseconds 100
 
@@ -636,7 +638,7 @@ function Export-StlFile($Proc, [string]$Target) {
         $strip = [Vl]::FindChild($state.Main.Handle, '_mainMenuStrip')
         $script:menuStrips[$Proc.Id] = $strip
     }
-    if ($strip -eq [IntPtr]::Zero) { throw 'V okne VL chybi hlavni menu (_mainMenuStrip).' }
+    if ($strip -eq [IntPtr]::Zero) { throw 'The main menu (_mainMenuStrip) is missing in the VL window.' }
 
     $before = @($state.Tops | ForEach-Object { $_.Handle })
     $topItem = $null
@@ -644,8 +646,8 @@ function Export-StlFile($Proc, [string]$Target) {
         $parent = [System.Windows.Automation.AutomationElement]::FromHandle($strip)
         for ($i = 0; $i -lt $parts.Count; $i++) {
             $item = Find-ChildMenuItem $parent $parts[$i]
-            if (-not $item) { throw "V menu VL chybi polozka '$($parts[$i])' (cesta $Menu)." }
-            if (-not $item.Current.IsEnabled) { throw "Polozka menu '$($parts[$i])' je ve VL vypnuta." }
+            if (-not $item) { throw "The VL menu has no item '$($parts[$i])' (path $Menu)." }
+            if (-not $item.Current.IsEnabled) { throw "The menu item '$($parts[$i])' is disabled in VL." }
             if ($i -eq 0) { $topItem = $item }
             if ($i -lt $parts.Count - 1) {
                 $item.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
@@ -660,56 +662,56 @@ function Export-StlFile($Proc, [string]$Target) {
     }
 
     $stlDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Name -eq 'StlExporterDialog' } 50
-    if (-not $stlDialog) { throw 'Po vyberu Export > STL se neotevrelo okno exportu STL.' }
+    if (-not $stlDialog) { throw 'The STL export window did not open after selecting Export > STL.' }
 
-    # Binary, bez prorezeni; doplneni der VL pri kazdem otevreni vypina samo.
+    # Binary, no thinning; VL switches hole filling off by itself every time the window opens.
     $thinning = [Vl]::FindChild($stlDialog.Handle, '_thinningRatioComboBox')
     if ($thinning -ne [IntPtr]::Zero -and [Vl]::Send($thinning, 0x0147, 0) -ne 0) {
         [void][Vl]::Send($thinning, 0x014E, 0)
-        Write-Log 'Prorezeni nastaveno na 1:1.'
+        Write-Log 'Thinning set to 1:1.'
     }
     $binary = [Vl]::FindChild($stlDialog.Handle, '_binaryRadioButton')
     if ($binary -ne [IntPtr]::Zero) { [Vl]::Click($binary); Start-Sleep -Milliseconds 50 }
     $ok = [Vl]::FindChild($stlDialog.Handle, '_okButton')
-    if ($ok -eq [IntPtr]::Zero) { [Vl]::Close($stlDialog.Handle); throw 'V okne exportu STL chybi tlacitko OK.' }
+    if ($ok -eq [IntPtr]::Zero) { [Vl]::Close($stlDialog.Handle); throw 'The OK button is missing in the STL export window.' }
 
     $before = @(Get-Tops $Proc.Id | ForEach-Object { $_.Handle })
     [Vl]::Click($ok)
     $saveDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Class -eq '#32770' } 50
-    if (-not $saveDialog) { [Vl]::Close($stlDialog.Handle); throw 'Neotevrel se dialog Ulozit jako pro STL.' }
+    if (-not $saveDialog) { [Vl]::Close($stlDialog.Handle); throw 'The Save As dialog for the STL did not open.' }
     $edit = Find-FileNameEdit $saveDialog.Handle
-    if (-not $edit) { [Vl]::Click((Find-DialogButton $saveDialog.Handle 2)); throw 'V dialogu Ulozit jako chybi pole Nazev souboru.' }
+    if (-not $edit) { [Vl]::Click((Find-DialogButton $saveDialog.Handle 2)); throw 'The File name box is missing in the Save As dialog.' }
     [void][Vl]::SetText($edit, $Target)
-    if ([Vl]::GetText($edit) -ne $Target) { [Vl]::Click((Find-DialogButton $saveDialog.Handle 2)); throw 'Cilovou cestu STL se nepodarilo vlozit.' }
+    if ([Vl]::GetText($edit) -ne $Target) { [Vl]::Click((Find-DialogButton $saveDialog.Handle 2)); throw 'The STL target path could not be entered.' }
     [Vl]::Click((Find-DialogButton $saveDialog.Handle 1))
-    Write-Log "Exportuji STL: $Target"
+    Write-Log "Exporting STL: $Target"
 
-    # Hotovo, kdyz zmizi oba dialogy, VL je volne a soubor uz nikdo nezapisuje
-    # (VL zapsalo 'Finish STL Export', nebo se velikost dvakrat po sobe nezmenila).
+    # Done when both dialogs are gone, VL is idle and nobody writes the file any more
+    # (VL wrote 'Finish STL Export', or the size did not change twice in a row).
     $script:lastLength = -2
     $script:finishSeen = $false
     $finished = Wait-Until 600 {
         foreach ($l in @(Read-OperationLog)) { if ($l -match 'Finish STL Export') { $script:finishSeen = $true } }
         $tops = @(Get-Tops $Proc.Id)
         $other = @($tops | Where-Object { $_.Class -eq '#32770' -and $_.Handle -ne $saveDialog.Handle })
-        if ($other) { throw "VL pri exportu STL hlasi: $((Get-DialogText $other[0].Handle))" }
-        if ($Proc.HasExited) { throw 'VL se pri exportu STL zavrelo.' }
+        if ($other) { throw "VL reports during the STL export: $((Get-DialogText $other[0].Handle))" }
+        if ($Proc.HasExited) { throw 'VL closed during the STL export.' }
         $busy = @($tops | Where-Object { $_.Name -ne 'MeshAnalyzerForm' }).Count -gt 0
         $length = if (Test-Path -LiteralPath $Target) { Get-FinishedLength $Target } else { -1 }
         $stable = $length -gt 0 -and ($script:finishSeen -or $length -eq $script:lastLength)
         $script:lastLength = $length
         (-not $busy) -and $stable
     } 100
-    if (-not $finished) { throw 'Export STL nedobehl do 10 min.' }
+    if (-not $finished) { throw 'The STL export did not finish within 10 min.' }
 
     $triangles = Test-BinaryStl $Target
-    if (-not $triangles) { throw "Soubor $Target neni platne binarni STL." }
-    if (-not $script:finishSeen -and -not (@(Read-OperationLog) -match 'Finish STL Export')) { Write-Log 'VL nezapsalo do VLOperation.log Finish STL Export (soubor je ale v poradku).' Yellow }
+    if (-not $triangles) { throw "File $Target is not a valid binary STL." }
+    if (-not $script:finishSeen -and -not (@(Read-OperationLog) -match 'Finish STL Export')) { Write-Log 'VL did not write Finish STL Export to VLOperation.log (the file is fine though).' Yellow }
     return $triangles
 }
 
-# -VlDoPozadi: VL minimalizovat a do popredi dat okno PolyWorks, ze ktereho spoustec bezi
-# (predek iminspect.exe: iminspect -> cmd -> powershell). Bez PolyWorks jen minimalizuje VL.
+# -VlToBackground: minimize VL and bring the PolyWorks window the launcher runs from to the front
+# (ancestor iminspect.exe: iminspect -> cmd -> powershell). Without PolyWorks it only minimizes VL.
 function Move-VlToBackground($Proc) {
     try {
         $main = (Get-VlState $Proc.Id).Main
@@ -723,24 +725,24 @@ function Move-VlToBackground($Proc) {
             if (-not $parent) { break }
             if ($parent.ProcessName -eq 'iminspect' -and $parent.MainWindowHandle -ne [IntPtr]::Zero) {
                 [Vl]::BringToFront($parent.MainWindowHandle)
-                Write-Log "VL minimalizovano, PolyWorks (PID $id) v popredi."
+                Write-Log "VL minimized, PolyWorks (PID $id) in front."
                 return
             }
         }
-        Write-Log 'VL minimalizovano (spoustec nebezel z PolyWorks).'
+        Write-Log 'VL minimized (the launcher was not started from PolyWorks).'
     }
-    catch { Write-Log "VL do pozadi: $($_.Exception.Message)" Yellow }
+    catch { Write-Log "VL to background: $($_.Exception.Message)" Yellow }
 }
 
-# Bez oddelovacu tisicu a s desetinnou teckou, at je znacka stejna na kazdem PC.
+# Without thousands separators and with a decimal point, so the marker is the same on every PC.
 function Format-StlInfo([string]$Path, $Triangles) {
     $mb = (Get-Item -LiteralPath $Path).Length / 1MB
-    return [string]::Format([Globalization.CultureInfo]::InvariantCulture, 'STL {0:0.0} MB, {1} trojuhelniku.', $mb, $Triangles)
+    return [string]::Format([Globalization.CultureInfo]::InvariantCulture, 'STL {0:0.0} MB, {1} triangles.', $mb, $Triangles)
 }
 
 function Get-TargetPath([string]$Name) {
-    if ($StlSoubor) { return [IO.Path]::GetFullPath($StlSoubor) }
-    $base = Join-Path $Vystup ('{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName $Name), (Get-Date))
+    if ($StlFile) { return [IO.Path]::GetFullPath($StlFile) }
+    $base = Join-Path $OutputDir ('{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName $Name), (Get-Date))
     $target = "$base.stl"
     $n = 2
     while (Test-Path -LiteralPath $target) { $target = "${base}_$n.stl"; $n++ }
@@ -751,33 +753,33 @@ function Get-TargetPath([string]$Name) {
 
 $script:mutex = New-Object System.Threading.Mutex($false, 'Local\VL_replay')
 try { $owned = $script:mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
-if (-not $owned) { $script:mutex = $null; Write-Log 'vl_replay uz bezi (jiny dil), konec.' Red; exit $EXIT_BUSY }
+if (-not $owned) { $script:mutex = $null; Write-Log 'The launcher is already running (another part), exiting.' Red; exit $EXIT_BUSY }
 
 $script:programPath = ''
 $script:markerPath = $null
-$Host.UI.RawUI.WindowTitle = 'VL AI Replay -> PolyWorks'
-$what = if ($JenExport) { "jen export $Program".Trim() } else { $Program }
-$flags = @($(if ($Nanecisto) { 'NANECISTO' }), $(if ($NoveOkno) { 'nove okno' })) | Where-Object { $_ }
-Write-Log ("=== vl_replay $what | ucet $env:USERNAME | rezim $Rezim " + ($flags -join ' | ')).Trim() Cyan
+$Host.UI.RawUI.WindowTitle = 'VL Connector - AI Replay'
+$what = if ($ExportOnly) { "export only $Program".Trim() } else { $Program }
+$flags = @($(if ($DryRun) { 'DRY RUN' }), $(if ($NewWindow) { 'new window' })) | Where-Object { $_ }
+Write-Log ("=== VLReplay $what | account $env:USERNAME | mode $Mode " + ($flags -join ' | ')).Trim() Cyan
 
 $watcherRunning = $false
 $watcherMutex = $null
 if ([System.Threading.Mutex]::TryOpenExisting('Local\VL_export_stl', [ref]$watcherMutex)) { $watcherRunning = $true; $watcherMutex.Dispose() }
-if ($watcherRunning) { Write-Log 'Bezi hlidac export_stl.ps1 - po dilu vznikne STL dvakrat. Pro tento rezim ho vypnete.' Yellow }
-if (Test-Path -LiteralPath (Join-Path (Split-Path $VlExe) 'Keyence.VlStlPatch.dll')) { Write-Log 'Je nasazeny testovaci patch STL - ulozi dalsi STL do slozky reportu.' Yellow }
+if ($watcherRunning) { Write-Log 'The export_stl.ps1 watcher is running - every part will produce two STL files. Switch it off for this mode.' Yellow }
+if (Test-Path -LiteralPath (Join-Path (Split-Path $VlExe) 'Keyence.VlStlPatch.dll')) { Write-Log 'The STL test patch is deployed - it saves another STL into the report folder.' Yellow }
 
-if (-not $JenExport) {
-    if (-not $Program) { Write-Log 'Zadejte program: vl_replay.cmd <program nebo cesta k .vld4>' Red; $script:mutex.ReleaseMutex(); exit $EXIT_ARGS }
+if (-not $ExportOnly) {
+    if (-not $Program) { Write-Log 'Give the program: VLReplay.cmd <program or path to the .vld4>' Red; $script:mutex.ReleaseMutex(); exit $EXIT_ARGS }
     $programName = Get-SafeName ([IO.Path]::GetFileNameWithoutExtension($Program))
-    # Nanecisto zapise znacku (STAV=NANECISTO) jen se zadanou -Znacka, aby slo zkouset volani z PolyWorks.
-    if (-not $Nanecisto -or $Znacka) { $script:markerPath = if ($Znacka) { $Znacka } else { Join-Path $Vystup "$programName.hotovo" } }
+    # A dry run writes a marker (STATE=DRYRUN) only with -MarkerFile, so that calls from PolyWorks can be tested.
+    if (-not $DryRun -or $MarkerFile) { $script:markerPath = if ($MarkerFile) { $MarkerFile } else { Join-Path $OutputDir "$programName.done" } }
     try {
-        New-Item -ItemType Directory -Force -Path $Vystup | Out-Null
+        New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
         if ($script:markerPath -and (Test-Path -LiteralPath $script:markerPath)) { Remove-Item -LiteralPath $script:markerPath -Force }
         $script:programPath = Resolve-Program $Program
     }
-    catch { Exit-Run $EXIT_ARGS 'CHYBA' $_.Exception.Message }
-    if (-not $script:programPath) { Exit-Run $EXIT_ARGS 'CHYBA' "Program '$Program' nenalezen (hledano v naposledy pouzitych a v $($ProgramDir -join ', '))." }
+    catch { Exit-Run $EXIT_ARGS 'ERROR' $_.Exception.Message }
+    if (-not $script:programPath) { Exit-Run $EXIT_ARGS 'ERROR' "Program '$Program' not found (searched in the recently used programs and in $($ProgramDir -join ', '))." }
     Write-Log "Program: $script:programPath"
 }
 
@@ -785,44 +787,44 @@ try {
     $script:opOffset = 0L; $script:opPending = ''
     if (Test-Path -LiteralPath $operationLog) { $script:opOffset = (Get-Item -LiteralPath $operationLog).Length }
 
-    if ($JenExport) {
-        # se zadanou -Znackou ji zapsat i pri chybe pred nalezenim okna VL
-        if ($Znacka) { $script:markerPath = $Znacka }
+    if ($ExportOnly) {
+        # with -MarkerFile write the marker even on an error before a VL window is found
+        if ($MarkerFile) { $script:markerPath = $MarkerFile }
         $proc = $null
         foreach ($p in Get-VlProcesses) {
             $s = Get-VlState $p.Id
             if ($s.Idle -and -not $s.StartScreen -and $s.Main) { $proc = $p; $state = $s; break }
         }
-        if (-not $proc) { throw 'Zadne volne okno VL s otevrenymi daty.' }
+        if (-not $proc) { throw 'No idle VL window with open data.' }
         $dataName = if ($state.Main.Title -match '^\W*(.+?)\W*\s-\sVL-800') { $Matches[1] } else { 'VL' }
         $name = if ($Program) { [IO.Path]::GetFileNameWithoutExtension($Program) } else { $dataName }
-        $script:markerPath = if ($Znacka) { $Znacka } else { Join-Path $Vystup "$(Get-SafeName $name).hotovo" }
-        New-Item -ItemType Directory -Force -Path $Vystup | Out-Null
+        $script:markerPath = if ($MarkerFile) { $MarkerFile } else { Join-Path $OutputDir "$(Get-SafeName $name).done" }
+        New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
         if (Test-Path -LiteralPath $script:markerPath) { Remove-Item -LiteralPath $script:markerPath -Force }
-        Write-Log "Export z okna VL PID $($proc.Id): $($state.Main.Title)"
+        Write-Log "Export from VL window PID $($proc.Id): $($state.Main.Title)"
         $target = Get-TargetPath $name
         $triangles = Export-StlFile $proc $target
-        if ($VlDoPozadi) { Move-VlToBackground $proc }
+        if ($VlToBackground) { Move-VlToBackground $proc }
         Exit-Run $EXIT_OK 'OK' (Format-StlInfo $target $triangles) $target
     }
 
 
     $proc = Get-StartScreenVl
     $started = Start-AiReplay $proc $script:programPath
-    if ($Nanecisto) {
+    if ($DryRun) {
         if ($started) {
-            $dryRunText = 'AI Replay -> rezim -> program vlozen -> Storno. VL je zpet na uvodni obrazovce.'
-            if ($script:markerPath) { Exit-Run $EXIT_OK 'NANECISTO' $dryRunText }
-            Write-Log "NANECISTO: $dryRunText" Green; $script:mutex.ReleaseMutex(); exit $EXIT_OK
+            $dryRunText = 'AI Replay -> mode -> program entered -> Cancel. VL is back on its start screen.'
+            if ($script:markerPath) { Exit-Run $EXIT_OK 'DRYRUN' $dryRunText }
+            Write-Log "DRY RUN: $dryRunText" Green; $script:mutex.ReleaseMutex(); exit $EXIT_OK
         }
-        throw 'NANECISTO: dialog pro vyber programu se nezavrel.'
+        throw 'DRY RUN: the program selection dialog did not close.'
     }
-    Write-Log 'AI Replay bezi - operator pokracuje ve VL jako obvykle.' Green
+    Write-Log 'AI Replay is running - the operator continues in VL as usual.' Green
 
     $finish = Wait-ReplayFinished $proc
     switch ($finish.Result) {
-        'Cancelled' { Exit-Run $EXIT_CANCELLED 'ZRUSENO' $finish.Message }
-        'Error'     { Exit-Run $EXIT_ERROR 'CHYBA' $finish.Message }
+        'Cancelled' { Exit-Run $EXIT_CANCELLED 'CANCELLED' $finish.Message }
+        'Error'     { Exit-Run $EXIT_ERROR 'ERROR' $finish.Message }
     }
     if ($finish.Message) { Write-Log $finish.Message Yellow }
 
@@ -831,16 +833,16 @@ try {
     for ($attempt = 1; $attempt -le 2 -and -not $triangles; $attempt++) {
         try { $triangles = Export-StlFile $proc $target }
         catch {
-            Write-Log "Export STL (pokus $attempt): $($_.Exception.Message)" Yellow
+            Write-Log "STL export (attempt $attempt): $($_.Exception.Message)" Yellow
             if ($attempt -eq 2) { throw }
             Start-Sleep -Seconds 3
             [void](Wait-Until 60 { (Get-VlState $proc.Id).Idle } 500)
         }
     }
     $message = ((Format-StlInfo $target $triangles) + ' ' + $finish.Message).Trim()
-    if ($VlDoPozadi) { Move-VlToBackground $proc }
+    if ($VlToBackground) { Move-VlToBackground $proc }
     Exit-Run $EXIT_OK 'OK' $message $target
 }
 catch {
-    Exit-Run $EXIT_ERROR 'CHYBA' $_.Exception.Message
+    Exit-Run $EXIT_ERROR 'ERROR' $_.Exception.Message
 }
