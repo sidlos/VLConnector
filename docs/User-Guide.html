@@ -51,6 +51,9 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <li>The installer checks every file against its manifest and shows the <strong>package fingerprint</strong>. Compare it with the fingerprint you received with the package, then confirm.</li>
 <li>It installs to <code>C:\ProgramData\VLConnector</code> (another folder: <code>Install.cmd -InstallDir D:\VLConnector</code>), builds the report layouts from your PolyWorks installation, creates the PolyWorks button files and the Start menu entries <strong>VL Connector</strong> (settings), <strong>VL Connector agent</strong> and <strong>Uninstall VL Connector</strong>.</li>
 </ol>
+<ol>
+<li>At the end it offers the <strong>setup wizard</strong> (also later: settings window &gt; Setup &gt; <em>Setup wizard</em>). The wizard asks for the scenario and the main options, builds the report layouts, <strong>adds the VL Connector tab with the Measure or Station button to PolyWorks</strong> (open PolyWorks|Inspector first; your PolyWorks layout is saved before and the wizard can undo it) and, for the network scenario, sets the shared folder and the agent.</li>
+</ol>
 <p><strong>Update:</strong> run Install.cmd of the new version. Settings, report layouts and the imported PolyWorks buttons stay. <strong>Check an installation:</strong> <code>Install.cmd -Verify</code> (in the program folder) compares all files with the manifest and shows the status of the PC. <strong>Uninstall:</strong> Start menu &gt; Uninstall VL Connector. Scans, reports and PolyWorks projects are never removed.</p>
 <h2 id="3-the-settings-window">3. The settings window</h2>
 <p>Start menu &gt; <strong>VL Connector</strong>. Every change is saved immediately (&quot;Saved&quot; appears at the bottom).</p>
@@ -86,6 +89,8 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <p><strong>Report:</strong> page 1 shows a large isometric color map with the verdict (green OK / red NOK) and the summary, page 2 the table of all controls, then top and front views. The CSV has one line per control with nominal, measured, deviation, tolerances and result. The verdict is NOK when a control is out of tolerance or could not be measured.</p>
 <h2 id="5-scenario-a-the-measure-button">5. Scenario A: the Measure button</h2>
 <h3 id="add-the-button-to-polyworks-once-per-windows-user">Add the button to PolyWorks (once per Windows user)</h3>
+<p>Automatically: open PolyWorks|Inspector (any project), then press <strong>Add to PolyWorks</strong> in the setup wizard or in the settings window, page <strong>PolyWorks</strong>. A ribbon tab <strong>VL Connector</strong> with the <strong>Measure</strong> button appears. Your PolyWorks visual layout is saved before (in <code>%LOCALAPPDATA%\VLConnector\polyworks-layout</code>); the wizard can undo it.</p>
+<p>By hand instead:</p>
 <ol>
 <li>In the settings window, page <strong>PolyWorks</strong>, press <strong>Copy macro path</strong>.</li>
 <li>In PolyWorks|Inspector open <strong>File &gt; Visual Layout &gt; Customize &gt; Customize</strong>.</li>

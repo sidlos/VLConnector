@@ -44,6 +44,11 @@ PolyWorks Metrology Suite 2026 (evaluating PC). No administrator rights are need
    builds the report layouts from your PolyWorks installation, creates the PolyWorks button files and the
    Start menu entries **VL Connector** (settings), **VL Connector agent** and **Uninstall VL Connector**.
 
+5. At the end it offers the **setup wizard** (also later: settings window > Setup > *Setup wizard*). The wizard
+   asks for the scenario and the main options, builds the report layouts, **adds the VL Connector tab with the
+   Measure or Station button to PolyWorks** (open PolyWorks|Inspector first; your PolyWorks layout is saved
+   before and the wizard can undo it) and, for the network scenario, sets the shared folder and the agent.
+
 **Update:** run Install.cmd of the new version. Settings, report layouts and the imported PolyWorks buttons stay.
 **Check an installation:** `Install.cmd -Verify` (in the program folder) compares all files with the manifest
 and shows the status of the PC. **Uninstall:** Start menu > Uninstall VL Connector. Scans, reports and
@@ -107,6 +112,12 @@ be measured.
 ## 5. Scenario A: the Measure button
 
 ### Add the button to PolyWorks (once per Windows user)
+
+Automatically: open PolyWorks|Inspector (any project), then press **Add to PolyWorks** in the setup wizard or in
+the settings window, page **PolyWorks**. A ribbon tab **VL Connector** with the **Measure** button appears. Your
+PolyWorks visual layout is saved before (in `%LOCALAPPDATA%\VLConnector\polyworks-layout`); the wizard can undo it.
+
+By hand instead:
 
 1. In the settings window, page **PolyWorks**, press **Copy macro path**.
 2. In PolyWorks|Inspector open **File > Visual Layout > Customize > Customize**.

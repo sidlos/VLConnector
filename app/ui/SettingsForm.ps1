@@ -100,37 +100,8 @@ function Update-ProgramsSummary([string]$Share) {
     catch { $c.ProgramsSummary.Text = "The programs list cannot be read: $($_.Exception.Message)" }
 }
 
-function Get-AgentShortcutPath { return Join-Path ([Environment]::GetFolderPath('Startup')) 'VL Connector agent.lnk' }
-
-function Test-AgentRunning {
-    $m = $null
-    if ([System.Threading.Mutex]::TryOpenExisting('Local\VLConnector_Agent', [ref]$m)) { $m.Dispose(); return $true }
-    return $false
-}
-
 function Update-AgentStatus {
     $script:sc.AgentStatus.Text = if (Test-AgentRunning) { 'The agent is running.' } else { 'The agent is not running.' }
-}
-
-function Start-VlcAgent {
-    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    Start-Process -FilePath $ps -ArgumentList '-NoProfile', '-STA', '-ExecutionPolicy', 'RemoteSigned', '-WindowStyle', 'Hidden', '-File', "`"$(Join-Path (Get-VlcPaths).AppDir 'Agent.ps1')`"" -WindowStyle Hidden
-}
-
-# Startup folder entry of the agent (no administrator rights, current user only).
-function Set-AgentAutostart([bool]$On) {
-    $lnk = Get-AgentShortcutPath
-    if (-not $On) { if (Test-Path -LiteralPath $lnk) { Remove-Item -LiteralPath $lnk -Force }; return }
-    $app = (Get-VlcPaths).AppDir
-    $shell = New-Object -ComObject WScript.Shell
-    $s = $shell.CreateShortcut($lnk)
-    $s.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $s.Arguments = "-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File `"$app\Agent.ps1`""
-    $s.WorkingDirectory = $app
-    $s.IconLocation = "$app\assets\VLC_icon.ico,0"
-    $s.Description = 'VL Connector agent - exports the STL after AI Replay and opens the reports'
-    $s.WindowStyle = 7
-    $s.Save()
 }
 
 function Invoke-StatusAction([string]$Id) {
@@ -189,7 +160,7 @@ function Show-SettingsWindow {
     $c.Versions.Text = Get-VlcVersionsText $cfg
     Update-PolyWorksPage
     Update-ProgramsSummary ([string]$cfg.network.share)
-    $c.AgentAutostart.IsChecked = Test-Path -LiteralPath (Get-AgentShortcutPath)
+    $c.AgentAutostart.IsChecked = Test-AgentAutostart
     Update-AgentStatus
 
     # --- navigation -----------------------------------------------------------------------------
@@ -262,6 +233,23 @@ function Show-SettingsWindow {
         Show-SettingsToast 'Icon path copied'
     })
     $c.ButtonHelp.Add_Click({ Open-VlcPath (Join-Path (Get-VlcPaths).InstallDir 'docs\User-Guide.html') })
+    $c.AddToPolyWorks.Add_Click({
+        $cfgNow = Read-VlcSettings
+        $kind = if ($cfgNow.scenario -eq 'Network' -and $cfgNow.role -eq 'Station') { 'Station' } else { 'Measure' }
+        $script:sc.ButtonPillText.Text = 'Adding...'
+        $script:sw.Dispatcher.Invoke([Action] {}, [System.Windows.Threading.DispatcherPriority]::Render)
+        try {
+            [void](Install-VlcPolyWorksTab $kind)
+            Show-SettingsToast 'The VL Connector tab is in PolyWorks'
+            $script:sc.ButtonPill.Background = Get-Brush 'SuccessBackBrush'; $script:sc.ButtonPillText.Foreground = Get-Brush 'SuccessBrush'
+            $script:sc.ButtonPillText.Text = 'Added to PolyWorks'
+        }
+        catch { Update-PolyWorksPage; [void][System.Windows.MessageBox]::Show($script:sw, $_.Exception.Message, 'VL Connector', 'OK', 'Warning') }
+    })
+    $c.RunWizard.Add_Click({
+        $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        Start-Process -FilePath $ps -ArgumentList '-NoProfile', '-STA', '-ExecutionPolicy', 'RemoteSigned', '-WindowStyle', 'Hidden', '-File', "`"$(Join-Path (Get-VlcPaths).AppDir 'VLConnector.ps1')`"", '-Show', 'Wizard' -WindowStyle Hidden
+    })
 
     # --- Network --------------------------------------------------------------------------------
     $c.SharePath.Add_LostFocus({

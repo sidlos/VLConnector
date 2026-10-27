@@ -180,9 +180,9 @@ if ($agentWasRunning) { Start-Process -FilePath $ps -ArgumentList $entries['VL C
 [IO.File]::WriteAllText((Join-Path $InstallDir 'install-info.txt'), ("VERSION={0}`r`nINSTALLED={1:yyyy-MM-dd HH:mm:ss}`r`nUSER={2}`r`nCOMPUTER={3}`r`nFINGERPRINT={4}`r`n" -f $version, (Get-Date), $env:USERNAME, $env:COMPUTERNAME, $check.Fingerprint))
 Say ''
 Say "VL Connector $version is installed." Green
-Say 'Next: open "VL Connector" in the Start menu, choose the scenario and follow the Setup page.'
+Say 'Next: the setup wizard (also later: Start menu > VL Connector > Setup wizard).'
 if (-not $Quiet) {
-    $answer = Read-Host 'Open the settings now? [Y/n]'
-    if (-not $answer -or $answer -match '^[YyAa]') { Start-Process -FilePath $ps -ArgumentList $entries['VL Connector'].Args -WindowStyle Hidden }
+    $answer = Read-Host 'Open the setup wizard now? [Y/n]'
+    if (-not $answer -or $answer -match '^[YyAa]') { Start-Process -FilePath $ps -ArgumentList ($entries['VL Connector'].Args + ' -Show Wizard') -WindowStyle Hidden }
 }
 exit 0

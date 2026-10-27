@@ -75,7 +75,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 </table>
 <p>No registry keys are written. There is no internet access and no telemetry; the only network access is the shared folder that the user configures for scenario B.</p>
 <h2 id="5-polyworks">5. PolyWorks</h2>
-<p>The Measure and Station buttons are small macro files that the user imports into the PolyWorks ribbon once; they call <code>app\polyworks\*.pwmacro</code>. The macros use only the documented PolyWorks macro language. The station runs in a PolyWorks|Inspector of the station PC that a user starts; it keeps PolyWorks&#39; own licensing (one licence per PC).</p>
+<p>The setup wizard can add the buttons to the PolyWorks ribbon by itself, only when the user presses <em>Add to PolyWorks</em>: it sends documented PolyWorks macro commands (<code>WINDOW VISUAL_LAYOUT EXPORT</code>, <code>IMPORT_MACRO_SCRIPTS</code>, <code>LOAD</code>) through the PolyWorks programming interface (COM) to the PolyWorks|Inspector the user has open, after saving the current visual layout; it never starts PolyWorks itself. The Measure and Station buttons are small macro files (also importable by hand) that the user adds to the PolyWorks ribbon once; they call <code>app\polyworks\*.pwmacro</code>. The macros use only the documented PolyWorks macro language. The station runs in a PolyWorks|Inspector of the station PC that a user starts; it keeps PolyWorks&#39; own licensing (one licence per PC).</p>
 <h2 id="6-integrity-of-the-package">6. Integrity of the package</h2>
 <ul>
 <li><code>SHA256SUMS.txt</code> next to the ZIP: SHA-256 of the ZIP and the package fingerprint.</li>

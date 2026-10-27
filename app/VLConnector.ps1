@@ -1,14 +1,15 @@
 <#
   VLConnector.ps1 - VL Connector for PolyWorks: opens a window.
     VLConnector.cmd                   settings (scenario, scan options, PolyWorks, network, diagnostics)
+    VLConnector.cmd -Show Wizard      setup wizard (scenario, options, PolyWorks tab, network)
   The network scenario runs in the background: app\Agent.ps1 on the scanner PC (tray, starts with Windows)
   and the PolyWorks station inside PolyWorks (VL Station button, VLC_Station.pwmacro).
   Only one window of each kind runs per user; a second start brings the open one to the front.
 #>
-param([ValidateSet('Settings')] [string]$Show = 'Settings')
+param([ValidateSet('Settings', 'Wizard')] [string]$Show = 'Settings')
 
 $ErrorActionPreference = 'Stop'
-foreach ($lib in 'Settings', 'Log', 'KeyValueFile', 'Ui', 'PolyWorksSetup', 'Share', 'Prerequisites', 'Diagnostics') {
+foreach ($lib in 'Settings', 'Log', 'KeyValueFile', 'Ui', 'PolyWorksSetup', 'PolyWorksLayout', 'Share', 'AgentControl', 'Prerequisites', 'Diagnostics') {
     . (Join-Path $PSScriptRoot "lib\$lib.ps1")
 }
 
@@ -23,7 +24,7 @@ $owned = $false
 try { $owned = $mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
 if (-not $owned) {
     # already open: bring it to the front
-    $title = 'VL Connector for PolyWorks'
+    $title = @{ Settings = 'VL Connector for PolyWorks'; Wizard = 'VL Connector - Setup' }[$Show]
     Add-Type -Namespace VlcEntry -Name Win -MemberDefinition @'
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
@@ -38,6 +39,7 @@ if (-not $owned) {
 try {
     switch ($Show) {
         'Settings' { . (Join-Path $PSScriptRoot 'ui\SettingsForm.ps1'); Show-SettingsWindow }
+        'Wizard' { . (Join-Path $PSScriptRoot 'ui\WizardForm.ps1'); Show-SetupWizard }
     }
 }
 catch {

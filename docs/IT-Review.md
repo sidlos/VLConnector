@@ -76,7 +76,11 @@ shared folder that the user configures for scenario B.
 
 ## 5. PolyWorks
 
-The Measure and Station buttons are small macro files that the user imports into the PolyWorks ribbon once;
+The setup wizard can add the buttons to the PolyWorks ribbon by itself, only when the user presses *Add to
+PolyWorks*: it sends documented PolyWorks macro commands (`WINDOW VISUAL_LAYOUT EXPORT`, `IMPORT_MACRO_SCRIPTS`,
+`LOAD`) through the PolyWorks programming interface (COM) to the PolyWorks|Inspector the user has open, after
+saving the current visual layout; it never starts PolyWorks itself. The Measure and Station buttons are small
+macro files (also importable by hand) that the user adds to the PolyWorks ribbon once;
 they call `app\polyworks\*.pwmacro`. The macros use only the documented PolyWorks macro language. The station
 runs in a PolyWorks|Inspector of the station PC that a user starts; it keeps PolyWorks' own licensing (one
 licence per PC).
