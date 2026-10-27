@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VL Connector for PolyWorks - Protocol</title>
+<style>
+body { font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; font-size: 15px; line-height: 1.55; color: #1b1b1b;
+       background: #f3f3f3; margin: 0; }
+main { max-width: 920px; margin: 28px auto; background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 32px 44px 44px; }
+h1 { font-size: 28px; font-weight: 600; margin: 0 0 8px; }
+h2 { font-size: 21px; font-weight: 600; margin: 34px 0 10px; padding-top: 6px; border-top: 1px solid #ececec; }
+h3 { font-size: 17px; font-weight: 600; margin: 24px 0 8px; }
+a { color: #0f6cbd; text-decoration: none; } a:hover { text-decoration: underline; }
+code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; background: #f3f3f3; padding: 1px 5px; border-radius: 4px; }
+pre { background: #f6f6f6; border: 1px solid #e5e5e5; border-radius: 6px; padding: 12px 14px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+th, td { border: 1px solid #e3e3e3; padding: 7px 10px; text-align: left; vertical-align: top; }
+th { background: #f7f7f7; font-weight: 600; }
+blockquote { margin: 14px 0; padding: 10px 16px; background: #fff4ce; border-left: 4px solid #9d5d00; border-radius: 4px; }
+img { max-width: 100%; border: 1px solid #e5e5e5; border-radius: 6px; margin: 8px 0; }
+li.task { list-style: none; margin-left: -18px; }
+footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+<h1 id="vl-connector-for-polyworks---protocol">VL Connector for PolyWorks - Protocol</h1>
+<p>Files exchanged between the launcher, the PolyWorks macros, the Scan window and the PolyWorks station.</p>
+<p><strong>Format of all KEY=value files:</strong> one <code>KEY=value</code> per line, keys in the fixed order given below (the PolyWorks macros read them by line number), UTF-8 <strong>with BOM</strong> (files written by PolyWorks are UTF-16; readers accept both). Values never contain line breaks or <code>=</code> (written as <code>-</code>; paths with <code>=</code> are refused). Files are written under a temporary name (<code>.part</code>) and renamed, so a reader never sees half a file.</p>
+<h2 id="1-launcher-vlreplayps1">1. Launcher (VLReplay.ps1)</h2>
+<p><strong>Marker</strong> (<code>-MarkerFile</code>, written once at the end):</p>
+<table>
+<tr><th>#</th><th>Key</th><th>Value</th></tr>
+<tr><td>1</td><td>STATE</td><td><code>OK</code>, <code>ERROR</code>, <code>CANCELLED</code>, <code>DRYRUN</code>, <code>BUSY</code></td></tr>
+<tr><td>2</td><td>STL</td><td>Exported STL (state OK)</td></tr>
+<tr><td>3</td><td>PROGRAM</td><td>.vld4 program</td></tr>
+<tr><td>4</td><td>START</td><td>Start time (local, <code>yyyy-MM-dd HH:mm:ss</code>)</td></tr>
+<tr><td>5</td><td>END</td><td>End time</td></tr>
+<tr><td>6</td><td>MESSAGE</td><td>Error or cancel reason, empty on OK</td></tr>
+<tr><td>7</td><td>USER</td><td>Windows user</td></tr>
+<tr><td>8</td><td>COMPUTER</td><td>Computer name</td></tr>
+<tr><td>9</td><td>JOBID</td><td><code>-JobId</code> (Scan window) or empty</td></tr>
+<tr><td>10</td><td>VERSION</td><td>VL Connector version</td></tr>
+<tr><td>11</td><td>START_UTC</td><td>Start time, UTC</td></tr>
+</table>
+<p><strong>Status</strong> <code>&lt;marker&gt;.status</code> while the run is active: <code>STEP</code>, <code>TEXT</code> (progress text shown to the operator), <code>VLMESSAGE</code> (text of a VL dialog), <code>UPDATED</code>. <strong>Cancel:</strong> a caller creates <code>&lt;marker&gt;.cancel</code>; the launcher ends with <code>STATE=CANCELLED</code>. Both files are removed at the end.</p>
+<p><strong>Exit codes:</strong> 0 OK, 1 error, 2 cancelled, 3 bad parameters or program not found, 4 another scan running.</p>
+<h2 id="2-polyworks-macros">2. PolyWorks macros</h2>
+<p><strong>Get-MacroContext.ps1 output</strong> (for VLC_Measure): <code>STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, LAYOUT_DIR, KEEP_PIECES, OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE</code>.</p>
+<p><strong>VLC_Evaluate.pwmacro parameters</strong> (<code>$1</code> = file): <code>PWK, TEMPLATE, STL, RUN, REPORT_DIR, LAYOUT_DIR, OPERATOR, PROGRAM, UTC, KEEP_PIECES, COLOR_SCALE, DEVICE, RESULT, JOBID</code>. The piece is named <code>&lt;TEMPLATE&gt;_&lt;RUN&gt;</code>; PDF and CSV get the same name in <code>REPORT_DIR</code>.</p>
+<p><strong>VLC_Evaluate result</strong> (file <code>RESULT</code>, UTF-16, written last): <code>STATE (OK/ERROR), VERDICT (OK/NOK), SUMMARY, PDF, CSV, PIECE, PIECE_KEPT (1/0), MESSAGE</code>. When <code>PIECE_KEPT=0</code> the caller removes the piece from the workspace after reopening the template.</p>
+<h2 id="3-network-scenario">3. Network scenario</h2>
+<p><strong>Shared folder:</strong> <code>jobs\</code>, <code>work\</code>, <code>reports\</code>, <code>processed\</code>, <code>failed\</code>, <code>status\</code>, <code>parts.csv</code>.</p>
+<p><strong>JobId:</strong> <code>&lt;COMPUTER&gt;_&lt;PART&gt;_&lt;yyyyMMdd-HHmmss&gt;_&lt;4 hex&gt;</code>, characters <code>A-Z a-z 0-9 -</code> and <code>_</code> as separator only (other characters in computer and part names become <code>-</code>). Files: <code>&lt;JobId&gt;.job</code>, <code>.stl</code>, <code>.pdf</code>, <code>.csv</code>, <code>.result</code>.</p>
+<p><strong>Job</strong> <code>jobs\&lt;JobId&gt;.job</code> (written after the STL): <code>PROTOCOL (1), JOBID, PART, PROGRAM, COMPUTER, USER, CREATED_UTC, STL, STL_SIZE, STL_SHA256, VERSION</code>.</p>
+<p><strong>Station:</strong> claims the oldest job by moving <code>&lt;JobId&gt;.job</code> to <code>work\</code> (a station that loses the race skips it), moves the STL, checks protocol, JobId, STL size, SHA-256 and binary STL format, and that the part is in <code>parts.csv</code> with an existing workspace. It then evaluates with VLC_Evaluate and publishes <code>reports\&lt;JobId&gt;.pdf</code> and <code>.csv</code>, then <strong><code>reports\&lt;JobId&gt;.result</code> last</strong>: <code>PROTOCOL, JOBID, STATE, VERDICT, SUMMARY, PDF, CSV, STATION, FINISHED_UTC, MESSAGE</code>. The job and STL move to <code>processed\</code> (STATE=OK) or <code>failed\</code> (with a result STATE=ERROR and the reason).</p>
+<p><strong>Scanner PC:</strong> keeps its JobIds in <code>%LOCALAPPDATA%\VLConnector\pending.txt</code> and reads only the results of those JobIds. A PDF is copied and opened only when it starts with <code>%PDF-</code> and ends with <code>%%EOF</code>.</p>
+<p><strong>Heartbeat</strong> <code>status\&lt;COMPUTER&gt;.station</code>: <code>STATION, STATE (Idle/Busy/Stopped), JOB, VERSION, UPDATED_UTC</code>, updated about every 30 s and at each job; the Scan window shows a station as online when the file is newer than 2 minutes and the state is not <code>Stopped</code>.</p>
+<p><strong>parts.csv</strong> (UTF-8 with BOM, <code>;</code>-separated, header line): <code>Part;Workspace;Template;VlProgram;Options</code>.</p>
+<p>Both sides treat each other&#39;s files as untrusted input: names are checked against the JobId pattern, paths are built locally, the STL is checked by hash and format, and the station takes the template only from its own parts list.</p>
+</main>
+<footer>VL Connector for PolyWorks - unofficial tool, not an official KEYENCE or InnovMetric product.</footer>
+</body>
+</html>
