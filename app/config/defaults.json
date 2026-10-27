@@ -28,7 +28,9 @@
         "openPdf": true,
         "colorScaleMm": 0.5,
         "reportsFolder": "",
-        "scansFolder": ""
+        "scansFolder": "",
+        "deviceText": "KEYENCE VL-800 (AI Replay)",
+        "operatorName": ""
     },
     "network": {
         "share": "",

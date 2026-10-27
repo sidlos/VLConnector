@@ -1,0 +1,18 @@
+{
+    "launcher":  {
+                     "extra":  {
+                                   "en":  [ "-Options", "-Mode Standard -Speed 3" ]
+                               }
+                 },
+    "flavors":  [
+                    "en"
+                ],
+    "expect":  {
+                   "exitCode":  3,
+                   "logIncludes":  [
+                                       "unknown option -Speed"
+                                   ],
+                   "state":  "ERROR",
+                   "maxSeconds":  15
+               }
+}

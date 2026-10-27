@@ -1,0 +1,18 @@
+{
+    "launcher":  {
+                     "extra":  {
+                                   "en":  [ "-Options", "-mode Standard -SettleSec 1" ]
+                               }
+                 },
+    "flavors":  [
+                    "en"
+                ],
+    "expect":  {
+                   "exitCode":  0,
+                   "eventsInclude":  [
+                                         "mode:Standard"
+                                     ],
+                   "stl":  true,
+                   "state":  "OK"
+               }
+}

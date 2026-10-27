@@ -1,0 +1,265 @@
+version "7.0"
+#==============================================================================
+# VLC_Measure - VL Connector for PolyWorks: the Measure button (PolyWorks on the scanner PC).
+#   $1 = VL Connector app folder; the button stub VLC_Measure_Button.pwmacro passes it, so an update of
+#        VL Connector needs no new import into PolyWorks.
+#
+# The part template has these project properties (File > Project > Properties, Add):
+#   "VL program"   AI Replay program (.vld4) of this part (required)
+#   "VL options"   optional options for this part, e.g. -Mode Standard -AfterExport Minimize
+#   "VL reports"   optional folder for PDF and CSV (otherwise the VL Connector setting or <workspace>\Reports)
+#   "VL test STL"  optional: evaluate this STL instead of scanning (test without the scanner)
+# Every measured piece gets "VL template" (= template name), so the next press opens the template again.
+#
+# Flow: opens the template (when a measured piece is open) -> AI Replay in VL (VLReplay.ps1, progress
+#   and Cancel here) -> VLC_Evaluate.pwmacro: piece = copy of the template, alignment to CAD, all
+#   controls of the template, color map, PDF report and CSV -> keeps or removes the piece (setting
+#   "Keep measured pieces") -> opens the PDF (setting) -> shows the verdict.
+#   The template itself is never modified.
+#==============================================================================
+MACRO END_ON_ERROR ( "Off" )
+
+DECLARE vApp $1
+DECLARE vProj ""
+DECLARE vPwk ""
+DECLARE vProgram ""
+DECLARE vTemplate ""
+DECLARE vOptions ""
+DECLARE vPdfDir ""
+DECLARE vTestStl ""
+DECLARE vSt
+DECLARE vErr
+DECLARE vCallId
+DECLARE vTemp ""
+DECLARE vCtx ""
+DECLARE vCtxState ""
+DECLARE vRun ""
+DECLARE vUser ""
+DECLARE vUtc ""
+DECLARE vReportDir ""
+DECLARE vScanDir ""
+DECLARE vLayoutDir ""
+DECLARE vKeep "All"
+DECLARE vOpenPdf "1"
+DECLARE vScale "0.5"
+DECLARE vDevice ""
+DECLARE vMsg ""
+DECLARE vMarker ""
+DECLARE vStatus ""
+DECLARE vList
+DECLARE vFound 0
+DECLARE vElapsed 0
+DECLARE vTimeoutS 2700
+DECLARE vCancel "Off"
+DECLARE vCancelled 0
+DECLARE vCancelWait 0
+DECLARE vState ""
+DECLARE vStl ""
+DECLARE vText ""
+DECLARE vLastText ""
+DECLARE vProgName "test STL"
+DECLARE vParams ""
+DECLARE vResult ""
+DECLARE vRState ""
+DECLARE vVerdict ""
+DECLARE vSummary ""
+DECLARE vPdf ""
+DECLARE vCsv ""
+DECLARE vPiece ""
+DECLARE vKept "1"
+DECLARE vRMsg ""
+DECLARE vIcon "Information"
+DECLARE vNote ""
+
+IF "$vApp" == ""
+    MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector: the Measure button is not set up correctly.", "Import VLC_Measure_Button.pwmacro from the VL Connector folder again.", "See the User Guide, chapter 'Measure button'." )
+    MACRO END ( "Error", "VL Connector folder missing" )
+ENDIF
+
+PROJECT PROPERTIES NAME GET ( vProj )
+PROJECT PROPERTIES WORKSPACE_FILENAME GET ( vPwk )
+PROJECT PROPERTIES CUSTOMIZABLE GET ( "VL program", vProgram )
+PROJECT PROPERTIES CUSTOMIZABLE GET ( "VL template", vTemplate )
+PROJECT PROPERTIES CUSTOMIZABLE GET ( "VL options", vOptions )
+PROJECT PROPERTIES CUSTOMIZABLE GET ( "VL reports", vPdfDir )
+PROJECT PROPERTIES CUSTOMIZABLE GET ( "VL test STL", vTestStl )
+IF "$vProgram" == "" AND "$vTestStl" == ""
+    MACRO INPUT ERROR_MESSAGE ( "Warning", "Project $vProj has no VL program.", "The project property 'VL program' (path to the .vld4 AI Replay program) is missing.", "File > Project > Properties: press Add, create the property 'VL program' and paste the path to this part's .vld4 into Value. Then save the project." )
+    MACRO END ( "Error", "VL program missing" )
+ENDIF
+IF "$vTemplate" == ""
+    SET vTemplate $vProj
+ENDIF
+
+# --- context: run time stamp, operator, settings and folders (Get-MacroContext.ps1) -------------------
+SYSTEM ENVIRONMENT_VARIABLE GET ( "TEMP", vTemp )
+SET vCtx "${vTemp}\VLConnector_context.txt"
+SYSTEM COMMAND EXEC SYNC ( "IF", { "EXIST", "${_QUOTES}${vCtx}${_QUOTES}", "DEL", "/Q", "${_QUOTES}${vCtx}${_QUOTES}" } )
+SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Get-MacroContext.ps1${_QUOTES}", "-Out", "${_QUOTES}${vCtx}${_QUOTES}", "-Pwk", "${_QUOTES}${vPwk}${_QUOTES}" }, vCallId )
+DATA_FILE READ LINE_FIELD ( $vCtx, 1, 2, vCtxState, "=", "On" )
+IF "$vCtxState" != "OK"
+    DATA_FILE READ LINE_FIELD ( $vCtx, 13, 2, vMsg, "=", "On" )
+    IF "$vMsg" == ""
+        SET vMsg "PowerShell could not run ${vApp}\polyworks\Get-MacroContext.ps1."
+    ENDIF
+    MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector could not start.", "$vMsg", "Check the VL Connector installation (Start menu: VL Connector Settings, page Setup)." )
+    MACRO END ( "Error", "VL Connector context" )
+ENDIF
+DATA_FILE READ LINE_FIELD ( $vCtx, 2, 2, vRun, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 3, 2, vUser, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 4, 2, vUtc, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 5, 2, vReportDir, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 6, 2, vScanDir, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 7, 2, vLayoutDir, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 8, 2, vKeep, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 9, 2, vOpenPdf, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 10, 2, vScale, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 11, 2, vDevice, "=", "On" )
+IF "$vPdfDir" != ""
+    SET vReportDir $vPdfDir
+ENDIF
+
+# --- 1) clean template (when a measured piece is open) ---------------------------------------------
+IF "$vProj" != "$vTemplate"
+    MACRO INTERACTIVITY ( "Off" )
+    FILE OPEN_PROJECT_IN_PWK ( $vPwk, $vTemplate )
+    MACRO GET_ERROR_STATUS ( vSt, vErr )
+    MACRO INTERACTIVITY ( "On" )
+    IF $vSt == "Error"
+        MACRO INPUT ERROR_MESSAGE ( "Error", "Template $vTemplate could not be opened.", "$vErr", "$vPwk" )
+        MACRO END ( "Error", "Template" )
+    ENDIF
+ENDIF
+
+# --- 2) scan in VL (or the test STL) -----------------------------------------------------------------
+IF "$vTestStl" != ""
+    SET vStl $vTestStl
+ELSE
+    SET vProgName "$vProgram:t"
+    SET vMarker "${vScanDir}\vlc_${vRun}.done"
+    SET vStatus "${vMarker}.status"
+    SYSTEM COMMAND EXEC ASYNC ( "powershell.exe", { "-NoProfile", "-STA", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\VLReplay.ps1${_QUOTES}", "${_QUOTES}${vProgram}${_QUOTES}", "-MarkerFile", "${_QUOTES}${vMarker}${_QUOTES}", "-OutputDir", "${_QUOTES}${vScanDir}${_QUOTES}", "-Options", "${_QUOTES}${vOptions}${_QUOTES}" }, vCallId )
+    MACRO PROGRESS SHOW ( "VL Connector - $vTemplate", "Program: $vProgName", 0, $vTimeoutS, "Cancel" )
+    MACRO PROGRESS STATUS MESSAGE ( "Starting AI Replay in VL..." )
+    WHILE $vFound == 0
+        MACRO SLEEP ( 1000 )
+        ++ vElapsed
+        MACRO PROGRESS VALUE ( $vElapsed )
+        SET vText ""
+        DATA_FILE READ LINE_FIELD ( $vStatus, 2, 2, vText, "=", "On" )
+        IF "$vText" != "" AND "$vText" != "$vLastText"
+            MACRO PROGRESS STATUS MESSAGE ( $vText )
+            SET vLastText $vText
+        ENDIF
+        # Cancel: VLReplay.ps1 sees the .cancel file and ends with a CANCELLED marker
+        MACRO PROGRESS CANCEL_REQUESTED GET ( vCancel )
+        IF $vCancel == "On" AND $vCancelled == 0
+            DATA_FILE CREATE ( "${vMarker}.cancel", "Ascii", "Yes" )
+            SET vCancelled 1
+            MACRO PROGRESS STATUS MESSAGE ( "Cancelling..." )
+        ENDIF
+        IF $vCancelled == 1
+            ++ vCancelWait
+            IF $vCancelWait >= 30
+                MACRO PROGRESS HIDE
+                MACRO END ( "Error", "Measurement cancelled." )
+            ENDIF
+        ENDIF
+        IF $vElapsed >= $vTimeoutS
+            DATA_FILE CREATE ( "${vMarker}.cancel", "Ascii", "Yes" )
+            MACRO PROGRESS HIDE
+            MACRO INPUT ERROR_MESSAGE ( "Error", "VL did not finish the part in time.", "The scan was cancelled after $vTimeoutS s.", "" )
+            MACRO END ( "Error", "Timeout" )
+        ENDIF
+        SYSTEM DIRECTORY CONTENT GET ( $vScanDir, vList, "Off", "^vlc_${vRun}\.done${_DOLLAR}" )
+        IF SIZE(vList) >= 1
+            IF "$vList[1]" != ""
+                SET vFound 1
+            ENDIF
+        ENDIF
+    ENDWHILE
+    MACRO PROGRESS HIDE
+    DATA_FILE READ LINE_FIELD ( $vMarker, 1, 2, vState, "=", "On" )
+    DATA_FILE READ LINE_FIELD ( $vMarker, 2, 2, vStl, "=", "On" )
+    DATA_FILE READ LINE_FIELD ( $vMarker, 6, 2, vMsg, "=", "On" )
+    SYSTEM COMMAND EXEC SYNC ( "DEL", { "/Q", "${_QUOTES}${vMarker}${_QUOTES}" } )
+    IF "$vState" == "CANCELLED"
+        IF $vCancelled == 0
+            MACRO INPUT ERROR_MESSAGE ( "Information", "The scan was cancelled in VL.", "$vMsg", "" )
+        ENDIF
+        MACRO END ( "Error", "Measurement cancelled." )
+    ENDIF
+    IF "$vState" != "OK"
+        MACRO INPUT ERROR_MESSAGE ( "Error", "The scan in VL failed ($vState).", "$vMsg", "Details: VL Connector log in %LOCALAPPDATA%\VLConnector\logs" )
+        MACRO END ( "Error", "VL: $vState" )
+    ENDIF
+ENDIF
+
+# --- 3) evaluation: VLC_Evaluate.pwmacro (parameters file -> result file) ------------------------------
+SET vParams "${vScanDir}\vlc_${vRun}.params"
+SET vResult "${vScanDir}\vlc_${vRun}.result"
+DATA_FILE CREATE ( $vParams, "Unicode", "Yes" )
+DATA_FILE APPEND LINE ( $vParams, { "PWK=$vPwk" } )
+DATA_FILE APPEND LINE ( $vParams, { "TEMPLATE=$vTemplate" } )
+DATA_FILE APPEND LINE ( $vParams, { "STL=$vStl" } )
+DATA_FILE APPEND LINE ( $vParams, { "RUN=$vRun" } )
+DATA_FILE APPEND LINE ( $vParams, { "REPORT_DIR=$vReportDir" } )
+DATA_FILE APPEND LINE ( $vParams, { "LAYOUT_DIR=$vLayoutDir" } )
+DATA_FILE APPEND LINE ( $vParams, { "OPERATOR=$vUser" } )
+DATA_FILE APPEND LINE ( $vParams, { "PROGRAM=$vProgName" } )
+DATA_FILE APPEND LINE ( $vParams, { "UTC=$vUtc" } )
+DATA_FILE APPEND LINE ( $vParams, { "KEEP_PIECES=$vKeep" } )
+DATA_FILE APPEND LINE ( $vParams, { "COLOR_SCALE=$vScale" } )
+DATA_FILE APPEND LINE ( $vParams, { "DEVICE=$vDevice" } )
+DATA_FILE APPEND LINE ( $vParams, { "RESULT=$vResult" } )
+DATA_FILE APPEND LINE ( $vParams, { "JOBID=" } )
+MACRO EXEC ( "${vApp}\polyworks\VLC_Evaluate.pwmacro", $vParams )
+MACRO GET_ERROR_STATUS ( vSt, vErr )
+MACRO INTERACTIVITY ( "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 1, 2, vRState, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 2, 2, vVerdict, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 3, 2, vSummary, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 4, 2, vPdf, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 5, 2, vCsv, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 6, 2, vPiece, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 7, 2, vKept, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 8, 2, vRMsg, "=", "On" )
+SYSTEM COMMAND EXEC SYNC ( "DEL", { "/Q", "${_QUOTES}${vParams}${_QUOTES}", "${_QUOTES}${vResult}${_QUOTES}" } )
+IF "$vRState" != "OK"
+    IF "$vRMsg" == ""
+        SET vRMsg "$vErr"
+    ENDIF
+    MACRO INPUT ERROR_MESSAGE ( "Error", "The evaluation of $vTemplate failed.", "$vRMsg", "Scan: $vStl" )
+    MACRO END ( "Error", "Evaluation" )
+ENDIF
+
+# --- 4) measured piece not kept (setting "Keep measured pieces": only NOK / none) -----------------------
+IF "$vKept" == "0" AND "$vPiece" != "" AND "$vPiece" != "$vTemplate"
+    MACRO INTERACTIVITY ( "Off" )
+    FILE OPEN_PROJECT_IN_PWK ( $vPwk, $vTemplate )
+    MACRO GET_ERROR_STATUS ( vSt, vErr )
+    IF $vSt != "Error"
+        MACRO EXEC REMOTE_COMMAND ( "EDIT OBJECT DELETE", "Off", $vPwk, $vPiece )
+        MACRO GET_ERROR_STATUS ( vSt, vErr )
+    ENDIF
+    MACRO INTERACTIVITY ( "On" )
+    IF $vSt == "Error"
+        SET vNote "The piece $vPiece could not be removed from the workspace: $vErr"
+    ENDIF
+ENDIF
+
+# --- 5) report and verdict -----------------------------------------------------------------------------
+IF "$vOpenPdf" == "1" AND "$vPdf" != ""
+    SYSTEM COMMAND EXEC ASYNC ( "start", { "${_QUOTES}${_QUOTES}", "${_QUOTES}${vPdf}${_QUOTES}" }, vCallId )
+ENDIF
+IF "$vVerdict" != "OK"
+    SET vIcon "Warning"
+ENDIF
+IF "$vRMsg" != ""
+    SET vNote "Note: $vRMsg"
+ENDIF
+IF "$vNote" == ""
+    SET vNote "Table: $vCsv"
+ENDIF
+MACRO ECHO ( "VL Connector: $vPiece: $vVerdict - $vSummary. Report $vPdf" )
+MACRO INPUT ERROR_MESSAGE ( $vIcon, "Part $vPiece: $vVerdict - $vSummary.", "Report: $vPdf", "$vNote" )

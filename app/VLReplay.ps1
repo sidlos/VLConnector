@@ -23,6 +23,9 @@
     VLReplay.cmd ABC -DryRun                 only walks through the dialogs and cancels the program selection
     VLReplay.cmd -ExportOnly                 only exports the STL from the data already open in VL
     VLReplay.cmd ABC -ExportImmediately On -AfterExport Close
+    VLReplay.cmd ABC -Options "-Mode Standard -AfterExport Minimize"
+                                             the same options as one text (the PolyWorks project property
+                                             "VL options"); options given directly win
 
   Files next to the marker while the run is active: <marker>.status (current step, read by the callers)
   and <marker>.cancel (created by a caller to cancel the run).
@@ -51,7 +54,8 @@ param(
     [switch]$ExportOnly,
     [string]$Menu = '',
     [string]$VlExe = '',
-    [string]$VlArgs
+    [string]$VlArgs,
+    [string]$Options = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -806,6 +810,32 @@ function Get-TargetPath([string]$RunName) {
 if ($MarkerFile) { Set-MarkerPath $MarkerFile }
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
     Exit-Run $EXIT_ARGS 'ERROR' "PowerShell runs in $($ExecutionContext.SessionState.LanguageMode) mode; VL Connector needs FullLanguage (see the notes for IT)."
+}
+# -Options: a few options as one text, e.g. "-Mode Standard -AfterExport Minimize" from the PolyWorks
+# project property "VL options". Only these names are accepted; options given directly win.
+if ($Options) {
+    $valueOptions = 'Mode', 'ExportImmediately', 'ConfirmStageMotion', 'AfterExport', 'ReturnFocus', 'TimeoutMin', 'SettleSec'
+    $tokens = @($Options.Trim() -split '\s+' | Where-Object { $_ })
+    try {
+        for ($i = 0; $i -lt $tokens.Count; $i++) {
+            if ($tokens[$i] -notmatch '^-([A-Za-z]+)$') { throw "'$($tokens[$i])' is not an option" }
+            $name = @($valueOptions + 'NewWindow' | Where-Object { $_ -eq $Matches[1] })[0]
+            if (-not $name) { throw "unknown option $($tokens[$i]) (allowed: -$($valueOptions -join ', -'), -NewWindow)" }
+            if ($name -eq 'NewWindow') {
+                if (-not $PSBoundParameters.ContainsKey('NewWindow')) { $NewWindow = [switch]$true }
+                continue
+            }
+            if ($i + 1 -ge $tokens.Count) { throw "-$name needs a value" }
+            $i++
+            if ($PSBoundParameters.ContainsKey($name)) { continue }
+            switch ($name) {
+                'TimeoutMin' { $TimeoutMin = [int]::Parse($tokens[$i], [Globalization.CultureInfo]::InvariantCulture) }
+                'SettleSec' { $SettleSec = [double]::Parse($tokens[$i], [Globalization.CultureInfo]::InvariantCulture) }
+                default { Set-Variable -Name $name -Value $tokens[$i] }
+            }
+        }
+    }
+    catch { Exit-Run $EXIT_ARGS 'ERROR' "VL options '$Options': $($_.Exception.Message -replace '^Exception calling .*?: ', '')." }
 }
 try {
     $cfg = Read-VlcSettings

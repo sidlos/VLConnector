@@ -1,0 +1,350 @@
+version "7.0"
+#==============================================================================
+# VLC_Evaluate - VL Connector for PolyWorks: evaluates one scan (STL) against a part template.
+# Used by the Measure button (VLC_Measure.pwmacro) and by the PolyWorks station. Shows no dialog.
+#
+#   $1 = parameters file, one KEY=value per line in this order (see docs\Protocol.md):
+#         1 PWK          workspace file of the template
+#         2 TEMPLATE     template project name
+#         3 STL          scan to evaluate
+#         4 RUN          run name (date_time), used for the piece name and the report file names
+#         5 REPORT_DIR   folder for the PDF and CSV
+#         6 LAYOUT_DIR   folder with VL_Report_OK.ezl / VL_Report_NOK.ezl ("" = PolyWorks default layout)
+#         7 OPERATOR     operator name for the report
+#         8 PROGRAM      VL program file name for the report
+#         9 UTC          measurement time (ISO 8601, UTC) for the piece date
+#        10 KEEP_PIECES  All | Nok | None
+#        11 COLOR_SCALE  color map range in mm (e.g. 0.5)
+#        12 DEVICE       device text for the report
+#        13 RESULT       result file to write
+#        14 JOBID        job id (network scenario) or empty
+#   Result file (written last): STATE, VERDICT, SUMMARY, PDF, CSV, PIECE, PIECE_KEPT, MESSAGE.
+#
+# The measured piece is a copy of the template (<template>_<run>), made before anything is changed:
+# PolyWorks writes piece and project properties to the workspace immediately, so they must never be
+# set in the template. The template itself is never saved.
+#==============================================================================
+MACRO END_ON_ERROR ( "Off" )
+MACRO INTERACTIVITY ( "Off" )
+
+DECLARE vParams $1
+DECLARE vPwk ""
+DECLARE vTemplate ""
+DECLARE vStl ""
+DECLARE vRun ""
+DECLARE vReportDir ""
+DECLARE vLayoutDir ""
+DECLARE vUser ""
+DECLARE vProgram ""
+DECLARE vUtc ""
+DECLARE vKeep "All"
+DECLARE vScale 0.5
+DECLARE vDevice ""
+DECLARE vResult ""
+DECLARE vJobId ""
+DECLARE vProj ""
+DECLARE vPiece ""
+DECLARE vSt
+DECLARE vErr
+DECLARE vData
+DECLARE vFr ""
+DECLARE vPdf ""
+DECLARE vCsv ""
+DECLARE vN 0
+DECLARE vI 0
+DECLARE vJ 0
+DECLARE vObj ""
+DECLARE vPass 1
+DECLARE vNc 0
+DECLARE vCtrls
+DECLARE vNom
+DECLARE vMeas
+DECLARE vDev
+DECLARE vUt
+DECLARE vUw
+DECLARE vLw
+DECLARE vLt
+DECLARE vRes
+DECLARE vVerdict
+DECLARE vCount 0
+DECLARE vFail 0
+DECLARE vMissing 0
+DECLARE vWarn 0
+DECLARE vSummary ""
+DECLARE vVerdictAll "OK"
+DECLARE vDetail ""
+DECLARE vLayout ""
+DECLARE vCover ""
+DECLARE vNfr 0
+DECLARE vRepErr ""
+DECLARE vDest ""
+DECLARE vZoom 0
+DECLARE vKept 1
+DECLARE vNegScale -0.5
+
+DATA_FILE READ LINE_FIELD ( $vParams, 1, 2, vPwk, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 2, 2, vTemplate, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 3, 2, vStl, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 4, 2, vRun, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 5, 2, vReportDir, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 6, 2, vLayoutDir, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 7, 2, vUser, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 8, 2, vProgram, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 9, 2, vUtc, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 10, 2, vKeep, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 11, 2, vScale, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 12, 2, vDevice, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 13, 2, vResult, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 14, 2, vJobId, "=", "On" )
+MACRO GET_ERROR_STATUS ( vSt, vErr )
+IF "$vResult" == ""
+    MACRO END ( "Error", "VLC_Evaluate: the parameters file $vParams could not be read." )
+ENDIF
+SET vPiece "${vTemplate}_${vRun}"
+SET vPdf "${vReportDir}\${vPiece}.pdf"
+SET vCsv "${vReportDir}\${vPiece}.csv"
+SET vNegScale EXPR ( -$vScale )
+SYSTEM COMMAND EXEC SYNC ( "IF", { "NOT", "EXIST", "${_QUOTES}${vReportDir}${_QUOTES}", "MKDIR", "${_QUOTES}${vReportDir}${_QUOTES}" } )
+
+# --- 1) clean template --------------------------------------------------------------
+PROJECT PROPERTIES NAME GET ( vProj )
+IF "$vProj" != "$vTemplate"
+    FILE OPEN_PROJECT_IN_PWK ( $vPwk, $vTemplate )
+    MACRO GET_ERROR_STATUS ( vSt, vErr )
+    IF $vSt == "Error"
+        DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
+        DATA_FILE APPEND LINE ( $vResult, { "STATE=ERROR" } )
+        DATA_FILE APPEND LINE ( $vResult, { "VERDICT=" } )
+        DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=" } )
+        DATA_FILE APPEND LINE ( $vResult, { "PDF=" } )
+        DATA_FILE APPEND LINE ( $vResult, { "CSV=" } )
+        DATA_FILE APPEND LINE ( $vResult, { "PIECE=" } )
+        DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=0" } )
+        DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=The template $vTemplate could not be opened: $vErr" } )
+        MACRO END ( "Error", "Template" )
+    ENDIF
+ENDIF
+
+# --- 2) piece = copy of the template ----------------------------------------------------
+FILE SAVE_PROJECT_AS ( $vPwk, $vPiece )
+MACRO GET_ERROR_STATUS ( vSt, vErr )
+IF $vSt == "Error"
+    DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
+    DATA_FILE APPEND LINE ( $vResult, { "STATE=ERROR" } )
+    DATA_FILE APPEND LINE ( $vResult, { "VERDICT=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "PDF=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "CSV=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "PIECE=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=0" } )
+    DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=The piece $vPiece could not be created: $vErr" } )
+    MACRO END ( "Error", "Piece" )
+ENDIF
+# the measured piece remembers its template (the next press of the Measure button opens it)
+PROJECT PROPERTIES CUSTOMIZABLE ( "VL template", $vTemplate )
+MACRO GET_ERROR_STATUS ( vSt, vErr )
+IF $vSt == "Error"
+    PROJECT PROPERTIES CUSTOMIZABLE ADD ( "VL template", $vTemplate )
+ENDIF
+
+# --- 3) data, alignment to CAD, measurement ------------------------------------------------
+FILE IMPORT_DATA POLYGONAL_MODEL ( { $vStl }, "stl" )
+MACRO GET_ERROR_STATUS ( vSt, vErr )
+IF $vSt == "Error"
+    DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
+    DATA_FILE APPEND LINE ( $vResult, { "STATE=ERROR" } )
+    DATA_FILE APPEND LINE ( $vResult, { "VERDICT=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "PDF=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "CSV=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "PIECE=$vPiece" } )
+    DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=0" } )
+    DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=The STL could not be imported: $vErr" } )
+    MACRO END ( "Error", "STL import" )
+ENDIF
+TREEVIEW DATA NAME GET ( 1, vData )
+TREEVIEW OBJECT PROPERTIES NAME ( "Scan", { $vData } )
+
+TREEVIEW OBJECT SELECT NONE
+ALIGN BEST_FIT DATA_TO_REFERENCE CREATE FIT_TO_REFERENCE_OBJECT_SURFACES USING_PRE_ALIGNMENT AUTOMATIC ( "Best-fit to CAD" )
+TREEVIEW OBJECT SELECT NONE
+TREEVIEW FEATURE SELECT ALL
+MEASURE EXTRACT MEASURED
+TREEVIEW OBJECT SELECT NONE
+MEASURE COMPARISON_POINT EXTRACT MEASURED ALL
+TREEVIEW OBJECT SELECT NONE
+COMPARE VIEWING_OPTIONS COLOR_SCALE RANGE_LIMITS ( "Custom", $vNegScale, $vScale )
+COMPARE VIEWING_OPTIONS COLOR_SCALE SYMMETRICAL ( "On" )
+MEASURE DATA_COLOR_MAP REFERENCE_SURFACE CREATE ( "Deviation from CAD" )
+
+# --- 4) report header: piece properties (name, measurement date and time, operator) --
+PIECE PROPERTIES NAME ( , $vRun )
+IF "$vUtc" != ""
+    PIECE PROPERTIES DATE_TIME_UTC ( , $vUtc )
+ENDIF
+PIECE PROPERTIES CUSTOMIZABLE ( , { "Serial number", "Operator name", "Device" }, { $vPiece, $vUser, $vDevice } )
+
+# --- 5) results: every control with OK/NOK into the CSV, summary ----------------
+DATA_FILE CREATE ( $vCsv, "Ascii", "Yes" )
+DATA_FILE APPEND LINE ( $vCsv, { "Part;$vPiece;VL program;$vProgram;Operator;$vUser" } )
+DATA_FILE APPEND LINE ( $vCsv, { "Object;Control;Nominal;Measured;Deviation;Upper tol.;Lower tol.;Result" } )
+# pass 1 = features, pass 2 = comparison points; objects without controls (e.g. axes for a pitch) are skipped
+SET vPass 1
+WHILE $vPass <= 2
+  IF $vPass == 1
+    TREEVIEW FEATURE COUNT GET ( vN )
+  ELSE
+    TREEVIEW COMPARISON_POINT COUNT GET ( vN )
+  ENDIF
+  SET vI 1
+  WHILE $vI <= $vN
+    IF $vPass == 1
+        TREEVIEW FEATURE NAME GET ( $vI, vObj )
+    ELSE
+        TREEVIEW COMPARISON_POINT NAME GET ( $vI, vObj )
+    ENDIF
+    ++ vI
+    SET vNc 0
+    MEASURE CONTROL COUNT GET ( vNc, { $vObj } )
+    IF $vNc > 0
+      MEASURE CONTROL NAME ALL GET ( vCtrls, $vObj )
+    ENDIF
+    SET vJ 1
+    WHILE $vJ <= $vNc
+        IF "$vCtrls[$vJ]" != ""
+            SET vNom ""
+            SET vMeas ""
+            SET vDev ""
+            SET vUt ""
+            SET vLt ""
+            SET vRes ""
+            MEASURE CONTROL NOMINAL GET ( $vCtrls[$vJ], vNom, $vObj )
+            MEASURE CONTROL MEASURED GET ( $vCtrls[$vJ], vMeas, $vObj )
+            MEASURE CONTROL DEVIATION GET ( $vCtrls[$vJ], vDev, $vObj )
+            MEASURE CONTROL TOLERANCE_ZONE LIMITS GET ( $vCtrls[$vJ], vUt, vUw, vLw, vLt, $vObj )
+            MEASURE CONTROL TEST TOLERANCE_ZONE_RESULT GET ( $vCtrls[$vJ], vRes, $vObj )
+            ++ vCount
+            SET vVerdict "OK"
+            IF "$vRes" == ""
+                SET vVerdict "NOT MEASURED"
+                ++ vMissing
+            ENDIF
+            IF "$vRes" == "Beyond upper tolerance limit" OR "$vRes" == "Beyond lower tolerance limit"
+                SET vVerdict "NOK"
+                ++ vFail
+            ENDIF
+            IF "$vRes" == "Within upper warning zone" OR "$vRes" == "Within lower warning zone"
+                SET vVerdict "OK (warning)"
+                ++ vWarn
+            ENDIF
+            DATA_FILE APPEND LINE ( $vCsv, { "$vObj;$vCtrls[$vJ];$vNom;$vMeas;$vDev;$vUt;$vLt;$vVerdict" } )
+        ENDIF
+        ++ vJ
+    ENDWHILE
+  ENDWHILE
+  ++ vPass
+ENDWHILE
+IF $vFail > 0 OR $vMissing > 0
+    SET vDetail "$vFail of $vCount controls out of tolerance, $vMissing not measured"
+    SET vVerdictAll "NOK"
+ELSE
+    SET vDetail "all $vCount controls within tolerance"
+    IF $vWarn > 0
+        SET vDetail "all $vCount controls within tolerance ($vWarn in the warning zone)"
+    ENDIF
+ENDIF
+SET vSummary "$vVerdictAll - $vDetail"
+DATA_FILE APPEND LINE ( $vCsv, { "RESULT;$vSummary;;;;;;" } )
+
+# --- 6) PDF report --------------------------------------------------------------
+# p. 1 isometric view with the verdict, p. 2 control table, then top and front views.
+# New report items go to the tree view temporarily (the default destination "Active Formatted
+# Report" would put them into an automatically created "report 1" without a layout); the report
+# is then built from them with the layout. Without a selection, CREATE_AUTOMATIC takes all items
+# except the header and footer (SELECT ALL would select only those two).
+REPORT_ITEM OPTIONS DESTINATION GET ( vDest )
+REPORT_ITEM OPTIONS DESTINATION ( "Tree View" )
+MEASURE CONTROL_VIEW CREATE FROM_ALL_CONTROLS ( "Controls", "Dimensions and points with tolerances" )
+MEASURE CONTROL_VIEW REPORT_ITEM CREATE SNAPSHOT_AND_TABLE ( { "Controls" } )
+VIEW POSE Z_POS
+VIEW POSE CENTER
+REPORT_ITEM SNAPSHOT CAPTURE ( "Deviation color map - top" )
+VIEW POSE Y_NEG
+VIEW POSE CENTER
+REPORT_ITEM SNAPSHOT CAPTURE ( "Deviation color map - front" )
+VIEW POSE ISOMETRIC ( "+X-Y+Z", "+Z" )
+VIEW POSE CENTER
+TREEVIEW OBJECT SELECT NONE
+TREEVIEW REPORT_ITEM SELECT NONE
+SET vLayout ""
+IF "$vLayoutDir" != ""
+    SET vLayout "${vLayoutDir}\VL_Report_${vVerdictAll}.ezl"
+    FORMATTED_REPORT CREATE_AUTOMATIC USING_LAYOUT ( "Report", $vLayout )
+    MACRO GET_ERROR_STATUS ( vSt, vErr )
+    IF $vSt == "Error"
+        SET vRepErr "$vErr"
+        SET vLayout ""
+    ENDIF
+ENDIF
+IF "$vLayout" == ""
+    TREEVIEW REPORT_ITEM SELECT NONE
+    FORMATTED_REPORT CREATE_AUTOMATIC ( "Report" )
+ENDIF
+TREEVIEW FORMATTED_REPORT COUNT GET ( vNfr )
+TREEVIEW FORMATTED_REPORT NAME GET ( $vNfr, vFr )
+FORMATTED_REPORT PROPERTIES STANDARD ( $vFr, "Title", "Inspection Report - $vTemplate" )
+FORMATTED_REPORT PROPERTIES STANDARD ( $vFr, "Author", $vUser )
+IF "$vLayout" != ""
+    # cover snapshot only after the report is created, so that it is not repeated in the content;
+    # the scene is rendered in the aspect ratio of the cover box (1440 x 1450 px), scan at 90 %
+    SET vCover "Deviation color map - isometric"
+    VIEW POSE CENTER_ON_OBJECTS ZOOM GET ( vZoom )
+    VIEW POSE CENTER_ON_OBJECTS ZOOM ( 90 )
+    VIEW POSE CENTER_ON_OBJECTS ( { "Scan" } )
+    REPORT_ITEM SNAPSHOT CAPTURE_REGION ( 0, 0, 1450, 1440, 1450, 1440, $vCover )
+    IF $vZoom > 0
+        VIEW POSE CENTER_ON_OBJECTS ZOOM ( $vZoom )
+    ENDIF
+    FORMATTED_REPORT ITEM ASSIGN_ITEM ( $vCover, $vFr, "snapshot 0" )
+    MACRO GET_ERROR_STATUS ( vSt, vErr )
+    IF $vSt == "Error"
+        SET vRepErr "cover snapshot: $vErr"
+    ENDIF
+    FORMATTED_REPORT PROPERTIES CUSTOM ADD ( $vFr, "RESULT", $vVerdictAll )
+    FORMATTED_REPORT PROPERTIES CUSTOM ADD ( $vFr, "SUMMARY", $vDetail )
+    FORMATTED_REPORT PROPERTIES CUSTOM ADD ( $vFr, "PROGRAM", $vProgram )
+    FORMATTED_REPORT PROPERTIES CUSTOM ADD ( $vFr, "SCAN", "$vStl:t" )
+ENDIF
+FILE EXPORT_FORMATTED_REPORT PDF ( $vPdf, "Off", $vFr )
+MACRO GET_ERROR_STATUS ( vSt, vErr )
+IF $vSt == "Error"
+    SET vRepErr "PDF export: $vErr"
+ENDIF
+IF "$vDest" != ""
+    REPORT_ITEM OPTIONS DESTINATION ( $vDest )
+ENDIF
+
+# --- 7) keep the piece ------------------------------------------------------------
+# All: always; Nok: only NOK pieces; None: never (the caller removes the piece project from the workspace)
+SET vKept 1
+IF "$vKeep" == "None"
+    SET vKept 0
+ENDIF
+IF "$vKeep" == "Nok" AND "$vVerdictAll" == "OK"
+    SET vKept 0
+ENDIF
+IF $vKept == 1
+    FILE SAVE_PROJECT
+ENDIF
+
+# --- 8) result for the caller ---------------------------------------------------------
+DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
+DATA_FILE APPEND LINE ( $vResult, { "STATE=OK" } )
+DATA_FILE APPEND LINE ( $vResult, { "VERDICT=$vVerdictAll" } )
+DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=$vDetail" } )
+DATA_FILE APPEND LINE ( $vResult, { "PDF=$vPdf" } )
+DATA_FILE APPEND LINE ( $vResult, { "CSV=$vCsv" } )
+DATA_FILE APPEND LINE ( $vResult, { "PIECE=$vPiece" } )
+DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=$vKept" } )
+DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=$vRepErr" } )
+MACRO ECHO ( "VLC_Evaluate: $vPiece: $vSummary. Report $vPdf" )
