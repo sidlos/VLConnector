@@ -11,6 +11,9 @@ First release for a closed group of users.
   agent (notification area, optionally started with Windows) exports the STL named after the .vld4 program,
   sends it to a shared network folder (outbox, hash check) and opens the returned PDF (only own scans). The
   PolyWorks station runs in its own Inspector and picks the template by the VL program (programs list).
+- Setup wizard (opens after the installation): scenario, scanning options, report layouts, shared folder and agent,
+  and **Add to PolyWorks** - a ribbon tab "VL Connector" with the Measure or Station button in PolyWorks|Inspector,
+  added with PolyWorks' own macro commands after saving the visual layout (undo possible).
 - Settings window with status check, report layout builder, PolyWorks button files, network test and support ZIP.
 - Launcher options: replay mode (High speed / Standard / Ask), export right after the scan, automatic
   confirmation of the stage dialogs, VL window after the export (leave, minimize, close, save and close with

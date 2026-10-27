@@ -44,7 +44,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <p><strong>A - PolyWorks on the scanner PC.</strong> The operator opens the part template in PolyWorks|Inspector and presses <strong>Measure</strong>. VL starts AI Replay for the part; the operator scans as usual. After the last position the STL goes straight to PolyWorks, which evaluates it and shows the verdict and the report.</p>
 <p><strong>B - PolyWorks on another PC.</strong> The scanner PC has only VL and VL Connector. The operator scans with AI Replay in VL as usual; the VL Connector <strong>agent</strong> in the background exports the STL and sends it to a shared network folder. A <strong>PolyWorks station</strong> evaluates it with the template of the VL program, and the PDF report comes back and opens on the scanner PC - only the reports of scans made on that PC.</p>
 <h2 id="2-installation">2. Installation</h2>
-<p>You need Windows 10 or 11, the VL Application 4.6 with its <strong>English</strong> user interface (scanner PC) and PolyWorks Metrology Suite 2026 (evaluating PC). No administrator rights are needed.</p>
+<p>You need Windows 10 or 11, the VL Application 4.6 with its <strong>English</strong> user interface (scanner PC) and PolyWorks Metrology Suite 2026 (evaluating PC). No administrator rights are needed, and nothing is copied into the program folders of VL or PolyWorks (VL Connector is not a PolyWorks plug-in).</p>
 <ol>
 <li>Check that the SHA-256 of the downloaded ZIP matches <code>SHA256SUMS.txt</code>: <code>Get-FileHash .\VLConnector-1.0.0.zip</code> in PowerShell.</li>
 <li>Extract the ZIP (right click &gt; Extract All) and double-click <strong>Install.cmd</strong>.</li>
@@ -60,7 +60,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <p><img src="images/settings-setup.png" alt="Setup page"></p>
 <table>
 <tr><th>Page</th><th>What you set</th></tr>
-<tr><td><strong>Setup</strong></td><td>Scenario A or B; in scenario B whether this PC is the scanner PC or the PolyWorks station. The status list checks this PC and offers the next step (for example <em>Build</em> for missing report layouts).</td></tr>
+<tr><td><strong>Setup</strong></td><td>Scenario A or B; in scenario B whether this PC is the scanner PC or the PolyWorks station. The status list checks this PC and offers the next step (for example <em>Build</em> for missing report layouts). <strong>Setup wizard</strong> runs the guided setup again.</td></tr>
 <tr><td><strong>Scanning</strong></td><td>AI Replay mode (High speed, Standard, or let the operator choose in VL), export right after the scan, automatic confirmation of the stage movement, what happens to the VL window after the export, where VL programs are.</td></tr>
 <tr><td><strong>PolyWorks</strong></td><td>Report layouts, which measured pieces to keep, opening the PDF, the Measure (or Station) button.</td></tr>
 <tr><td><strong>Network</strong></td><td>The shared folder (scenario B), opening reports automatically, the agent (start with Windows), the programs list.</td></tr>
@@ -131,7 +131,7 @@ Housing-12;D:\PolyWorks\Parts\Parts.pwk;Housing12</code></pre>
 </ol>
 <p>Only reports of scans made on this PC are opened. An AI Replay started by the Measure button of scenario A is never exported twice.</p>
 <h3 id="the-polyworks-station">The PolyWorks station</h3>
-<p>On the station PC set the role <strong>PolyWorks station</strong> (page Setup). Then, once: import the station button into PolyWorks like the Measure button (page PolyWorks &gt; Copy macro path copies <code>VLC_Station_Button.pwmacro</code>).</p>
+<p>On the station PC choose <strong>PolyWorks station</strong> in the setup wizard (or page Setup). Then, once, with PolyWorks|Inspector open: <strong>Add to PolyWorks</strong> in the wizard (or page PolyWorks) adds the tab <strong>VL Connector</strong> with the <strong>VL Station</strong> button (by hand: import <code>VLC_Station_Button.pwmacro</code> like the Measure button).</p>
 <p>To run the station, open a PolyWorks|Inspector <strong>used only for the station</strong> (from the Workspace Manager as usual) and press <strong>VL Station</strong>. A small window shows the shared folder, the last job and a <strong>Stop</strong> button. The station takes the scans one by one, opens the template of the VL program from the programs list, evaluates the scan and sends the report back; it uses the PolyWorks settings of the station PC (keep pieces, report layouts, color scale). Keep the station PC logged on (a locked screen is fine) while scanning.</p>
 <h2 id="7-options-per-part">7. Options per part</h2>
 <p>The template property <code>VL options</code> (scenario A) overrides the settings for one part. (In scenario B the operator starts AI Replay in VL, so the settings of the scanner PC apply.) Use any of:</p>

@@ -6,13 +6,15 @@ AI Replay program. Tick each line; note deviations.
 ## Preparation
 
 - [ ] Package checked: SHA-256 of the ZIP matches `SHA256SUMS.txt`; the fingerprint shown by Install.cmd matches.
-- [ ] Installed with Install.cmd; settings window opens from the Start menu.
+- [ ] Installed with Install.cmd; the setup wizard opens; settings window opens from the Start menu.
 - [ ] Setup page: all lines green (or understood warnings).
 - [ ] VL Application shows its English user interface.
 
 ## Scenario A (PolyWorks on the scanner PC)
 
-- [ ] Template has the property `VL program`; Measure button imported into the PolyWorks ribbon.
+- [ ] Wizard, step PolyWorks, with PolyWorks|Inspector open: **Add to PolyWorks** - the tab "VL Connector" with
+      the Measure button appears; **Undo** brings the previous ribbon back; add it again.
+- [ ] Template has the property `VL program`.
 - [ ] **Measure** in the template: VL starts AI Replay with the right program and mode.
 - [ ] Progress window in PolyWorks shows the VL steps; scanning works as usual.
 - [ ] After the last position: STL exported, PolyWorks comes to the front, evaluation runs.
@@ -30,7 +32,8 @@ AI Replay program. Tick each line; note deviations.
 
 - [ ] Shared folder entered on both PCs; **Test** is green on both.
 - [ ] `programs.csv` filled (VL program -> workspace and template on the station).
-- [ ] Station button imported on the station PC; **VL Station** runs and shows the shared folder.
+- [ ] Station PC: wizard (PolyWorks station) > **Add to PolyWorks** - tab "VL Connector" with **VL Station**;
+      it runs and shows the shared folder.
 - [ ] Scanner PC: agent switched on (*Start with Windows*), icon in the notification area; after a Windows
       logon it starts by itself.
 - [ ] Agent menu shows *station online*.

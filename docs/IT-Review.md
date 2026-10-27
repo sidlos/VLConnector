@@ -12,13 +12,13 @@ Unofficial tool - not an official KEYENCE or InnovMetric product. License: MIT.
 
 | File | Runs | Purpose |
 |---|---|---|
-| `app\VLConnector.ps1` | when the user opens it (Start menu) | Settings window (WPF). |
+| `app\VLConnector.ps1` | when the user opens it (Start menu; the installer offers the wizard) | Settings window and setup wizard (WPF). |
 | `app\Agent.ps1` | scenario B, scanner PC: at logon (only if switched on) or from the Start menu | Notification-area agent: starts the launcher in watch mode, sends STL files to the shared folder, opens the user's reports. |
 | `app\VLReplay.ps1` | started by the PolyWorks Measure macro or by the agent (`-Watch`) | Drives AI Replay in the VL Application (or follows a replay the operator started) and exports the STL. |
 | `app\polyworks\*.pwmacro` | inside PolyWorks, when the user presses the button | Evaluation, report, network station loop. |
 | `app\polyworks\Get-MacroContext.ps1`, `Station-Step.ps1` | started by the macros | Read settings, move job files (PolyWorks macros cannot read JSON). |
 | `app\polyworks\Make-ReportLayouts.ps1` | installer / settings window | Builds the report layouts from the installed PolyWorks A4 layout. |
-| `app\lib\*.ps1` | loaded by the scripts above | Shared code. `Native.ps1` holds all Windows API declarations. |
+| `app\lib\*.ps1` | loaded by the scripts above | Shared code. `Native.ps1` holds all Windows API declarations; `PolyWorksLayout.ps1` the PolyWorks COM declarations (used only by *Add to PolyWorks*). |
 | `Install.ps1`, `Uninstall.ps1` | once, by the user | Installation, removal. |
 | `tools\Sign-Scripts.ps1` | by IT, optional | Signs the scripts with your certificate (AllSigned environments). |
 
@@ -53,6 +53,7 @@ but with documented Windows messages and UI Automation instead of mouse and keyb
 | `OpenProcess` (only `PROCESS_VM_OPERATION`, `PROCESS_VM_READ`), `VirtualAllocEx`, `ReadProcessMemory`, `VirtualFreeEx` with `WM_GETCONTROLNAME` | Read the internal control names of VL's WinForms windows (e.g. `_replayScanButton`), the standard technique of UI test tools, so buttons are found independent of their captions. Nothing is written into VL's memory by VL Connector; no code is injected. |
 | UI Automation (`System.Windows.Automation`) | Open VL's menus (File > Export > STL, File > Save As) and read the AI Replay progress. |
 | `SetForegroundWindow`, `AttachThreadInput`, `ShowWindow`, `mouse_event` with a 0-pixel move | Bring the PolyWorks or VL Connector window to the front after the scan, or minimize VL. Windows lets only the process with the last input change the foreground; the zero move gives that right without moving the mouse. |
+| PolyWorks COM interface (`InnovMetric.PolyWorks.WorkspaceManager`: running modules, command center, run a macro script text) | Only when the user presses *Add to PolyWorks* (wizard or settings): sends PolyWorks' own macro commands to the PolyWorks|Inspector the user has open. PolyWorks is never started by VL Connector. |
 
 VL Connector **reads** two VL files: `%APPDATA%\KEYENCE\VL-800 Series\VL Application\VLOperation.log` (to see
 when AI Replay finished) and `%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml` (to find programs).
@@ -65,13 +66,17 @@ It **never writes** KEYENCE files and never terminates VL.
 | `C:\ProgramData\VLConnector\` | The program (read and execute for all users; write only for administrators, SYSTEM and the installing user), `layouts\` (report layouts, writable for all users), the PolyWorks button files, `install-info.txt`. |
 | `C:\ProgramData\VLConnector\machine.json` | Optional, created by IT: settings for all users of the PC. |
 | `%APPDATA%\VLConnector\settings.json` | Settings of the user (settings window). |
-| `%LOCALAPPDATA%\VLConnector\` | `logs\` (30 days), agent outbox and pending list, station work files. |
+| `%LOCALAPPDATA%\VLConnector\` | `logs\` (30 days), agent outbox and pending list, station work files, `polyworks-layout\` (backups of the PolyWorks visual layout made before *Add to PolyWorks*). |
+| `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector agent.lnk` | Only if the user switches on *Start the agent with Windows*. |
+| PolyWorks visual layout of the user | Only on *Add to PolyWorks*: a ribbon tab "VL Connector" with the button macro (a copy of `VLC_Measure_Button.pwmacro` or `VLC_Station_Button.pwmacro`). The previous layout is saved first and can be loaded back (*Undo*). |
 | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\VL Connector\` | Start menu entries. |
 | `Documents\VL Connector\` | Scans (STL) and, in scenario B, the received reports. |
 | PolyWorks workspace of the part | Measured pieces (copies of the template) and, by default, `Reports`/`Scans` folders next to the workspace. Templates are never modified. Pieces are removed only when the user chose to keep fewer pieces, and only pieces created by VL Connector in the same run. |
 | Shared folder (scenario B) | `jobs`, `work`, `reports`, `processed`, `failed`, `status`, `programs.csv` - see [Protocol](Protocol.md). |
 
-No registry keys are written. There is no internet access and no telemetry; the only network access is the
+Nothing is written into the program folders of VL (`C:\Program Files\KEYENCE\...`) or PolyWorks
+(`C:\Program Files\InnovMetric\...`): VL Connector installs no PolyWorks plug-in (DLL) and changes no PolyWorks
+options. No registry keys are written. There is no internet access and no telemetry; the only network access is the
 shared folder that the user configures for scenario B.
 
 ## 5. PolyWorks

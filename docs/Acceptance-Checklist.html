@@ -30,13 +30,14 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <h2 id="preparation">Preparation</h2>
 <ul>
 <li class="task">&#9744; Package checked: SHA-256 of the ZIP matches <code>SHA256SUMS.txt</code>; the fingerprint shown by Install.cmd matches.</li>
-<li class="task">&#9744; Installed with Install.cmd; settings window opens from the Start menu.</li>
+<li class="task">&#9744; Installed with Install.cmd; the setup wizard opens; settings window opens from the Start menu.</li>
 <li class="task">&#9744; Setup page: all lines green (or understood warnings).</li>
 <li class="task">&#9744; VL Application shows its English user interface.</li>
 </ul>
 <h2 id="scenario-a-polyworks-on-the-scanner-pc">Scenario A (PolyWorks on the scanner PC)</h2>
 <ul>
-<li class="task">&#9744; Template has the property <code>VL program</code>; Measure button imported into the PolyWorks ribbon.</li>
+<li class="task">&#9744; Wizard, step PolyWorks, with PolyWorks|Inspector open: <strong>Add to PolyWorks</strong> - the tab &quot;VL Connector&quot; with the Measure button appears; <strong>Undo</strong> brings the previous ribbon back; add it again.</li>
+<li class="task">&#9744; Template has the property <code>VL program</code>.</li>
 <li class="task">&#9744; <strong>Measure</strong> in the template: VL starts AI Replay with the right program and mode.</li>
 <li class="task">&#9744; Progress window in PolyWorks shows the VL steps; scanning works as usual.</li>
 <li class="task">&#9744; After the last position: STL exported, PolyWorks comes to the front, evaluation runs.</li>
@@ -54,7 +55,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <ul>
 <li class="task">&#9744; Shared folder entered on both PCs; <strong>Test</strong> is green on both.</li>
 <li class="task">&#9744; <code>programs.csv</code> filled (VL program -&gt; workspace and template on the station).</li>
-<li class="task">&#9744; Station button imported on the station PC; <strong>VL Station</strong> runs and shows the shared folder.</li>
+<li class="task">&#9744; Station PC: wizard (PolyWorks station) &gt; <strong>Add to PolyWorks</strong> - tab &quot;VL Connector&quot; with <strong>VL Station</strong>; it runs and shows the shared folder.</li>
 <li class="task">&#9744; Scanner PC: agent switched on (<em>Start with Windows</em>), icon in the notification area; after a Windows logon it starts by itself.</li>
 <li class="task">&#9744; Agent menu shows <em>station online</em>.</li>
 <li class="task">&#9744; AI Replay started <strong>in VL</strong> with a program from the list: after the last position the STL is exported (<code>Documents\VL Connector\Scans\&lt;program&gt;_&lt;date&gt;_&lt;time&gt;.stl</code>) and a notification says it was sent.</li>

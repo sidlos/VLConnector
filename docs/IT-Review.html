@@ -31,13 +31,13 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <h2 id="1-components">1. Components</h2>
 <table>
 <tr><th>File</th><th>Runs</th><th>Purpose</th></tr>
-<tr><td><code>app\VLConnector.ps1</code></td><td>when the user opens it (Start menu)</td><td>Settings window (WPF).</td></tr>
+<tr><td><code>app\VLConnector.ps1</code></td><td>when the user opens it (Start menu; the installer offers the wizard)</td><td>Settings window and setup wizard (WPF).</td></tr>
 <tr><td><code>app\Agent.ps1</code></td><td>scenario B, scanner PC: at logon (only if switched on) or from the Start menu</td><td>Notification-area agent: starts the launcher in watch mode, sends STL files to the shared folder, opens the user&#39;s reports.</td></tr>
 <tr><td><code>app\VLReplay.ps1</code></td><td>started by the PolyWorks Measure macro or by the agent (<code>-Watch</code>)</td><td>Drives AI Replay in the VL Application (or follows a replay the operator started) and exports the STL.</td></tr>
 <tr><td><code>app\polyworks\*.pwmacro</code></td><td>inside PolyWorks, when the user presses the button</td><td>Evaluation, report, network station loop.</td></tr>
 <tr><td><code>app\polyworks\Get-MacroContext.ps1</code>, <code>Station-Step.ps1</code></td><td>started by the macros</td><td>Read settings, move job files (PolyWorks macros cannot read JSON).</td></tr>
 <tr><td><code>app\polyworks\Make-ReportLayouts.ps1</code></td><td>installer / settings window</td><td>Builds the report layouts from the installed PolyWorks A4 layout.</td></tr>
-<tr><td><code>app\lib\*.ps1</code></td><td>loaded by the scripts above</td><td>Shared code. <code>Native.ps1</code> holds all Windows API declarations.</td></tr>
+<tr><td><code>app\lib\*.ps1</code></td><td>loaded by the scripts above</td><td>Shared code. <code>Native.ps1</code> holds all Windows API declarations; <code>PolyWorksLayout.ps1</code> the PolyWorks COM declarations (used only by <em>Add to PolyWorks</em>).</td></tr>
 <tr><td><code>Install.ps1</code>, <code>Uninstall.ps1</code></td><td>once, by the user</td><td>Installation, removal.</td></tr>
 <tr><td><code>tools\Sign-Scripts.ps1</code></td><td>by IT, optional</td><td>Signs the scripts with your certificate (AllSigned environments).</td></tr>
 </table>
@@ -59,6 +59,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <tr><td><code>OpenProcess</code> (only <code>PROCESS_VM_OPERATION</code>, <code>PROCESS_VM_READ</code>), <code>VirtualAllocEx</code>, <code>ReadProcessMemory</code>, <code>VirtualFreeEx</code> with <code>WM_GETCONTROLNAME</code></td><td>Read the internal control names of VL&#39;s WinForms windows (e.g. <code>_replayScanButton</code>), the standard technique of UI test tools, so buttons are found independent of their captions. Nothing is written into VL&#39;s memory by VL Connector; no code is injected.</td></tr>
 <tr><td>UI Automation (<code>System.Windows.Automation</code>)</td><td>Open VL&#39;s menus (File &gt; Export &gt; STL, File &gt; Save As) and read the AI Replay progress.</td></tr>
 <tr><td><code>SetForegroundWindow</code>, <code>AttachThreadInput</code>, <code>ShowWindow</code>, <code>mouse_event</code> with a 0-pixel move</td><td>Bring the PolyWorks or VL Connector window to the front after the scan, or minimize VL. Windows lets only the process with the last input change the foreground; the zero move gives that right without moving the mouse.</td></tr>
+<tr><td>PolyWorks COM interface (<code>InnovMetric.PolyWorks.WorkspaceManager</code>: running modules, command center, run a macro script text)</td><td>Only when the user presses <em>Add to PolyWorks</em> (wizard or settings): sends PolyWorks&#39; own macro commands to the PolyWorks</td><td>Inspector the user has open. PolyWorks is never started by VL Connector.</td></tr>
 </table>
 <p>VL Connector <strong>reads</strong> two VL files: <code>%APPDATA%\KEYENCE\VL-800 Series\VL Application\VLOperation.log</code> (to see when AI Replay finished) and <code>%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml</code> (to find programs). It <strong>never writes</strong> KEYENCE files and never terminates VL.</p>
 <h2 id="4-what-is-written-where">4. What is written where</h2>
@@ -67,13 +68,15 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <tr><td><code>C:\ProgramData\VLConnector\</code></td><td>The program (read and execute for all users; write only for administrators, SYSTEM and the installing user), <code>layouts\</code> (report layouts, writable for all users), the PolyWorks button files, <code>install-info.txt</code>.</td></tr>
 <tr><td><code>C:\ProgramData\VLConnector\machine.json</code></td><td>Optional, created by IT: settings for all users of the PC.</td></tr>
 <tr><td><code>%APPDATA%\VLConnector\settings.json</code></td><td>Settings of the user (settings window).</td></tr>
-<tr><td><code>%LOCALAPPDATA%\VLConnector\</code></td><td><code>logs\</code> (30 days), agent outbox and pending list, station work files.</td></tr>
+<tr><td><code>%LOCALAPPDATA%\VLConnector\</code></td><td><code>logs\</code> (30 days), agent outbox and pending list, station work files, <code>polyworks-layout\</code> (backups of the PolyWorks visual layout made before <em>Add to PolyWorks</em>).</td></tr>
+<tr><td><code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector agent.lnk</code></td><td>Only if the user switches on <em>Start the agent with Windows</em>.</td></tr>
+<tr><td>PolyWorks visual layout of the user</td><td>Only on <em>Add to PolyWorks</em>: a ribbon tab &quot;VL Connector&quot; with the button macro (a copy of <code>VLC_Measure_Button.pwmacro</code> or <code>VLC_Station_Button.pwmacro</code>). The previous layout is saved first and can be loaded back (<em>Undo</em>).</td></tr>
 <tr><td><code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\VL Connector\</code></td><td>Start menu entries.</td></tr>
 <tr><td><code>Documents\VL Connector\</code></td><td>Scans (STL) and, in scenario B, the received reports.</td></tr>
 <tr><td>PolyWorks workspace of the part</td><td>Measured pieces (copies of the template) and, by default, <code>Reports</code>/<code>Scans</code> folders next to the workspace. Templates are never modified. Pieces are removed only when the user chose to keep fewer pieces, and only pieces created by VL Connector in the same run.</td></tr>
 <tr><td>Shared folder (scenario B)</td><td><code>jobs</code>, <code>work</code>, <code>reports</code>, <code>processed</code>, <code>failed</code>, <code>status</code>, <code>programs.csv</code> - see <a href="Protocol.html">Protocol</a>.</td></tr>
 </table>
-<p>No registry keys are written. There is no internet access and no telemetry; the only network access is the shared folder that the user configures for scenario B.</p>
+<p>Nothing is written into the program folders of VL (<code>C:\Program Files\KEYENCE\...</code>) or PolyWorks (<code>C:\Program Files\InnovMetric\...</code>): VL Connector installs no PolyWorks plug-in (DLL) and changes no PolyWorks options. No registry keys are written. There is no internet access and no telemetry; the only network access is the shared folder that the user configures for scenario B.</p>
 <h2 id="5-polyworks">5. PolyWorks</h2>
 <p>The setup wizard can add the buttons to the PolyWorks ribbon by itself, only when the user presses <em>Add to PolyWorks</em>: it sends documented PolyWorks macro commands (<code>WINDOW VISUAL_LAYOUT EXPORT</code>, <code>IMPORT_MACRO_SCRIPTS</code>, <code>LOAD</code>) through the PolyWorks programming interface (COM) to the PolyWorks|Inspector the user has open, after saving the current visual layout; it never starts PolyWorks itself. The Measure and Station buttons are small macro files (also importable by hand) that the user adds to the PolyWorks ribbon once; they call <code>app\polyworks\*.pwmacro</code>. The macros use only the documented PolyWorks macro language. The station runs in a PolyWorks|Inspector of the station PC that a user starts; it keeps PolyWorks&#39; own licensing (one licence per PC).</p>
 <h2 id="6-integrity-of-the-package">6. Integrity of the package</h2>

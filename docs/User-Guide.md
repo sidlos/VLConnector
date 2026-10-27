@@ -33,7 +33,8 @@ comes back and opens on the scanner PC - only the reports of scans made on that 
 ## 2. Installation
 
 You need Windows 10 or 11, the VL Application 4.6 with its **English** user interface (scanner PC) and
-PolyWorks Metrology Suite 2026 (evaluating PC). No administrator rights are needed.
+PolyWorks Metrology Suite 2026 (evaluating PC). No administrator rights are needed, and nothing is copied into
+the program folders of VL or PolyWorks (VL Connector is not a PolyWorks plug-in).
 
 1. Check that the SHA-256 of the downloaded ZIP matches `SHA256SUMS.txt`:
    `Get-FileHash .\VLConnector-1.0.0.zip` in PowerShell.
@@ -62,7 +63,7 @@ Start menu > **VL Connector**. Every change is saved immediately ("Saved" appear
 
 | Page | What you set |
 |---|---|
-| **Setup** | Scenario A or B; in scenario B whether this PC is the scanner PC or the PolyWorks station. The status list checks this PC and offers the next step (for example *Build* for missing report layouts). |
+| **Setup** | Scenario A or B; in scenario B whether this PC is the scanner PC or the PolyWorks station. The status list checks this PC and offers the next step (for example *Build* for missing report layouts). **Setup wizard** runs the guided setup again. |
 | **Scanning** | AI Replay mode (High speed, Standard, or let the operator choose in VL), export right after the scan, automatic confirmation of the stage movement, what happens to the VL window after the export, where VL programs are. |
 | **PolyWorks** | Report layouts, which measured pieces to keep, opening the PDF, the Measure (or Station) button. |
 | **Network** | The shared folder (scenario B), opening reports automatically, the agent (start with Windows), the programs list. |
@@ -192,8 +193,9 @@ never exported twice.
 
 ### The PolyWorks station
 
-On the station PC set the role **PolyWorks station** (page Setup). Then, once: import the station button into
-PolyWorks like the Measure button (page PolyWorks > Copy macro path copies `VLC_Station_Button.pwmacro`).
+On the station PC choose **PolyWorks station** in the setup wizard (or page Setup). Then, once, with
+PolyWorks|Inspector open: **Add to PolyWorks** in the wizard (or page PolyWorks) adds the tab **VL Connector**
+with the **VL Station** button (by hand: import `VLC_Station_Button.pwmacro` like the Measure button).
 
 To run the station, open a PolyWorks|Inspector **used only for the station** (from the Workspace Manager as
 usual) and press **VL Station**. A small window shows the shared folder, the last job and a **Stop** button.

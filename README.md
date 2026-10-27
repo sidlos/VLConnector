@@ -25,15 +25,19 @@ is never changed.
 - KEYENCE VL-800 with VL Application 4.6 (tested: 4.6.1.6002), English user interface.
 - PolyWorks Metrology Suite 2026 (Inspector) on the evaluating PC.
 - Scenario B: a shared network folder that the scanner PCs and the station can read and write.
-- No administrator rights are needed.
+- No administrator rights are needed. Nothing is copied into the program folders of VL or PolyWorks
+  (VL Connector is not a PolyWorks plug-in).
 
 ## Install
 
 1. Check the download: the SHA-256 of the ZIP must match `SHA256SUMS.txt` (PowerShell: `Get-FileHash <zip>`).
 2. Extract the ZIP and run **Install.cmd**. It checks every file, shows the package fingerprint (compare it
    with the one you received), installs to `C:\ProgramData\VLConnector` and creates the Start menu entries.
-3. Open **VL Connector** from the Start menu, choose the scenario and follow the Setup page. The settings
-   window only holds settings (modes, options, start with Windows); scanning stays in VL and evaluating in PolyWorks.
+3. The **setup wizard** opens at the end (later: Start menu > VL Connector > Setup wizard). It asks for the
+   scenario and the main options, builds the report layouts and **adds the VL Connector tab with the Measure or
+   Station button to PolyWorks** (PolyWorks|Inspector must be open; the PolyWorks layout is saved before and
+   can be restored). The settings window only holds settings (modes, options, start with Windows); scanning
+   stays in VL and evaluating in PolyWorks.
 
 Update: run Install.cmd of the new version (settings, report layouts and the PolyWorks buttons stay).
 Uninstall: Start menu > Uninstall VL Connector.
