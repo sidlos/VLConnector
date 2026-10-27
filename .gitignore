@@ -3,3 +3,5 @@ dist/
 # test work folders and logs
 tests/_work/
 *.log
+/VLC_Measure_Button.pwmacro
+/layouts/

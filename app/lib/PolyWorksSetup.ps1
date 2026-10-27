@@ -10,7 +10,11 @@ function Get-PolyWorksInfo {
     $exe = if ($server -match '^"([^"]+)"') { $Matches[1] } else { ($server -split ' ')[0] }
     $dir = Split-Path (Split-Path $exe)
     $inspector = Join-Path $dir 'bin\iminspect.exe'
-    $version = if (Test-Path -LiteralPath $inspector) { (Get-Item -LiteralPath $inspector).VersionInfo.FileVersion } else { '' }
+    $version = ''
+    if (Test-Path -LiteralPath $inspector) {
+        $vi = (Get-Item -LiteralPath $inspector).VersionInfo
+        $version = '{0}.{1}.{2}.{3}' -f $vi.FileMajorPart, $vi.FileMinorPart, $vi.FileBuildPart, $vi.FilePrivatePart
+    }
     return [pscustomobject]@{ Dir = $dir; Name = Split-Path $dir -Leaf; InspectorVersion = $version }
 }
 
