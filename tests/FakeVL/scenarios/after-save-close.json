@@ -1,0 +1,20 @@
+{
+    "launcher":  {
+                     "afterExport":  "SaveAndClose"
+                 },
+    "flavors":  [
+                    "en"
+                ],
+    "expect":  {
+                   "vldExists":  true,
+                   "vlRunning":  false,
+                   "exitCode":  0,
+                   "stl":  true,
+                   "eventsOrder":  [
+                                       "exported:",
+                                       "saved:",
+                                       "exit:closed"
+                                   ],
+                   "state":  "OK"
+               }
+}

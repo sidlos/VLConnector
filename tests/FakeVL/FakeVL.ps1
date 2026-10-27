@@ -132,6 +132,9 @@ $defaults = [ordered]@{
     postStlIdleSec      = 3.0     # idle time after the final STL Ready before VL aligns to the program
     alignSec            = 4.0     # VL aligning to the program (main window busy), then the program list is rewritten
     exportFailCount     = 0       # the first N STL exports fail with an error message box
+    operatorModeSec     = 0       # simulated operator picks the replay mode after this delay; 0 = never
+    operatorMode        = 'Standard'
+    corruptStlAfterSec  = 0       # truncate the exported STL after this delay (tests the check before closing)
     triangles           = 2000
     dataName            = 'demo'
 }
@@ -294,7 +297,13 @@ $script:replayButton.Add_Click({
     $script:modeChosen = $false
     $script:main.Enabled = $false
     $script:mode.Show($script:main)
+    $script:modeButtons = @{ HighSpeed = $hs; Standard = $nm }
     Write-Event 'mode-dialog'
+    if ([double]$cfg.operatorModeSec -gt 0) {
+        Invoke-After ([double]$cfg.operatorModeSec) {
+            if (-not $script:modeChosen) { Write-Event "operator:mode-$($cfg.operatorMode)"; $script:modeButtons[[string]$cfg.operatorMode].PerformClick() }
+        }
+    }
 })
 
 function Select-Mode([string]$Mode) {
@@ -485,6 +494,14 @@ function Complete-StlExport {
     Write-Event "exported:$path"
     $script:main.Enabled = $true
     $script:exportBusy = $false
+    if ([double]$cfg.corruptStlAfterSec -gt 0) {
+        $script:corruptPath = $path
+        Invoke-After ([double]$cfg.corruptStlAfterSec) {
+            $fs = [IO.File]::Open($script:corruptPath, 'Open', 'Write', 'ReadWrite')
+            try { $fs.SetLength(1000) } finally { $fs.Dispose() }
+            Write-Event 'stl-corrupted'
+        }
+    }
 }
 
 $script:saveAsItem.Add_Click({
@@ -500,6 +517,10 @@ $script:saveAsItem.Add_Click({
         }
         else { Write-Event 'save:cancelled' }
     }
+})
+
+$script:main.Add_Resize({
+    if ($script:main.WindowState -eq 'Minimized' -and -not $script:minimizedLogged) { $script:minimizedLogged = $true; Write-Event 'window:minimized' }
 })
 
 # --- Closing (save prompt) ---------------------------------------------------------------------

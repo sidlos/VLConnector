@@ -1,262 +1,150 @@
 <#
-  VLReplay.ps1 - starts AI Replay in the VL-800 from outside (e.g. from PolyWorks) and hands the STL over.
+  VLReplay.ps1 - VL Connector for PolyWorks: runs AI Replay in the KEYENCE VL-800 "VL Application"
+  from outside (the PolyWorks Measure button or the VL Connector scan window) and hands the STL over.
 
   Steps:
     1. finds a VL window on its start screen (AI Replay button), otherwise opens a new VL window,
-    2. clicks AI Replay, picks the mode (Standard / HighSpeed) and puts the .vld4 program into the dialog,
-    3. the operator works as usual (places the part, confirms the position...),
-    4. when VL has applied the program after the scan and the window is idle, exports the STL via the
-       menu File > Export > STL... (Binary, no thinning) straight into the output folder,
-    5. checks the STL and writes the marker <program>.done (STATE=OK/ERROR/CANCELLED, STL=path).
+    2. clicks AI Replay, chooses the mode (HighSpeed / Standard, or lets the operator choose: Ask)
+       and enters the .vld4 program,
+    3. the operator works as usual (places the part, presses Measure); VL messages can be answered
+       automatically (stage movement) or end the run (scanner not connected),
+    4. when the part is finished, exports the STL via the menu File > Export > STL... (binary, no
+       thinning) and checks it,
+    5. writes the marker file (STATE=OK/ERROR/CANCELLED/DRYRUN/BUSY, STL=path; see docs\Protocol.md),
+    6. optionally minimizes or closes VL (closing only after the STL has been checked again) and
+       brings the calling window back to the front.
 
   VL is driven only by Windows messages and UI Automation (no mouse or keyboard input). Nothing is
-  written to KEYENCE files.
+  written to KEYENCE files. Options that are not given come from the VL Connector settings.
 
   Usage:
-    VLReplay.cmd ABC                          program ABC.vld4 is searched in Documents / recently used programs
-    VLReplay.cmd "C:\Programs\ABC.vld4" -Mode Standard   mode with stitching confirmation (default is HighSpeed)
-    VLReplay.cmd ABC -DryRun                  only walks through the dialogs and cancels the program selection (no scan)
-    VLReplay.cmd -ExportOnly                  only exports the STL from the data already open in VL
-    VLReplay.cmd ABC -ExportImmediately       STL right after the scan is composed, without waiting for the alignment
-                                              to the program (~20 s); the STL is then in scanner coordinates
-                                              (PolyWorks aligns it itself)
-    VLReplay.cmd ABC -VlToBackground          after the STL export minimizes VL and brings the PolyWorks window
-                                              that started the launcher to the front (the next run restores VL)
+    VLReplay.cmd ABC                         program ABC.vld4 (searched in the program folders and recent programs)
+    VLReplay.cmd "C:\Programs\ABC.vld4" -Mode Standard
+    VLReplay.cmd ABC -DryRun                 only walks through the dialogs and cancels the program selection
+    VLReplay.cmd -ExportOnly                 only exports the STL from the data already open in VL
+    VLReplay.cmd ABC -ExportImmediately On -AfterExport Close
 
-  Exit code: 0 OK, 1 error, 2 cancelled in VL, 3 bad parameters / program not found, 4 already running.
-  Log: VLReplay_<user>.log next to the script.
+  Files next to the marker while the run is active: <marker>.status (current step, read by the callers)
+  and <marker>.cancel (created by a caller to cancel the run).
+  Exit code: 0 OK, 1 error, 2 cancelled, 3 bad parameters / program not found, 4 already running.
+  Log: %LOCALAPPDATA%\VLConnector\logs\VLReplay_<date>.log
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)] [string]$Program,
-    [ValidateSet('Standard', 'HighSpeed')] [string]$Mode = 'HighSpeed',
-    [string]$OutputDir = 'C:\PolyWorks\Vstup',
+    [string]$Mode = '',
+    [string]$OutputDir = '',
     [string]$StlFile,
     [string]$MarkerFile,
-    [string[]]$ProgramDir = @([Environment]::GetFolderPath('MyDocuments')),
-    [int]$TimeoutMin = 45,
-    [double]$SettleSec = 2,
-    [switch]$ExportImmediately,
+    [string]$JobId = '',
+    [string[]]$ProgramDir = @(),
+    [int]$TimeoutMin = 0,
+    [double]$SettleSec = 0,
+    [string]$ExportImmediately = '',
+    [string]$ConfirmStageMotion = '',
+    [string]$AfterExport = '',
+    [string]$VldFolder = '',
+    [string]$ReturnFocus = '',
+    [long]$ReturnFocusHwnd = 0,
     [switch]$NewWindow,
     [switch]$DryRun,
     [switch]$ExportOnly,
-    [switch]$VlToBackground,
-    [string]$Menu = 'File>Export>STL',
-    [string]$VlExe = 'C:\Program Files\KEYENCE\VL-800 Series\VL Application\VLApplication4.exe',
+    [string]$Menu = '',
+    [string]$VlExe = '',
     [string]$VlArgs
 )
 
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-
-Add-Type -ReferencedAssemblies UIAutomationClient, UIAutomationTypes, WindowsBase -TypeDefinition @'
-using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading;
-using System.Windows.Automation;
-
-public static class Vl
-{
-    delegate bool EnumProc(IntPtr h, IntPtr l);
-    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
-    [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumProc cb, IntPtr l);
-    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
-    [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
-    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
-    [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
-    [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr h);
-    [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr h);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
-    [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
-    [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint t, out IntPtr r);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, string l, uint f, uint t, out IntPtr r);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, StringBuilder l, uint f, uint t, out IntPtr r);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
-    [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
-    [DllImport("kernel32.dll")] static extern IntPtr VirtualAllocEx(IntPtr p, IntPtr a, uint size, uint type, uint protect);
-    [DllImport("kernel32.dll")] static extern bool VirtualFreeEx(IntPtr p, IntPtr a, uint size, uint type);
-    [DllImport("kernel32.dll")] static extern bool ReadProcessMemory(IntPtr p, IntPtr a, byte[] b, uint size, out IntPtr read);
-    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
-    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
-    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
-    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
-    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool attach);
-    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
-    [DllImport("user32.dll")] static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extra);
-
-    const uint SMTO_ABORTIFHUNG = 2;
-    static readonly uint WM_GETCONTROLNAME = RegisterWindowMessage("WM_GETCONTROLNAME");
-
-    // Visible top-level windows of the given process.
-    public static IntPtr[] TopWindows(int pid)
-    {
-        var list = new List<IntPtr>();
-        EnumWindows(delegate(IntPtr h, IntPtr l)
-        {
-            uint p; GetWindowThreadProcessId(h, out p);
-            if (p == (uint)pid && IsWindowVisible(h)) list.Add(h);
-            return true;
-        }, IntPtr.Zero);
-        return list.ToArray();
-    }
-
-    public static IntPtr[] Children(IntPtr parent)
-    {
-        var list = new List<IntPtr>();
-        EnumChildWindows(parent, delegate(IntPtr h, IntPtr l) { list.Add(h); return true; }, IntPtr.Zero);
-        return list.ToArray();
-    }
-
-    public static string ClassOf(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, s.Capacity); return s.ToString(); }
-
-    // Window title (for windows of other processes only the title, not the content of an edit box).
-    public static string Title(IntPtr h) { var s = new StringBuilder(1024); GetWindowText(h, s, s.Capacity); return s.ToString(); }
-
-    // Text of any window including edit boxes in another process (the system marshals WM_GETTEXT).
-    public static string GetText(IntPtr h)
-    {
-        var s = new StringBuilder(2048); IntPtr r;
-        SendMessageTimeout(h, 0x000D, (IntPtr)s.Capacity, s, SMTO_ABORTIFHUNG, 2000, out r);
-        return s.ToString();
-    }
-
-    public static bool SetText(IntPtr h, string text)
-    {
-        IntPtr r;
-        return SendMessageTimeout(h, 0x000C, IntPtr.Zero, text, SMTO_ABORTIFHUNG, 3000, out r) != IntPtr.Zero;
-    }
-
-    public static long Send(IntPtr h, uint msg, long w)
-    {
-        IntPtr r;
-        SendMessageTimeout(h, msg, (IntPtr)w, IntPtr.Zero, SMTO_ABORTIFHUNG, 3000, out r);
-        return (long)r;
-    }
-
-    // VL is processing messages (its window thread is not busy): an empty WM_NULL message within 1 s.
-    public static bool IsResponsive(IntPtr h)
-    {
-        IntPtr r;
-        return SendMessageTimeout(h, 0x0000, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 1000, out r) != IntPtr.Zero;
-    }
-
-    // Button click without the mouse; PostMessage lets VL open a modal dialog if it needs to.
-    public static void Click(IntPtr h) { PostMessage(h, 0x00F5, IntPtr.Zero, IntPtr.Zero); }
-    public static void Close(IntPtr h) { PostMessage(h, 0x0010, IntPtr.Zero, IntPtr.Zero); }
-
-    // WinForms control name (Control.Name), independent of the VL user interface language.
-    public static string WinFormsName(IntPtr hwnd)
-    {
-        uint pid; GetWindowThreadProcessId(hwnd, out pid);
-        IntPtr proc = OpenProcess(0x0008 | 0x0010 | 0x0020 | 0x0400, false, pid);
-        if (proc == IntPtr.Zero) return "";
-        IntPtr mem = VirtualAllocEx(proc, IntPtr.Zero, 1024, 0x3000, 0x04);
-        try
-        {
-            IntPtr r;
-            if (SendMessageTimeout(hwnd, WM_GETCONTROLNAME, (IntPtr)512, mem, SMTO_ABORTIFHUNG, 1000, out r) == IntPtr.Zero) return "";
-            byte[] b = new byte[1024]; IntPtr read;
-            ReadProcessMemory(proc, mem, b, 1024, out read);
-            string s = Encoding.Unicode.GetString(b);
-            int z = s.IndexOf('\0');
-            return z >= 0 ? s.Substring(0, z) : s;
-        }
-        finally { VirtualFreeEx(proc, mem, 0, 0x8000); CloseHandle(proc); }
-    }
-
-    public static IntPtr FindChild(IntPtr parent, string winFormsName)
-    {
-        foreach (IntPtr h in Children(parent))
-            if (WinFormsName(h) == winFormsName) return h;
-        return IntPtr.Zero;
-    }
-
-    // Windows lets a window come to the foreground only for the process with the last input;
-    // a mouse move by 0 px satisfies that without side effects.
-    public static void BringToFront(IntPtr hwnd)
-    {
-        if (IsIconic(hwnd)) ShowWindow(hwnd, 9);
-        IntPtr fg = GetForegroundWindow();
-        if (fg == hwnd) return;
-        mouse_event(0x1, 0, 0, 0, UIntPtr.Zero);
-        uint ignored;
-        uint fgThread = GetWindowThreadProcessId(fg, out ignored);
-        uint me = GetCurrentThreadId();
-        bool attached = fgThread != 0 && fgThread != me && AttachThreadInput(me, fgThread, true);
-        try { SetForegroundWindow(hwnd); }
-        finally { if (attached) AttachThreadInput(me, fgThread, false); }
-    }
-
-    public static void Minimize(IntPtr hwnd) { ShowWindow(hwnd, 6); }
-
-    // Invoke on a menu item that opens a modal dialog returns only after the dialog closes,
-    // so it runs on its own thread.
-    public static void InvokeAsync(AutomationElement e)
-    {
-        var t = new Thread(delegate() { try { ((InvokePattern)e.GetCurrentPattern(InvokePattern.Pattern)).Invoke(); } catch { } });
-        t.IsBackground = true;
-        t.Start();
-    }
-}
-'@
-
 $EXIT_OK = 0; $EXIT_ERROR = 1; $EXIT_CANCELLED = 2; $EXIT_ARGS = 3; $EXIT_BUSY = 4
 
-$logFile      = Join-Path $PSScriptRoot ('VLReplay_{0}.log' -f $env:USERNAME)
+. (Join-Path $PSScriptRoot 'lib\Settings.ps1')
+. (Join-Path $PSScriptRoot 'lib\Log.ps1')
+. (Join-Path $PSScriptRoot 'lib\KeyValueFile.ps1')
+. (Join-Path $PSScriptRoot 'lib\Native.ps1')
+
+$logFile      = Initialize-VlcLog 'VLReplay'
 $operationLog = Join-Path $env:APPDATA 'KEYENCE\VL-800 Series\VL Application\VLOperation.log'
 $templateList = Join-Path $env:LOCALAPPDATA 'KEYENCE\VL-800 Series\VL Application\RecentUsedTemplateFiles.xml'
 $mySession    = [Diagnostics.Process]::GetCurrentProcess().SessionId
 $startTime    = Get-Date
+$script:markerPath = $null
+$script:statusPath = $null
+$script:cancelPath = $null
+$script:programPath = ''
+$script:mutex = $null
+$script:lastStatus = ''
+$script:lastMessage = ''
 
 # --- Helper functions -----------------------------------------------------------------
 
 function Write-Log([string]$Text, [string]$Color = 'Gray') {
-    $line = '{0:yyyy-MM-dd HH:mm:ss.fff}  {1}' -f (Get-Date), $Text
-    Write-Host $line -ForegroundColor $Color
-    # Shared write: the log can be written even while someone has it open (viewer, tail).
-    try {
-        $fs = [IO.File]::Open($logFile, 'Append', 'Write', 'ReadWrite, Delete')
-        try { $bytes = [Text.Encoding]::UTF8.GetBytes($line + "`r`n"); $fs.Write($bytes, 0, $bytes.Length) }
-        finally { $fs.Dispose() }
-    }
-    catch { }
+    Write-Host ('{0:HH:mm:ss.fff}  {1}' -f (Get-Date), $Text) -ForegroundColor $Color
+    Write-VlcLog $Text
 }
 
 function Get-SafeName([string]$Name) {
     return ($Name.Split([IO.Path]::GetInvalidFileNameChars()) -join '_').Trim()
 }
 
-# Marker for PolyWorks: written under a temporary name and renamed, so it is never half-written.
+function Set-MarkerPath([string]$Path) {
+    $script:markerPath = $Path
+    $script:statusPath = if ($Path) { "$Path.status" } else { $null }
+    $script:cancelPath = if ($Path) { "$Path.cancel" } else { $null }
+}
+
+# Marker for the caller (PolyWorks or the scan window). Line order is fixed: callers read by line number.
 function Write-Marker([string]$State, [string]$StlPath, [string]$Message) {
     if (-not $script:markerPath) { return }
-    $lines = @(
-        "STATE=$State"
-        "STL=$StlPath"
-        "PROGRAM=$script:programPath"
-        ('START={0:yyyy-MM-dd HH:mm:ss}' -f $startTime)
-        ('END={0:yyyy-MM-dd HH:mm:ss}' -f (Get-Date))
-        "MESSAGE=$($Message -replace '\r?\n', ' ')"
-    )
+    $pairs = [ordered]@{
+        STATE     = $State
+        STL       = $StlPath
+        PROGRAM   = $script:programPath
+        START     = '{0:yyyy-MM-dd HH:mm:ss}' -f $startTime
+        END       = '{0:yyyy-MM-dd HH:mm:ss}' -f (Get-Date)
+        MESSAGE   = $Message
+        USER      = $env:USERNAME
+        COMPUTER  = $env:COMPUTERNAME
+        JOBID     = $JobId
+        VERSION   = Get-VlcVersion
+        START_UTC = $startTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    }
     try {
-        $temp = "$script:markerPath.part"
-        [IO.File]::WriteAllLines($temp, [string[]]$lines, (New-Object Text.UTF8Encoding($false)))
-        if (Test-Path -LiteralPath $script:markerPath) { [IO.File]::Delete($script:markerPath) }
-        [IO.File]::Move($temp, $script:markerPath)
+        Write-KeyValueFile $script:markerPath $pairs
         Write-Log "Marker: $script:markerPath ($State)"
     }
     catch { Write-Log "The marker could not be written: $($_.Exception.Message)" Red }
+}
+
+# Current step for the caller's progress display; written only when it changes.
+function Write-Status([string]$Step, [string]$Text, [string]$VlMessage = '') {
+    if (-not $script:statusPath) { return }
+    $key = "$Step|$Text|$VlMessage"
+    if ($key -eq $script:lastStatus) { return }
+    $script:lastStatus = $key
+    try { Write-KeyValueFile $script:statusPath ([ordered]@{ STEP = $Step; TEXT = $Text; VLMESSAGE = $VlMessage; UPDATED = '{0:yyyy-MM-dd HH:mm:ss}' -f (Get-Date) }) }
+    catch { }
+}
+
+function Remove-RunFiles {
+    foreach ($p in @($script:statusPath, $script:cancelPath)) {
+        if ($p -and (Test-Path -LiteralPath $p)) { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 function Exit-Run([int]$Code, [string]$State, [string]$Message, [string]$StlPath = '') {
     $color = if ($Code -eq $EXIT_OK) { 'Green' } elseif ($Code -eq $EXIT_CANCELLED) { 'Yellow' } else { 'Red' }
     Write-Log "$State`: $Message" $color
     Write-Marker $State $StlPath $Message
+    Remove-RunFiles
     if ($script:mutex) { try { $script:mutex.ReleaseMutex() } catch { } }
     exit $Code
+}
+
+# A caller cancels the run by creating <marker>.cancel.
+function Test-CancelRequested {
+    if ($script:cancelPath -and (Test-Path -LiteralPath $script:cancelPath)) {
+        Exit-Run $EXIT_CANCELLED 'CANCELLED' 'Cancelled by the user.'
+    }
 }
 
 function Get-FileStamp([string]$Path) {
@@ -278,7 +166,7 @@ function Get-RecentTemplatePaths {
         Where-Object { $_ -match '^([A-Za-z]:\\|\\\\)' })
 }
 
-# Program: full path, or a name searched in the recently used programs and in -ProgramDir.
+# Program: full path, or a name searched in the recently used programs and in the program folders.
 function Resolve-Program([string]$Name) {
     foreach ($candidate in @($Name, "$Name.vld4")) {
         if ([IO.Path]::IsPathRooted($candidate) -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
@@ -302,12 +190,12 @@ function Resolve-Program([string]$Name) {
     }) + $recent | Select-Object -Unique)
     if ($found.Count -eq 1) { return $found[0] }
     if ($found.Count -gt 1) {
-        throw "Program '$Name' exists in several places, give the full path:`n  " + ($found -join "`n  ")
+        throw "Program '$Name' exists in several places, give the full path: " + ($found -join '; ')
     }
     return $null
 }
 
-# New complete lines in VLOperation.log (only for the log, helps with debugging).
+# New complete lines in VLOperation.log.
 function Read-OperationLog {
     if (-not (Test-Path -LiteralPath $operationLog)) { return @() }
     $fs = [IO.File]::Open($operationLog, 'Open', 'Read', 'ReadWrite, Delete')
@@ -337,6 +225,7 @@ function Get-FinishedLength([string]$Path) {
 
 # Binary STL: 80 byte header + triangle count + 50 bytes per triangle.
 function Test-BinaryStl([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return 0 }
     $fs = [IO.File]::OpenRead($Path)
     try {
         if ($fs.Length -lt 134) { return 0 }
@@ -385,9 +274,17 @@ function Get-VlState([int]$ProcId) {
     }
 }
 
+# A VL that another run is closing right now is left alone.
+function Test-VlBeingClosed([int]$ProcId) {
+    $m = $null
+    if ([System.Threading.Mutex]::TryOpenExisting("Local\VLConnector_Closing_$ProcId", [ref]$m)) { $m.Dispose(); return $true }
+    return $false
+}
+
+# VL processes of this session, newest first.
 function Get-VlProcesses {
     return @(Get-Process -Name VLApplication4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.SessionId -eq $mySession } | Sort-Object StartTime -Descending)
+        Where-Object { $_.SessionId -eq $mySession -and -not (Test-VlBeingClosed $_.Id) } | Sort-Object StartTime -Descending)
 }
 
 function Wait-Until([int]$TimeoutSec, [scriptblock]$Condition, [int]$StepMs = 250) {
@@ -417,10 +314,28 @@ function Find-DialogButton([IntPtr]$Dialog, [int]$Id) {
     return @([Vl]::Children($Dialog) | Where-Object { [Vl]::ClassOf($_) -eq 'Button' -and [Vl]::GetDlgCtrlID($_) -eq $Id }) | Select-Object -First 1
 }
 
-# Texts of a message box (MessageBox) - for the log and the marker.
+# OK of a message box: id 1, or the only button (an OK-only message box gives its OK button id 2).
+function Find-OkButton([IntPtr]$Dialog) {
+    $ok = Find-DialogButton $Dialog 1
+    if ($ok) { return $ok }
+    $buttons = @([Vl]::Children($Dialog) | Where-Object { [Vl]::ClassOf($_) -eq 'Button' -and [Vl]::IsWindowVisible($_) })
+    if ($buttons.Count -eq 1) { return $buttons[0] }
+    return $null
+}
+
+# Texts of a message box, blanks folded.
 function Get-DialogText([IntPtr]$Dialog) {
-    return (@([Vl]::Children($Dialog) | Where-Object { [Vl]::ClassOf($_) -match 'Static' } |
+    $text = (@([Vl]::Children($Dialog) | Where-Object { [Vl]::ClassOf($_) -match 'Static' } |
         ForEach-Object { [Vl]::Title($_) } | Where-Object { $_ }) -join ' / ')
+    return ($text -replace '\s+', ' ').Trim()
+}
+
+# Rule for a VL message box from the settings (vl.dialogRules): ConfirmStageMotion, ScannerNotConnected or ''.
+function Get-DialogRule([string]$Text) {
+    foreach ($rule in @($script:dialogRules)) {
+        if ($rule.match -and $Text.IndexOf([string]$rule.match, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return [string]$rule.action }
+    }
+    return ''
 }
 
 # --- VL window on its start screen -------------------------------------------------------
@@ -437,10 +352,12 @@ function Get-StartScreenVl {
     }
     if (-not (Test-Path -LiteralPath $VlExe)) { throw "VL is not installed: $VlExe" }
     Write-Log 'No idle VL window on its start screen, opening a new VL window...'
+    Write-Status 'starting' 'Starting VL...'
     $p = if ($VlArgs) { Start-Process -FilePath $VlExe -ArgumentList $VlArgs -WorkingDirectory (Split-Path $VlExe) -PassThru }
          else { Start-Process -FilePath $VlExe -WorkingDirectory (Split-Path $VlExe) -PassThru }
     $script:lastStartSig = ''
     $ready = Wait-Until 240 {
+        Test-CancelRequested
         if ($p.HasExited) { throw "VL exited right away (code $($p.ExitCode))." }
         $state = Get-VlState $p.Id
         if ($state.Signature -ne $script:lastStartSig) { $script:lastStartSig = $state.Signature; if ($state.Signature) { Write-Log "  VL windows: $($state.Signature)" DarkGray } }
@@ -462,18 +379,27 @@ function Start-AiReplay($Proc, [string]$ProgramPath) {
     $modeDialog = Wait-NewWindow $Proc.Id $before 15 { $_.Name -eq 'SelectReplayModeDialog' }
     if (-not $modeDialog) { throw 'The mode selection window did not open after clicking AI Replay.' }
 
-    $buttonName = if ($Mode -eq 'HighSpeed') { '_highSpeedModeButton' } else { '_normalModeButton' }
-    $modeButton = [Vl]::FindChild($modeDialog.Handle, $buttonName)
-    if ($Mode -eq 'HighSpeed' -and ($modeButton -eq [IntPtr]::Zero -or -not [Vl]::IsWindowEnabled($modeButton))) {
-        Write-Log 'High-speed mode is disabled in VL (GPU load limit), using Standard.' Yellow
-        $modeButton = [Vl]::FindChild($modeDialog.Handle, '_normalModeButton')
-    }
-    if ($modeButton -eq [IntPtr]::Zero) { [Vl]::Close($modeDialog.Handle); throw 'The mode button is missing in the mode selection window.' }
-
     $before = @(Get-Tops $Proc.Id | ForEach-Object { $_.Handle })
-    [Vl]::Click($modeButton)
-    $openDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Class -eq '#32770' }
-    if (-not $openDialog) { throw 'The AI Replay program selection dialog did not open.' }
+    if ($Mode -eq 'Ask') {
+        Write-Log 'Waiting for the operator to choose the replay mode in VL.'
+        Write-Status 'mode' 'Choose the replay mode in VL.'
+        $closed = Wait-Until 900 { Test-CancelRequested; -not [Vl]::IsWindow($modeDialog.Handle) -or -not [Vl]::IsWindowVisible($modeDialog.Handle) } 300
+        if (-not $closed) { throw 'No replay mode was chosen within 15 min.' }
+        $openDialog = Wait-NewWindow $Proc.Id $before 30 { $_.Class -eq '#32770' }
+        if (-not $openDialog) { Exit-Run $EXIT_CANCELLED 'CANCELLED' 'The replay mode selection was closed in VL.' }
+    }
+    else {
+        $buttonName = if ($Mode -eq 'HighSpeed') { '_highSpeedModeButton' } else { '_normalModeButton' }
+        $modeButton = [Vl]::FindChild($modeDialog.Handle, $buttonName)
+        if ($Mode -eq 'HighSpeed' -and ($modeButton -eq [IntPtr]::Zero -or -not [Vl]::IsWindowEnabled($modeButton))) {
+            Write-Log 'High-speed mode is disabled in VL (GPU load limit), using Standard.' Yellow
+            $modeButton = [Vl]::FindChild($modeDialog.Handle, '_normalModeButton')
+        }
+        if ($modeButton -eq [IntPtr]::Zero) { [Vl]::Close($modeDialog.Handle); throw 'The mode button is missing in the mode selection window.' }
+        [Vl]::Click($modeButton)
+        $openDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Class -eq '#32770' }
+        if (-not $openDialog) { throw 'The AI Replay program selection dialog did not open.' }
+    }
     Write-Log "Dialog '$($openDialog.Title)', entering the program."
 
     $edit = Find-FileNameEdit $openDialog.Handle
@@ -498,6 +424,45 @@ function Start-AiReplay($Proc, [string]$ProgramPath) {
     return $true
 }
 
+# --- VL message boxes during the replay -----------------------------------------------------------
+
+# Handles the open VL message boxes by the dialog rules. Stage movement is confirmed (OK) only with
+# -ConfirmStageMotion On, at least 0.5 s after the box appeared, retried every 2 s up to 3 times.
+function Invoke-DialogRules($State, [hashtable]$Seen) {
+    foreach ($d in @($State.Tops | Where-Object { $_.Class -eq '#32770' })) {
+        $h = [string]$d.Handle
+        if (-not $Seen.ContainsKey($h)) {
+            $text = Get-DialogText $d.Handle
+            $Seen[$h] = @{ Text = $text; First = Get-Date; Tries = 0; Last = [datetime]::MinValue }
+            if ($text) {
+                $script:lastMessage = "VL message '$($d.Title)': $text"
+                Write-Log "  $script:lastMessage" Yellow
+                Write-Status 'message' 'VL shows a message.' $text
+            }
+        }
+        $info = $Seen[$h]
+        switch (Get-DialogRule $info.Text) {
+            'ScannerNotConnected' {
+                $ok = Find-OkButton $d.Handle
+                if ($ok) { [Vl]::Click($ok) }
+                Exit-Run $EXIT_ERROR 'ERROR' "The scanner is not connected (VL: '$($info.Text)'). Check the scanner cable and power, then start again."
+            }
+            'ConfirmStageMotion' {
+                if ($ConfirmStageMotion -ne 'On' -or $info.Tries -ge 3) { break }
+                $now = Get-Date
+                if (($now - $info.First).TotalMilliseconds -lt 500 -or ($now - $info.Last).TotalSeconds -lt 2) { break }
+                $ok = Find-OkButton $d.Handle
+                if (-not $ok) { break }
+                [Vl]::BringToFront($d.Handle)
+                Start-Sleep -Milliseconds 200
+                [Vl]::Click($ok)
+                $info.Tries++; $info.Last = Get-Date
+                Write-Log "  Confirmed: $($info.Text)"
+            }
+        }
+    }
+}
+
 # --- Waiting for the end of the part ------------------------------------------------------------
 
 # Done: data in VL, VL started applying the program (it rewrites the program list only after the
@@ -505,7 +470,7 @@ function Start-AiReplay($Proc, [string]$ProgramPath) {
 # "AI Replay (n/n)" was seen and then the main window is idle and responsive for SettleSec. If the
 # last position was not seen, 30 s of quiet after the program was applied are enough. If the
 # program is not applied but VL has taken the scan over (STL Ready) and the last position ran,
-# export after 120 s of quiet.
+# export after 120 s of quiet. With -ExportImmediately On: export as soon as the composed scan is in VL.
 # Cancelled: back on the start screen and 30 s of quiet.
 function Wait-ReplayFinished($Proc) {
     $templateStamp = Get-FileStamp $templateList
@@ -514,7 +479,6 @@ function Wait-ReplayFinished($Proc) {
     $idleSince = $null
     $lastChange = Get-Date
     $lastSignature = $null
-    $lastMessage = ''
     $seenDialogs = @{}
     $stlReady = 0
     $finalScan = $false    # 'STL Ready' came only after the last position n/n = the composed scan is in VL
@@ -523,8 +487,9 @@ function Wait-ReplayFinished($Proc) {
 
     while ($true) {
         Start-Sleep -Milliseconds 500
+        Test-CancelRequested
         $now = Get-Date
-        if ($Proc.HasExited) { return @{ Result = 'Error'; Message = "The VL window closed (PID $($Proc.Id)). $lastMessage" } }
+        if ($Proc.HasExited) { return @{ Result = 'Error'; Message = "The VL window closed (PID $($Proc.Id)). $script:lastMessage".Trim() } }
         if ($now -gt $deadline) { return @{ Result = 'Error'; Message = "The part was not finished within $TimeoutMin min." } }
 
         # VLOperation.log: 'STL Ready' = VL has taken the scan over (after position 1 and after composing all positions).
@@ -533,7 +498,11 @@ function Wait-ReplayFinished($Proc) {
             $lastChange = $now
             if ($line -match 'STL Ready') {
                 $stlReady++
-                if ($position -and $position.K -ge $position.N) { $finalScan = $true; Write-Log 'The composed scan is in VL (STL Ready after the last position).' }
+                if ($position -and $position.K -ge $position.N) {
+                    $finalScan = $true
+                    Write-Log 'The composed scan is in VL (STL Ready after the last position).'
+                    Write-Status 'composed' 'The scan is complete, VL finishes the part.'
+                }
             }
         }
 
@@ -542,12 +511,8 @@ function Wait-ReplayFinished($Proc) {
             $lastSignature = $state.Signature
             $lastChange = $now
             Write-Log "  VL windows: $($state.Signature)" DarkGray
-            foreach ($d in $state.Tops | Where-Object { $_.Class -eq '#32770' -and -not $seenDialogs.ContainsKey($_.Handle) }) {
-                $seenDialogs[$d.Handle] = $true
-                $text = Get-DialogText $d.Handle
-                if ($text) { $lastMessage = "VL message '$($d.Title)': $text"; Write-Log "  $lastMessage" Yellow }
-            }
         }
+        Invoke-DialogRules $state $seenDialogs
 
         # The window before each position (ReplayForm) has "AI Replay (k/n)" in its title.
         foreach ($w in $state.Tops) {
@@ -556,6 +521,7 @@ function Wait-ReplayFinished($Proc) {
                 if (-not $position -or $position.K -ne $k -or $position.N -ne $n) {
                     $position = @{ K = $k; N = $n }
                     Write-Log "AI Replay: position $k/$n"
+                    Write-Status 'position' "Position $k of ${n}: place the part and press Measure in VL."
                 }
             }
         }
@@ -572,10 +538,10 @@ function Wait-ReplayFinished($Proc) {
         if ($state.Idle) { if (-not $idleSince) { $idleSince = $now } } else { $idleSince = $null }
         $idleFor = if ($idleSince) { ($now - $idleSince).TotalSeconds } else { 0 }
 
-        # -ExportImmediately: export right after the scan is composed, without waiting for the alignment to the program
+        # Export right after the scan is composed, without waiting for the alignment to the program
         # (VL aligns for ~20 s in the background; the STL is then in scanner coordinates, not program coordinates).
-        if ($ExportImmediately -and $finalScan -and $state.Idle -and -not $state.StartScreen -and $idleFor -ge 1) {
-            return @{ Result = 'Done'; Message = 'STL right after the scan (before the alignment to the program, scanner coordinates).' }
+        if ($ExportImmediately -eq 'On' -and $finalScan -and $state.Idle -and -not $state.StartScreen -and $idleFor -ge 1) {
+            return @{ Result = 'Done'; TemplateApplied = $templateApplied; TemplateStamp = $templateStamp; Message = 'STL right after the scan (before the alignment to the program, scanner coordinates).' }
         }
         if ($state.Idle -and -not $state.StartScreen) {
             if ($templateApplied -and $idleFor -ge $SettleSec -and -not $lastPosition -and -not $appliedWaitLogged) {
@@ -584,35 +550,21 @@ function Wait-ReplayFinished($Proc) {
             }
             if ($templateApplied -and (($lastPosition -and $idleFor -ge $SettleSec) -or $idleFor -ge 30)) {
                 if (-not $stlReady) { Write-Log 'There was no STL Ready in VLOperation.log - continuing because the program was applied.' Yellow }
-                return @{ Result = 'Done'; Message = '' }
+                return @{ Result = 'Done'; TemplateApplied = $true; TemplateStamp = $templateStamp; Message = '' }
             }
             if (-not $templateApplied -and $stlReady -and $lastPosition -and $idleFor -ge 120 -and ($now - $lastChange).TotalSeconds -ge 120) {
-                return @{ Result = 'Done'; Message = 'VL did not apply the program after the scan, the STL has no VL evaluation.' }
+                return @{ Result = 'Done'; TemplateApplied = $false; TemplateStamp = $templateStamp; Message = 'VL did not apply the program after the scan, the STL has no VL evaluation.' }
             }
         }
         if ($state.Idle -and $state.StartScreen -and $idleFor -ge 30 -and ($now - $lastChange).TotalSeconds -ge 30) {
-            return @{ Result = 'Cancelled'; Message = "AI Replay was cancelled or failed, VL is back on its start screen. $lastMessage".Trim() }
+            return @{ Result = 'Cancelled'; Message = "AI Replay was cancelled or failed, VL is back on its start screen. $script:lastMessage".Trim() }
         }
     }
 }
 
-# --- STL export via the menu File > Export > STL... -----------------------------------------------------
-
-function Get-MenuItems([int]$ProcId) {
-    $byPid = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $ProcId)
-    $isItem = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::MenuItem)
-    return @([System.Windows.Automation.AutomationElement]::RootElement.FindAll('Children', $byPid) |
-        ForEach-Object { $_.FindAll('Descendants', $isItem) })
-}
-
-function Find-MenuItem([int]$ProcId, [string]$Name, [int]$TimeoutSec = 5) {
-    return Wait-Until $TimeoutSec {
-        @(Get-MenuItems $ProcId | Where-Object { ($_.Current.Name -replace '&', '' -replace '\.\.\.$', '').Trim() -eq $Name }) | Select-Object -First 1
-    }
-}
+# --- Menu commands (File > Export > STL..., File > Save As...) -----------------------------------------
 
 # Targeted menu search: items of the main menu bar, then the children of the expanded item (~0.07 s).
-# Searching all UIA descendants of all VL windows (Find-MenuItem) took ~1.2 s per item.
 function Find-ChildMenuItem($Parent, [string]$Name, [int]$TimeoutMs = 3000) {
     $isItem = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::MenuItem)
     $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
@@ -626,8 +578,9 @@ function Find-ChildMenuItem($Parent, [string]$Name, [int]$TimeoutMs = 3000) {
 
 $script:menuStrips = @{}
 
-function Export-StlFile($Proc, [string]$Target) {
-    $parts = @($Menu -split '>' | ForEach-Object { $_.Trim() })
+# Opens a menu command of the idle VL main window, e.g. 'File>Export>STL'.
+function Invoke-VlMenu($Proc, [string]$Path) {
+    $parts = @($Path -split '>' | ForEach-Object { $_.Trim() })
     $state = Get-VlState $Proc.Id
     if (-not $state.Idle) { throw "The VL window is not idle: $($state.Signature)" }
     [Vl]::BringToFront($state.Main.Handle)
@@ -640,13 +593,12 @@ function Export-StlFile($Proc, [string]$Target) {
     }
     if ($strip -eq [IntPtr]::Zero) { throw 'The main menu (_mainMenuStrip) is missing in the VL window.' }
 
-    $before = @($state.Tops | ForEach-Object { $_.Handle })
     $topItem = $null
     try {
         $parent = [System.Windows.Automation.AutomationElement]::FromHandle($strip)
         for ($i = 0; $i -lt $parts.Count; $i++) {
             $item = Find-ChildMenuItem $parent $parts[$i]
-            if (-not $item) { throw "The VL menu has no item '$($parts[$i])' (path $Menu)." }
+            if (-not $item) { throw "The VL menu has no item '$($parts[$i])' (path $Path)." }
             if (-not $item.Current.IsEnabled) { throw "The menu item '$($parts[$i])' is disabled in VL." }
             if ($i -eq 0) { $topItem = $item }
             if ($i -lt $parts.Count - 1) {
@@ -660,7 +612,41 @@ function Export-StlFile($Proc, [string]$Target) {
         if ($topItem) { try { $topItem.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse() } catch { } }
         throw
     }
+    return $state
+}
 
+# Fills the Save As dialog with $Target and presses Save.
+function Complete-SaveDialog($SaveDialog, [string]$Target) {
+    $edit = Find-FileNameEdit $SaveDialog.Handle
+    if (-not $edit) { [Vl]::Click((Find-DialogButton $SaveDialog.Handle 2)); throw 'The File name box is missing in the Save As dialog.' }
+    [void][Vl]::SetText($edit, $Target)
+    if ([Vl]::GetText($edit) -ne $Target) { [Vl]::Click((Find-DialogButton $SaveDialog.Handle 2)); throw 'The target path could not be entered.' }
+    [Vl]::Click((Find-DialogButton $SaveDialog.Handle 1))
+}
+
+# Waits until both dialogs are gone, VL is idle and nobody writes $Target any more
+# (VL wrote $FinishText to its operation log, or the size did not change twice in a row).
+function Wait-FileSaved($Proc, $SaveDialog, [string]$Target, [string]$FinishText) {
+    $script:lastLength = -2
+    $script:finishSeen = $false
+    $finished = Wait-Until 600 {
+        foreach ($l in @(Read-OperationLog)) { if ($FinishText -and $l -match $FinishText) { $script:finishSeen = $true } }
+        $tops = @(Get-Tops $Proc.Id)
+        $other = @($tops | Where-Object { $_.Class -eq '#32770' -and $_.Handle -ne $SaveDialog.Handle })
+        if ($other) { throw "VL reports while saving: $((Get-DialogText $other[0].Handle))" }
+        if ($Proc.HasExited) { throw 'VL closed while saving.' }
+        $busy = @($tops | Where-Object { $_.Name -ne 'MeshAnalyzerForm' }).Count -gt 0
+        $length = if (Test-Path -LiteralPath $Target) { Get-FinishedLength $Target } else { -1 }
+        $stable = $length -gt 0 -and ($script:finishSeen -or $length -eq $script:lastLength)
+        $script:lastLength = $length
+        (-not $busy) -and $stable
+    } 100
+    if (-not $finished) { throw 'Saving did not finish within 10 min.' }
+}
+
+function Export-StlFile($Proc, [string]$Target) {
+    $state = Invoke-VlMenu $Proc $Menu
+    $before = @($state.Tops | ForEach-Object { $_.Handle })
     $stlDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Name -eq 'StlExporterDialog' } 50
     if (-not $stlDialog) { throw 'The STL export window did not open after selecting Export > STL.' }
 
@@ -679,59 +665,125 @@ function Export-StlFile($Proc, [string]$Target) {
     [Vl]::Click($ok)
     $saveDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Class -eq '#32770' } 50
     if (-not $saveDialog) { [Vl]::Close($stlDialog.Handle); throw 'The Save As dialog for the STL did not open.' }
-    $edit = Find-FileNameEdit $saveDialog.Handle
-    if (-not $edit) { [Vl]::Click((Find-DialogButton $saveDialog.Handle 2)); throw 'The File name box is missing in the Save As dialog.' }
-    [void][Vl]::SetText($edit, $Target)
-    if ([Vl]::GetText($edit) -ne $Target) { [Vl]::Click((Find-DialogButton $saveDialog.Handle 2)); throw 'The STL target path could not be entered.' }
-    [Vl]::Click((Find-DialogButton $saveDialog.Handle 1))
+    Complete-SaveDialog $saveDialog $Target
     Write-Log "Exporting STL: $Target"
-
-    # Done when both dialogs are gone, VL is idle and nobody writes the file any more
-    # (VL wrote 'Finish STL Export', or the size did not change twice in a row).
-    $script:lastLength = -2
-    $script:finishSeen = $false
-    $finished = Wait-Until 600 {
-        foreach ($l in @(Read-OperationLog)) { if ($l -match 'Finish STL Export') { $script:finishSeen = $true } }
-        $tops = @(Get-Tops $Proc.Id)
-        $other = @($tops | Where-Object { $_.Class -eq '#32770' -and $_.Handle -ne $saveDialog.Handle })
-        if ($other) { throw "VL reports during the STL export: $((Get-DialogText $other[0].Handle))" }
-        if ($Proc.HasExited) { throw 'VL closed during the STL export.' }
-        $busy = @($tops | Where-Object { $_.Name -ne 'MeshAnalyzerForm' }).Count -gt 0
-        $length = if (Test-Path -LiteralPath $Target) { Get-FinishedLength $Target } else { -1 }
-        $stable = $length -gt 0 -and ($script:finishSeen -or $length -eq $script:lastLength)
-        $script:lastLength = $length
-        (-not $busy) -and $stable
-    } 100
-    if (-not $finished) { throw 'The STL export did not finish within 10 min.' }
+    Write-Status 'exporting' 'Exporting the STL file...'
+    Wait-FileSaved $Proc $saveDialog $Target 'Finish STL Export'
 
     $triangles = Test-BinaryStl $Target
     if (-not $triangles) { throw "File $Target is not a valid binary STL." }
-    if (-not $script:finishSeen -and -not (@(Read-OperationLog) -match 'Finish STL Export')) { Write-Log 'VL did not write Finish STL Export to VLOperation.log (the file is fine though).' Yellow }
+    if (-not $script:finishSeen) { Write-Log 'VL did not write Finish STL Export to VLOperation.log (the file is fine though).' Yellow }
     return $triangles
 }
 
-# -VlToBackground: minimize VL and bring the PolyWorks window the launcher runs from to the front
-# (ancestor iminspect.exe: iminspect -> cmd -> powershell). Without PolyWorks it only minimizes VL.
-function Move-VlToBackground($Proc) {
+# Saves the open VL data as a .vld4 file (File > Save As...).
+function Save-VlData($Proc, [string]$Target) {
+    $state = Invoke-VlMenu $Proc $script:menuSaveAs
+    $before = @($state.Tops | ForEach-Object { $_.Handle })
+    $saveDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Class -eq '#32770' } 50
+    if (-not $saveDialog) { throw 'The Save As dialog for the VL data did not open.' }
+    Complete-SaveDialog $saveDialog $Target
+    Write-Log "Saving VL data: $Target"
+    Wait-FileSaved $Proc $saveDialog $Target ''
+}
+
+# --- After the export ------------------------------------------------------------------------
+
+# Brings the caller's window to the front: the given window handle, otherwise the nearest parent
+# process with a window that is not a console (PolyWorks|Inspector when started by the Measure button).
+function Set-CallerToFront {
     try {
-        $main = (Get-VlState $Proc.Id).Main
-        if ($main) { [Vl]::Minimize($main.Handle) }
+        if ($ReturnFocusHwnd -ne 0) {
+            $h = [IntPtr]$ReturnFocusHwnd
+            if ([Vl]::IsWindow($h)) { [Vl]::BringToFront($h); Write-Log 'The calling window is in front.' }
+            return
+        }
+        $consoles = 'cmd', 'powershell', 'pwsh', 'conhost', 'OpenConsole', 'WindowsTerminal'
         $id = $PID
-        for ($i = 0; $i -lt 6; $i++) {
+        for ($i = 0; $i -lt 8; $i++) {
             $me = Get-CimInstance Win32_Process -Filter "ProcessId=$id"
-            if (-not $me) { break }
+            if (-not $me) { return }
             $id = [int]$me.ParentProcessId
             $parent = Get-Process -Id $id -ErrorAction SilentlyContinue
-            if (-not $parent) { break }
-            if ($parent.ProcessName -eq 'iminspect' -and $parent.MainWindowHandle -ne [IntPtr]::Zero) {
+            if (-not $parent) { return }
+            if ($consoles -notcontains $parent.ProcessName -and $parent.MainWindowHandle -ne [IntPtr]::Zero) {
                 [Vl]::BringToFront($parent.MainWindowHandle)
-                Write-Log "VL minimized, PolyWorks (PID $id) in front."
+                Write-Log "$($parent.ProcessName) (PID $id) is in front."
                 return
             }
         }
-        Write-Log 'VL minimized (the launcher was not started from PolyWorks).'
     }
-    catch { Write-Log "VL to background: $($_.Exception.Message)" Yellow }
+    catch { Write-Log "Bringing the caller to the front failed: $($_.Exception.Message)" Yellow }
+}
+
+# Waits until VL has finished its own work on the part (program applied, or idle for 60 s).
+function Wait-VlReadyToClose($Proc, $Finish) {
+    $deadline = (Get-Date).AddSeconds($script:closeWaitSec)
+    $idleSince = $null
+    while ((Get-Date) -lt $deadline) {
+        if ($Proc.HasExited) { return $true }
+        $applied = $Finish.TemplateApplied -or ((Get-FileStamp $templateList) -ne $Finish.TemplateStamp)
+        $state = Get-VlState $Proc.Id
+        if ($state.Idle) { if (-not $idleSince) { $idleSince = Get-Date } } else { $idleSince = $null }
+        $idleFor = if ($idleSince) { ((Get-Date) - $idleSince).TotalSeconds } else { 0 }
+        if (($applied -and $idleFor -ge [math]::Max($SettleSec, 1)) -or $idleFor -ge 60) { return $true }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
+
+# Closes VL; the save prompt is answered No (the data is either saved already or not wanted). Never kills VL.
+function Close-Vl($Proc) {
+    $state = Get-VlState $Proc.Id
+    if (-not $state.Main) { return $Proc.HasExited }
+    [Vl]::Close($state.Main.Handle)
+    $script:closeAnswered = $false
+    $closed = Wait-Until 60 {
+        if ($Proc.HasExited) { return $true }
+        foreach ($d in @(Get-Tops $Proc.Id | Where-Object { $_.Class -eq '#32770' })) {
+            $no = Find-DialogButton $d.Handle 7
+            if ($no -and -not $script:closeAnswered) {
+                Write-Log "  VL asks: $(Get-DialogText $d.Handle) - answering No."
+                [Vl]::Click($no); $script:closeAnswered = $true
+            }
+            elseif (-not $no) { throw "VL shows a message while closing: $(Get-DialogText $d.Handle)" }
+        }
+        $false
+    } 300
+    return [bool]$closed
+}
+
+# Minimizes or closes VL after the marker was written. Discarding the scan data happens only after the
+# STL has been checked again (same triangle count, still a valid binary STL).
+function Invoke-AfterExport($Proc, [string]$Target, $Triangles, $Finish) {
+    if ($AfterExport -eq 'Minimize') {
+        $main = (Get-VlState $Proc.Id).Main
+        if ($main) { [Vl]::Minimize($main.Handle); Write-Log 'VL minimized.' }
+    }
+    if ($ReturnFocus -eq 'On') { Set-CallerToFront }
+    if ($AfterExport -notin 'Close', 'SaveAndClose') { return }
+
+    $closing = New-Object System.Threading.Mutex($false, "Local\VLConnector_Closing_$($Proc.Id)")
+    try {
+        if (-not (Wait-VlReadyToClose $Proc $Finish)) { Write-Log 'VL did not finish its work on the part in time, it stays open.' Yellow; return }
+        if ($Proc.HasExited) { return }
+        if ($AfterExport -eq 'SaveAndClose') {
+            $folder = if ($VldFolder) { $VldFolder } else { Split-Path $Target }
+            New-Item -ItemType Directory -Force -Path $folder | Out-Null
+            $vld = Join-Path $folder ([IO.Path]::GetFileNameWithoutExtension($Target) + '.vld4')
+            try { Save-VlData $Proc $vld }
+            catch { Write-Log "VL data could not be saved, VL stays open: $($_.Exception.Message)" Yellow; return }
+            if ($ReturnFocus -eq 'On') { Set-CallerToFront }
+        }
+        $check = Test-BinaryStl $Target
+        if ($check -ne $Triangles) {
+            Write-Log "The STL check before closing failed ($Target has $check triangles, expected $Triangles). VL stays open with the scan." Yellow
+            return
+        }
+        if (Close-Vl $Proc) { Write-Log 'VL closed.' } else { Write-Log 'VL did not close within 60 s, it stays open.' Yellow }
+    }
+    catch { Write-Log "Closing VL: $($_.Exception.Message) - VL stays open." Yellow }
+    finally { $closing.Dispose() }
 }
 
 # Without thousands separators and with a decimal point, so the marker is the same on every PC.
@@ -740,39 +792,79 @@ function Format-StlInfo([string]$Path, $Triangles) {
     return [string]::Format([Globalization.CultureInfo]::InvariantCulture, 'STL {0:0.0} MB, {1} triangles.', $mb, $Triangles)
 }
 
-function Get-TargetPath([string]$Name) {
+function Get-TargetPath([string]$RunName) {
     if ($StlFile) { return [IO.Path]::GetFullPath($StlFile) }
-    $base = Join-Path $OutputDir ('{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName $Name), (Get-Date))
+    $base = Join-Path $OutputDir $RunName
     $target = "$base.stl"
     $n = 2
     while (Test-Path -LiteralPath $target) { $target = "${base}_$n.stl"; $n++ }
     return $target
 }
 
+# --- Settings and checks -------------------------------------------------------------------------
+
+if ($MarkerFile) { Set-MarkerPath $MarkerFile }
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    Exit-Run $EXIT_ARGS 'ERROR' "PowerShell runs in $($ExecutionContext.SessionState.LanguageMode) mode; VL Connector needs FullLanguage (see the notes for IT)."
+}
+try {
+    $cfg = Read-VlcSettings
+    if (-not $Mode) { $Mode = [string]$cfg.vl.mode }
+    if (-not $OutputDir) { $OutputDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'VL Connector\Scans' }
+    if (-not $ProgramDir) { $ProgramDir = @($cfg.vl.programFolders | Where-Object { $_ }) }
+    if (-not $ProgramDir) { $ProgramDir = @([Environment]::GetFolderPath('MyDocuments')) }
+    if ($TimeoutMin -le 0) { $TimeoutMin = [int]$cfg.vl.timeoutMin }
+    if ($SettleSec -le 0) { $SettleSec = [double]$cfg.vl.settleSec }
+    if (-not $ExportImmediately) { $ExportImmediately = if ($cfg.vl.exportImmediately) { 'On' } else { 'Off' } }
+    if (-not $ConfirmStageMotion) { $ConfirmStageMotion = if ($cfg.vl.confirmStageMotion) { 'On' } else { 'Off' } }
+    if (-not $AfterExport) { $AfterExport = [string]$cfg.vl.afterExport }
+    if (-not $VldFolder) { $VldFolder = [string]$cfg.vl.vldFolder }
+    if (-not $ReturnFocus) { $ReturnFocus = if ($cfg.vl.returnFocus) { 'On' } else { 'Off' } }
+    if (-not $Menu) { $Menu = [string]$cfg.vl.menuExportStl }
+    if (-not $VlExe) { $VlExe = [string]$cfg.vl.exe }
+    $script:menuSaveAs = [string]$cfg.vl.menuSaveAs
+    $script:closeWaitSec = [int]$cfg.vl.closeWaitSec
+    $script:dialogRules = @($cfg.vl.dialogRules)
+    $script:testedVersions = @($cfg.vl.testedVersions)
+}
+catch { Exit-Run $EXIT_ARGS 'ERROR' "Settings: $($_.Exception.Message)" }
+$checks = @(
+    @('Mode', $Mode, @('HighSpeed', 'Standard', 'Ask')),
+    @('ExportImmediately', $ExportImmediately, @('On', 'Off')),
+    @('ConfirmStageMotion', $ConfirmStageMotion, @('On', 'Off')),
+    @('AfterExport', $AfterExport, @('None', 'Minimize', 'Close', 'SaveAndClose')),
+    @('ReturnFocus', $ReturnFocus, @('On', 'Off')))
+foreach ($c in $checks) {
+    if ($c[2] -notcontains $c[1]) { Exit-Run $EXIT_ARGS 'ERROR' "-$($c[0]) '$($c[1])' is not valid (use $($c[2] -join ', '))." }
+}
+
 # --- Start -----------------------------------------------------------------------------
 
-$script:mutex = New-Object System.Threading.Mutex($false, 'Local\VL_replay')
+$script:mutex = New-Object System.Threading.Mutex($false, 'Local\VLConnector_VLReplay')
 try { $owned = $script:mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
-if (-not $owned) { $script:mutex = $null; Write-Log 'The launcher is already running (another part), exiting.' Red; exit $EXIT_BUSY }
+if (-not $owned) {
+    $script:mutex = $null
+    Exit-Run $EXIT_BUSY 'BUSY' 'Another scan is running on this PC. Finish it in VL first.'
+}
 
-$script:programPath = ''
-$script:markerPath = $null
 $Host.UI.RawUI.WindowTitle = 'VL Connector - AI Replay'
 $what = if ($ExportOnly) { "export only $Program".Trim() } else { $Program }
 $flags = @($(if ($DryRun) { 'DRY RUN' }), $(if ($NewWindow) { 'new window' })) | Where-Object { $_ }
-Write-Log ("=== VLReplay $what | account $env:USERNAME | mode $Mode " + ($flags -join ' | ')).Trim() Cyan
+Write-Log ("=== VLReplay $(Get-VlcVersion) $what | account $env:USERNAME | mode $Mode | export immediately $ExportImmediately | confirm stage $ConfirmStageMotion | after export $AfterExport " + ($flags -join ' | ')).Trim() Cyan
+if (Test-Path -LiteralPath $VlExe) {
+    $vlVersion = (Get-Item -LiteralPath $VlExe).VersionInfo.FileVersion
+    if ($vlVersion -and $script:testedVersions -and $script:testedVersions -notcontains $vlVersion) {
+        Write-Log "VL version $vlVersion has not been tested with VL Connector (tested: $($script:testedVersions -join ', '))." Yellow
+    }
+}
+if ($script:cancelPath -and (Test-Path -LiteralPath $script:cancelPath)) { Remove-Item -LiteralPath $script:cancelPath -Force }
 
-$watcherRunning = $false
-$watcherMutex = $null
-if ([System.Threading.Mutex]::TryOpenExisting('Local\VL_export_stl', [ref]$watcherMutex)) { $watcherRunning = $true; $watcherMutex.Dispose() }
-if ($watcherRunning) { Write-Log 'The export_stl.ps1 watcher is running - every part will produce two STL files. Switch it off for this mode.' Yellow }
-if (Test-Path -LiteralPath (Join-Path (Split-Path $VlExe) 'Keyence.VlStlPatch.dll')) { Write-Log 'The STL test patch is deployed - it saves another STL into the report folder.' Yellow }
-
+$runName = ''
 if (-not $ExportOnly) {
-    if (-not $Program) { Write-Log 'Give the program: VLReplay.cmd <program or path to the .vld4>' Red; $script:mutex.ReleaseMutex(); exit $EXIT_ARGS }
-    $programName = Get-SafeName ([IO.Path]::GetFileNameWithoutExtension($Program))
+    if (-not $Program) { Exit-Run $EXIT_ARGS 'ERROR' 'Give the program: VLReplay.cmd <program or path to the .vld4>' }
+    $runName = '{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName ([IO.Path]::GetFileNameWithoutExtension($Program))), $startTime
     # A dry run writes a marker (STATE=DRYRUN) only with -MarkerFile, so that calls from PolyWorks can be tested.
-    if (-not $DryRun -or $MarkerFile) { $script:markerPath = if ($MarkerFile) { $MarkerFile } else { Join-Path $OutputDir "$programName.done" } }
+    if (-not $DryRun -and -not $MarkerFile) { Set-MarkerPath (Join-Path $OutputDir "$runName.done") }
     try {
         New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
         if ($script:markerPath -and (Test-Path -LiteralPath $script:markerPath)) { Remove-Item -LiteralPath $script:markerPath -Force }
@@ -788,8 +880,6 @@ try {
     if (Test-Path -LiteralPath $operationLog) { $script:opOffset = (Get-Item -LiteralPath $operationLog).Length }
 
     if ($ExportOnly) {
-        # with -MarkerFile write the marker even on an error before a VL window is found
-        if ($MarkerFile) { $script:markerPath = $MarkerFile }
         $proc = $null
         foreach ($p in Get-VlProcesses) {
             $s = Get-VlState $p.Id
@@ -798,17 +888,23 @@ try {
         if (-not $proc) { throw 'No idle VL window with open data.' }
         $dataName = if ($state.Main.Title -match '^\W*(.+?)\W*\s-\sVL-800') { $Matches[1] } else { 'VL' }
         $name = if ($Program) { [IO.Path]::GetFileNameWithoutExtension($Program) } else { $dataName }
-        $script:markerPath = if ($MarkerFile) { $MarkerFile } else { Join-Path $OutputDir "$(Get-SafeName $name).done" }
+        $runName = '{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName $name), $startTime
+        if (-not $script:markerPath) { Set-MarkerPath (Join-Path $OutputDir "$runName.done") }
         New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
         if (Test-Path -LiteralPath $script:markerPath) { Remove-Item -LiteralPath $script:markerPath -Force }
         Write-Log "Export from VL window PID $($proc.Id): $($state.Main.Title)"
-        $target = Get-TargetPath $name
+        $target = Get-TargetPath $runName
         $triangles = Export-StlFile $proc $target
-        if ($VlToBackground) { Move-VlToBackground $proc }
-        Exit-Run $EXIT_OK 'OK' (Format-StlInfo $target $triangles) $target
+        $finish = @{ TemplateApplied = $true; TemplateStamp = (Get-FileStamp $templateList) }
+        Write-Marker 'OK' $target (Format-StlInfo $target $triangles)
+        Remove-RunFiles
+        $script:mutex.ReleaseMutex(); $script:mutex = $null
+        Invoke-AfterExport $proc $target $triangles $finish
+        Write-Log 'Done.' Green
+        exit $EXIT_OK
     }
 
-
+    Write-Status 'starting' 'Opening VL...'
     $proc = Get-StartScreenVl
     $started = Start-AiReplay $proc $script:programPath
     if ($DryRun) {
@@ -820,6 +916,7 @@ try {
         throw 'DRY RUN: the program selection dialog did not close.'
     }
     Write-Log 'AI Replay is running - the operator continues in VL as usual.' Green
+    Write-Status 'replay' 'AI Replay is running. Follow the steps in VL.'
 
     $finish = Wait-ReplayFinished $proc
     switch ($finish.Result) {
@@ -828,7 +925,7 @@ try {
     }
     if ($finish.Message) { Write-Log $finish.Message Yellow }
 
-    $target = Get-TargetPath $programName
+    $target = Get-TargetPath $runName
     $triangles = $null
     for ($attempt = 1; $attempt -le 2 -and -not $triangles; $attempt++) {
         try { $triangles = Export-StlFile $proc $target }
@@ -840,8 +937,12 @@ try {
         }
     }
     $message = ((Format-StlInfo $target $triangles) + ' ' + $finish.Message).Trim()
-    if ($VlToBackground) { Move-VlToBackground $proc }
-    Exit-Run $EXIT_OK 'OK' $message $target
+    Write-Marker 'OK' $target $message
+    Remove-RunFiles
+    $script:mutex.ReleaseMutex(); $script:mutex = $null
+    Invoke-AfterExport $proc $target $triangles $finish
+    Write-Log 'Done.' Green
+    exit $EXIT_OK
 }
 catch {
     Exit-Run $EXIT_ERROR 'ERROR' $_.Exception.Message

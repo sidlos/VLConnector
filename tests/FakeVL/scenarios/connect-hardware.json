@@ -9,5 +9,12 @@
                                      ],
                    "stl":  false,
                    "state":  "ERROR"
-               }
+               },
+    "expectByFlavor":  {
+                           "en":  {
+                                      "logIncludes":  [
+                                                          "The scanner is not connected"
+                                                      ]
+                                  }
+                       }
 }

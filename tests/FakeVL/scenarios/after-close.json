@@ -1,0 +1,22 @@
+{
+    "launcher":  {
+                     "afterExport":  "Close",
+                     "exportImmediately":  true
+                 },
+    "flavors":  [
+                    "en"
+                ],
+    "expect":  {
+                   "eventsOrder":  [
+                                       "exported:",
+                                       "template-applied",
+                                       "dialog:save-prompt",
+                                       "answer:save-prompt:7",
+                                       "exit:closed"
+                                   ],
+                   "exitCode":  0,
+                   "vlRunning":  false,
+                   "stl":  true,
+                   "state":  "OK"
+               }
+}

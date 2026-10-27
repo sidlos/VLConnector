@@ -1,0 +1,40 @@
+{
+    "schema": 1,
+    "scenario": "Local",
+    "role": "Scanner",
+    "vl": {
+        "exe": "C:\\Program Files\\KEYENCE\\VL-800 Series\\VL Application\\VLApplication4.exe",
+        "programFolders": [],
+        "mode": "HighSpeed",
+        "exportImmediately": true,
+        "confirmStageMotion": false,
+        "afterExport": "None",
+        "vldFolder": "",
+        "returnFocus": true,
+        "timeoutMin": 45,
+        "settleSec": 2,
+        "closeWaitSec": 180,
+        "menuExportStl": "File>Export>STL",
+        "menuSaveAs": "File>Save As",
+        "dialogRules": [
+            { "match": "stage will rotate", "action": "ConfirmStageMotion" },
+            { "match": "return the stage to the origin", "action": "ConfirmStageMotion" },
+            { "match": "connect the hardware", "action": "ScannerNotConnected" }
+        ],
+        "testedVersions": [ "4.6.1.6002" ]
+    },
+    "polyworks": {
+        "keepPieces": "All",
+        "openPdf": true,
+        "colorScaleMm": 0.5,
+        "reportsFolder": "",
+        "scansFolder": ""
+    },
+    "network": {
+        "share": "",
+        "autoOpenReports": true,
+        "stationName": "",
+        "pollSec": 3,
+        "jobTimeoutMin": 15
+    }
+}

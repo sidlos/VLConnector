@@ -2,7 +2,10 @@
     "expectByFlavor":  {
                            "proto":  {
                                          "state":  "none"
-                                     }
+                                     },
+                           "en":  {
+                                      "state":  "BUSY"
+                                  }
                        },
     "expect":  {
                    "stl":  false,

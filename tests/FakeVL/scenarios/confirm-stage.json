@@ -1,0 +1,25 @@
+{
+    "launcher":  {
+                     "confirmStageMotion":  true
+                 },
+    "fakevl":  {
+                   "rotateOperatorOkSec":  0
+               },
+    "flavors":  [
+                    "en"
+                ],
+    "expect":  {
+                   "exitCode":  0,
+                   "eventsExclude":  [
+                                         "operator:rotate-ok"
+                                     ],
+                   "stl":  true,
+                   "state":  "OK",
+                   "eventsInclude":  [
+                                         "answer:rotate:1"
+                                     ],
+                   "logIncludes":  [
+                                       "Confirmed: The stage will rotate"
+                                   ]
+               }
+}

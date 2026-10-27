@@ -34,6 +34,8 @@ if ($Launcher) {
     $results = @()
     foreach ($f in Get-ChildItem (Join-Path $PSScriptRoot 'FakeVL\scenarios') -Filter '*.json' | Sort-Object Name) {
         if ($Only -and $Only -notcontains $f.BaseName) { continue }
+        $flavors = (Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json).flavors
+        if ($flavors -and $flavors -notcontains $Flavor) { continue }
         Write-Host ("{0,-24}" -f $f.BaseName) -NoNewline
         $r = & (Join-Path $PSScriptRoot 'integration\Invoke-LauncherScenario.ps1') -ScenarioFile $f.FullName -Flavor $Flavor
         if ($r.Passed) { Write-Host ("PASS  {0,6}s  {1}" -f $r.Seconds, $r.State) -ForegroundColor Green }

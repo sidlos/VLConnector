@@ -1,0 +1,25 @@
+{
+    "launcher":  {
+                     "afterExport":  "Close"
+                 },
+    "flavors":  [
+                    "en"
+                ],
+    "expect":  {
+                   "vlRunning":  true,
+                   "exitCode":  0,
+                   "eventsExclude":  [
+                                         "dialog:save-prompt"
+                                     ],
+                   "state":  "OK",
+                   "eventsInclude":  [
+                                         "stl-corrupted"
+                                     ],
+                   "logIncludes":  [
+                                       "The STL check before closing failed"
+                                   ]
+               },
+    "fakevl":  {
+                   "corruptStlAfterSec":  1.5
+               }
+}

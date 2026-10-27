@@ -1,0 +1,21 @@
+{
+    "launcher":  {
+                     "mode":  "Ask"
+                 },
+    "fakevl":  {
+                   "operatorMode":  "Standard",
+                   "operatorModeSec":  2
+               },
+    "flavors":  [
+                    "en"
+                ],
+    "expect":  {
+                   "exitCode":  0,
+                   "eventsInclude":  [
+                                         "operator:mode-Standard",
+                                         "mode:Standard"
+                                     ],
+                   "stl":  true,
+                   "state":  "OK"
+               }
+}

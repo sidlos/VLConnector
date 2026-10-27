@@ -37,9 +37,11 @@ $flavors = @{
     }
     en = @{
         Args = @{ Out = '-OutputDir'; Marker = '-MarkerFile'; Timeout = '-TimeoutMin'
-                  ExportImmediately = @('-ExportImmediately'); DryRun = @('-DryRun'); ExportOnly = @('-ExportOnly')
-                  HighSpeed = @('-Mode', 'HighSpeed'); Standard = @('-Mode', 'Standard') }
-        StateKey = 'STATE'; MessageKey = 'MESSAGE'; Mutex = 'Local\VL_replay'
+                  ExportImmediately = @('-ExportImmediately', 'On'); DryRun = @('-DryRun'); ExportOnly = @('-ExportOnly')
+                  HighSpeed = @('-Mode', 'HighSpeed'); Standard = @('-Mode', 'Standard'); Ask = @('-Mode', 'Ask') }
+        # explicit values, so the tests do not depend on the shipped defaults
+        Fixed = @('-ConfirmStageMotion', 'Off', '-AfterExport', 'None', '-ReturnFocus', 'Off')
+        StateKey = 'STATE'; MessageKey = 'MESSAGE'; Mutex = 'Local\VLConnector_VLReplay'; InPlace = $true
         States = @{ OK = 'OK'; ERROR = 'ERROR'; CANCELLED = 'CANCELLED'; DRYRUN = 'DRYRUN'; BUSY = 'BUSY' }
     }
 }
@@ -83,7 +85,9 @@ $marker = Join-Path $out 'run.marker.txt'
 $events = Join-Path $work 'fakevl.events.log'
 $scenarioCopy = Join-Path $work 'scenario.json'
 Copy-Item -LiteralPath $ScenarioFile $scenarioCopy
-Copy-Item -LiteralPath $Launcher (Join-Path $launcherDir 'VLReplay.ps1')
+# the product launcher runs in place (it loads app\lib and app\config); the prototype ran from a copy
+$launcherPath = $Launcher
+if (-not $fl.InPlace) { $launcherPath = Join-Path $launcherDir 'VLReplay.ps1'; Copy-Item -LiteralPath $Launcher $launcherPath }
 $fakeArgs = "-NoProfile -STA -ExecutionPolicy Bypass -File $(Join-Path $repo 'tests\FakeVL\FakeVL.ps1') -Scenario $scenarioCopy -EventLog $events"
 
 function New-StartInfo([string]$File, [string]$Arguments) {
@@ -116,18 +120,37 @@ $launcherArgs = New-Object Collections.Generic.List[string]
 if (-not ($scenario.launcher -and $scenario.launcher.exportOnly)) { $launcherArgs.Add($program) }
 $launcherArgs.AddRange([string[]]@($a.Out, $out, $a.Marker, $marker, $a.Timeout, '3', '-VlExe', $fakeExe))
 $opt = $scenario.launcher
+if ($Flavor -eq 'en') {
+    # deterministic options; the scenario overrides single ones
+    $fixed = [ordered]@{ '-ExportImmediately' = 'Off'; '-ConfirmStageMotion' = 'Off'; '-AfterExport' = 'None'; '-ReturnFocus' = 'Off' }
+    if ($opt) {
+        if ($opt.exportImmediately) { $fixed['-ExportImmediately'] = 'On' }
+        if ($opt.confirmStageMotion) { $fixed['-ConfirmStageMotion'] = 'On' }
+        if ($opt.afterExport) { $fixed['-AfterExport'] = [string]$opt.afterExport }
+        if ($opt.returnFocus) { $fixed['-ReturnFocus'] = 'On' }
+    }
+    foreach ($k in $fixed.Keys) { $launcherArgs.Add($k); $launcherArgs.Add($fixed[$k]) }
+}
+elseif ($opt -and $opt.exportImmediately) { $launcherArgs.AddRange([string[]]$a.ExportImmediately) }
 if ($opt) {
-    if ($opt.exportImmediately) { $launcherArgs.AddRange([string[]]$a.ExportImmediately) }
     if ($opt.dryRun) { $launcherArgs.AddRange([string[]]$a.DryRun) }
     if ($opt.exportOnly) { $launcherArgs.AddRange([string[]]$a.ExportOnly) }
     if ($opt.mode) { $launcherArgs.AddRange([string[]]$a[[string]$opt.mode]) }
     if ($opt.extra -and $opt.extra.$Flavor) { $launcherArgs.AddRange([string[]]@($opt.extra.$Flavor)) }
 }
-$argLine = '-NoProfile -STA -ExecutionPolicy Bypass -File "' + (Join-Path $launcherDir 'VLReplay.ps1') + '" ' +
+$argLine = '-NoProfile -STA -ExecutionPolicy Bypass -File "' + $launcherPath + '" ' +
     (($launcherArgs | ForEach-Object { '"' + $_ + '"' }) -join ' ') + ' -VlArgs "' + $fakeArgs + '"'
 
 $t0 = Get-Date
 $proc = [Diagnostics.Process]::Start((New-StartInfo 'powershell.exe' $argLine))
+# a caller cancels by creating <marker>.cancel
+if ($scenario.cancelAfterSec) {
+    $cancelAt = $t0.AddSeconds([double]$scenario.cancelAfterSec)
+    while (-not $proc.HasExited -and (Get-Date) -lt $t0.AddSeconds($TimeoutSec)) {
+        if ((Get-Date) -ge $cancelAt -and -not (Test-Path -LiteralPath "$marker.cancel")) { [IO.File]::WriteAllText("$marker.cancel", 'cancel') }
+        Start-Sleep -Milliseconds 200
+    }
+}
 $finished = $proc.WaitForExit($TimeoutSec * 1000)
 $duration = ((Get-Date) - $t0).TotalSeconds
 if (-not $finished) { $proc.Kill() }
@@ -188,6 +211,14 @@ foreach ($e in @($expect.eventsOrder)) {
 }
 foreach ($t in @($expect.logIncludes)) {
     if ($t -and $launcherLog -notmatch [regex]::Escape($t)) { $failures.Add("log lacks '$t'") }
+}
+if ($expect.ContainsKey('maxSeconds') -and $duration -gt [double]$expect.maxSeconds) { $failures.Add("took $([math]::Round($duration, 1)) s, expected at most $($expect.maxSeconds) s") }
+if ($expect.ContainsKey('vldExists')) {
+    $vld = @(Get-ChildItem -LiteralPath $out -Filter '*.vld4' -ErrorAction SilentlyContinue).Count -gt 0
+    if ($vld -ne [bool]$expect.vldExists) { $failures.Add("VL data file exists $vld, expected $($expect.vldExists)") }
+}
+if ($Flavor -eq 'en') {
+    foreach ($f in "$marker.status", "$marker.cancel") { if (Test-Path -LiteralPath $f) { $failures.Add("run file left behind: $(Split-Path -Leaf $f)") } }
 }
 
 $result = [pscustomobject]@{

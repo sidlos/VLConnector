@@ -1,0 +1,17 @@
+{
+    "launcher":  {
+                     "afterExport":  "Minimize"
+                 },
+    "flavors":  [
+                    "en"
+                ],
+    "expect":  {
+                   "eventsInclude":  [
+                                         "window:minimized"
+                                     ],
+                   "exitCode":  0,
+                   "vlRunning":  true,
+                   "stl":  true,
+                   "state":  "OK"
+               }
+}
