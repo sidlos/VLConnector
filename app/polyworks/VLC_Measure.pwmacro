@@ -70,6 +70,8 @@ DECLARE vKept "1"
 DECLARE vRMsg ""
 DECLARE vIcon "Information"
 DECLARE vNote ""
+DECLARE vShowTemplate ""
+DECLARE vShowProgram ""
 
 IF "$vApp" == ""
     MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector: the Measure button is not set up correctly.", "Import VLC_Measure_Button.pwmacro from the VL Connector folder again.", "See the User Guide, chapter 'Measure button'." )
@@ -139,7 +141,10 @@ ELSE
     SET vMarker "${vScanDir}\vlc_${vRun}.done"
     SET vStatus "${vMarker}.status"
     SYSTEM COMMAND EXEC ASYNC ( "powershell.exe", { "-NoProfile", "-STA", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\VLReplay.ps1${_QUOTES}", "${_QUOTES}${vProgram}${_QUOTES}", "-MarkerFile", "${_QUOTES}${vMarker}${_QUOTES}", "-OutputDir", "${_QUOTES}${vScanDir}${_QUOTES}", "-Options", "${_QUOTES}${vOptions}${_QUOTES}" }, vCallId )
-    MACRO PROGRESS SHOW ( "VL Connector - $vTemplate", "Program: $vProgName", 0, $vTimeoutS, "Cancel" )
+    # the PolyWorks progress window shows "_" only when doubled (a single one marks a keyboard shortcut)
+    MACRO STRING REPLACE ( $vTemplate, "_", "__", 1, , vShowTemplate )
+    MACRO STRING REPLACE ( $vProgName, "_", "__", 1, , vShowProgram )
+    MACRO PROGRESS SHOW ( "VL Connector - $vShowTemplate", "Program: $vShowProgram", 0, $vTimeoutS, "Cancel" )
     MACRO PROGRESS STATUS MESSAGE ( "Starting AI Replay in VL..." )
     WHILE $vFound == 0
         MACRO SLEEP ( 1000 )

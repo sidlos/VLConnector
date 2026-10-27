@@ -2,13 +2,13 @@
   VLConnector.ps1 - VL Connector for PolyWorks: opens a window.
     VLConnector.cmd                   settings (scenario, scan options, PolyWorks, network, diagnostics)
     VLConnector.cmd -Show Scan        scan window of the scanner PC (network scenario)
-    VLConnector.cmd -Show Station     PolyWorks station (network scenario)
+  The PolyWorks station of the network scenario runs inside PolyWorks (VL Station button, VLC_Station.pwmacro).
   Only one window of each kind runs per user; a second start brings the open one to the front.
 #>
-param([ValidateSet('Settings', 'Scan', 'Station')] [string]$Show = 'Settings')
+param([ValidateSet('Settings', 'Scan')] [string]$Show = 'Settings')
 
 $ErrorActionPreference = 'Stop'
-foreach ($lib in 'Settings', 'Log', 'KeyValueFile', 'Ui', 'PolyWorksSetup', 'Share', 'Prerequisites', 'Diagnostics') {
+foreach ($lib in 'Settings', 'Log', 'KeyValueFile', 'Ui', 'PolyWorksSetup', 'Share', 'Jobs', 'Prerequisites', 'Diagnostics') {
     . (Join-Path $PSScriptRoot "lib\$lib.ps1")
 }
 
@@ -23,7 +23,7 @@ $owned = $false
 try { $owned = $mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
 if (-not $owned) {
     # already open: bring it to the front
-    $title = @{ Settings = 'VL Connector for PolyWorks'; Scan = 'VL Connector - Scan'; Station = 'VL Connector - Station' }[$Show]
+    $title = @{ Settings = 'VL Connector for PolyWorks'; Scan = 'VL Connector - Scan' }[$Show]
     Add-Type -Namespace VlcEntry -Name Win -MemberDefinition @'
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
@@ -38,7 +38,7 @@ if (-not $owned) {
 try {
     switch ($Show) {
         'Settings' { . (Join-Path $PSScriptRoot 'ui\SettingsForm.ps1'); Show-SettingsWindow }
-        default { throw "The $Show window is not available in this version." }
+        'Scan' { . (Join-Path $PSScriptRoot 'ui\ScanForm.ps1'); Show-ScanWindow }
     }
 }
 catch {

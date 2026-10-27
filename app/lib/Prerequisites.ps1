@@ -38,6 +38,10 @@ function Get-VlcStatusItems($Settings) {
     if ($mode -eq 'FullLanguage') { $items.Add((New-VlcStatusItem 'ps' 'Ok' 'PowerShell full language mode' 'Scripts can use the Windows and PolyWorks interfaces.')) }
     else { $items.Add((New-VlcStatusItem 'ps' 'Error' "PowerShell runs in $mode" 'VL Connector needs FullLanguage mode. Ask IT (see Notes for IT).')) }
 
+    if ($station) {
+        if (Test-Path -LiteralPath (Get-VlcButtonStubPath 'Station')) { $items.Add((New-VlcStatusItem 'button' 'Ok' 'Station button file ready' 'Import it once into the PolyWorks|Inspector of the station (page PolyWorks).' 'Show me how')) }
+        else { $items.Add((New-VlcStatusItem 'button' 'Warning' 'Station button not set up' 'Create the station button file and import it into PolyWorks.' 'Show me how')) }
+    }
     if (-not $network) {
         if (Test-Path -LiteralPath (Get-VlcButtonStubPath)) { $items.Add((New-VlcStatusItem 'button' 'Ok' 'Measure button file ready' 'Import it once into PolyWorks (page PolyWorks).' 'Show me how')) }
         else { $items.Add((New-VlcStatusItem 'button' 'Warning' 'Measure button not set up' 'Create the button file and import it into PolyWorks.' 'Show me how')) }

@@ -1,0 +1,107 @@
+<!--
+  VL Connector for PolyWorks - scan window of the scanner PC (network scenario). Loaded by
+  app\ui\ScanForm.ps1, which fills in the values and connects the events.
+-->
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VL Connector - Scan" Width="980" Height="700" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource WindowBrush}"
+        FontFamily="{StaticResource UiFont}" FontSize="14" Foreground="{StaticResource TextBrush}"
+        UseLayoutRounding="True" SnapsToDevicePixels="True" TextOptions.TextFormattingMode="Ideal">
+    <Grid Margin="28,22,28,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- header -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,14">
+            <Image x:Name="AppIcon" Width="34" Height="34" DockPanel.Dock="Left" RenderOptions.BitmapScalingMode="HighQuality"/>
+            <Border x:Name="StationPill" DockPanel.Dock="Right" Style="{StaticResource Pill}" VerticalAlignment="Center" Background="{StaticResource PaneBrush}">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="StationDot" Width="8" Height="8" Fill="{StaticResource TertiaryTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock x:Name="StationText" Text="Station: checking..." FontSize="12" Foreground="{StaticResource SecondaryTextBrush}"/>
+                </StackPanel>
+            </Border>
+            <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Scan" Style="{StaticResource TitleText}" FontSize="24"/>
+                <TextBlock x:Name="ShareText" Style="{StaticResource CaptionText}"/>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- start -->
+        <Border Grid.Row="1" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="44"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="&#xE722;" Style="{StaticResource IconText}"/>
+                <StackPanel Grid.Column="1" Margin="0,0,16,0">
+                    <TextBlock Text="Part" Style="{StaticResource BodyText}"/>
+                    <ComboBox x:Name="PartList" Margin="0,6,0,0"/>
+                    <TextBlock x:Name="PartInfo" Style="{StaticResource CaptionText}" Margin="0,6,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="StartScan" Style="{StaticResource AccentButton}" Content="Start scan" MinWidth="130" Height="40" FontSize="15"/>
+                    <Button x:Name="CancelScan" Content="Cancel" Margin="8,0,0,0" Height="40" IsEnabled="False"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- current state -->
+        <Border Grid.Row="2" x:Name="StateBar" Style="{StaticResource InfoBar}">
+            <DockPanel>
+                <TextBlock x:Name="StateIcon" Text="&#xE946;" Style="{StaticResource IconText}" DockPanel.Dock="Left" Foreground="{StaticResource AccentBrush}" FontSize="16" Margin="0,0,10,0"/>
+                <TextBlock x:Name="StateText" Style="{StaticResource BodyText}" FontSize="14" Text="Choose the part and press Start scan."/>
+            </DockPanel>
+        </Border>
+
+        <TextBlock Grid.Row="3" Text="Recent scans" Style="{StaticResource SectionText}"/>
+
+        <!-- history -->
+        <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0" Margin="0,0,0,0">
+            <Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="History" Margin="8,6">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="8,7">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66"/>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="92"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Time}" Style="{StaticResource CaptionText}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Part}" Style="{StaticResource BodyText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="2" Style="{StaticResource Pill}" Background="{Binding Back}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding State}" FontSize="12" Foreground="{Binding Fore}"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="3" Text="{Binding Summary}" Style="{StaticResource CaptionText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="8,0"/>
+                                    <Button Grid.Column="4" Content="Open PDF" Tag="{Binding Pdf}" Visibility="{Binding PdfVisibility}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <TextBlock x:Name="HistoryEmpty" Text="No scans yet." Style="{StaticResource CaptionText}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,30"/>
+            </Grid>
+        </Border>
+
+        <!-- footer -->
+        <DockPanel Grid.Row="5" Margin="0,12,0,0">
+            <TextBlock x:Name="OutboxText" Style="{StaticResource CaptionText}" VerticalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="OpenReports" Style="{StaticResource SubtleButton}" Content="Reports folder"/>
+                <Button x:Name="OpenSettings" Style="{StaticResource SubtleButton}" Content="Settings" Margin="4,0,0,0"/>
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>

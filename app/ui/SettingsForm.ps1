@@ -47,28 +47,6 @@ function Select-VlcFolder([string]$Start) {
     return $null
 }
 
-# Runs a script block in a background runspace and calls $Done with (output, error text) on the UI thread,
-# so slow checks (network folders) do not freeze the window.
-function Start-SettingsJob([scriptblock]$Work, [object[]]$Arguments, [scriptblock]$Done) {
-    $ps = [PowerShell]::Create()
-    [void]$ps.AddScript($Work.ToString())
-    foreach ($a in $Arguments) { [void]$ps.AddArgument($a) }
-    $timer = New-Object System.Windows.Threading.DispatcherTimer
-    $timer.Interval = [TimeSpan]::FromMilliseconds(150)
-    $timer.Tag = [pscustomobject]@{ PS = $ps; Handle = $ps.BeginInvoke(); Done = $Done }
-    $timer.Add_Tick({
-        $job = $this.Tag
-        if (-not $job.Handle.IsCompleted) { return }
-        $this.Stop()
-        $out = $null; $err = $null
-        try { $out = $job.PS.EndInvoke($job.Handle) } catch { $err = $_.Exception.Message }
-        if (-not $err -and $job.PS.Streams.Error.Count) { $err = $job.PS.Streams.Error[0].ToString() }
-        $job.PS.Dispose()
-        & $job.Done $out $err
-    })
-    $timer.Start()
-}
-
 $script:StatusWork = {
     param($AppDir)
     foreach ($lib in 'Settings', 'PolyWorksSetup', 'Share', 'Prerequisites') { . (Join-Path $AppDir "lib\$lib.ps1") }
@@ -79,7 +57,7 @@ function Update-SettingsStatus {
     $c = $script:sc
     $c.StatusList.ItemsSource = @([pscustomobject]@{ Id = ''; Title = 'Checking this PC...'; Detail = ''; Glyph = [string][char]0xE895
         Fore = Get-Brush 'SecondaryTextBrush'; Back = Get-Brush 'PaneBrush'; Action = ''; ActionVisibility = 'Collapsed' })
-    Start-SettingsJob $script:StatusWork @((Get-VlcPaths).AppDir) {
+    Start-UiJob $script:StatusWork @((Get-VlcPaths).AppDir) {
         param($Items, $ErrorText)
         $glyphs = @{ Ok = [string][char]0xE73E; Warning = [string][char]0xE7BA; Error = [string][char]0xE711 }
         if ($ErrorText) { $Items = @([pscustomobject]@{ Id = ''; Level = 'Error'; Title = 'The check failed'; Detail = $ErrorText; Action = '' }) }
@@ -233,8 +211,10 @@ function Show-SettingsWindow {
     $c.OpenPdf.Add_Checked({ Save-SettingValue 'polyworks.openPdf' $true }); $c.OpenPdf.Add_Unchecked({ Save-SettingValue 'polyworks.openPdf' $false })
     $c.CopyMacroPath.Add_Click({
         try {
-            $stub = Get-VlcButtonStubPath
-            if (-not (Test-Path -LiteralPath $stub)) { [void](New-VlcButtonStub $stub) }
+            $cfgNow = Read-VlcSettings
+            $kind = if ($cfgNow.scenario -eq 'Network' -and $cfgNow.role -eq 'Station') { 'Station' } else { 'Measure' }
+            $stub = Get-VlcButtonStubPath $kind
+            if (-not (Test-Path -LiteralPath $stub)) { [void](New-VlcButtonStub -Kind $kind) }
             [System.Windows.Clipboard]::SetText($stub)
             Show-SettingsToast 'Macro path copied'
         }
@@ -260,7 +240,7 @@ function Show-SettingsWindow {
         $path = $script:sc.SharePath.Text.Trim()
         $script:sc.ShareStatus.Text = 'Testing...'
         $script:sc.ShareTest.IsEnabled = $false
-        Start-SettingsJob { param($AppDir, $Path) . (Join-Path $AppDir 'lib\Share.ps1'); Test-VlcShare $Path } @((Get-VlcPaths).AppDir, $path) {
+        Start-UiJob { param($AppDir, $Path) . (Join-Path $AppDir 'lib\Share.ps1'); Test-VlcShare $Path } @((Get-VlcPaths).AppDir, $path) {
             param($Out, $ErrorText)
             $r = @($Out)[0]
             $script:sc.ShareStatus.Text = if ($ErrorText) { $ErrorText } else { $r.Text }

@@ -18,21 +18,24 @@ function Get-PolyWorksInfo {
     return [pscustomobject]@{ Dir = $dir; Name = Split-Path $dir -Leaf; InspectorVersion = $version }
 }
 
-# The button stub that the operator imports into PolyWorks once (File > Visual Layout > Customize, Macro
-# Scripts). It only calls the installed VLC_Measure.pwmacro, so updates of VL Connector need no new import.
-function Get-VlcButtonStubPath { return Join-Path (Get-VlcPaths).InstallDir 'VLC_Measure_Button.pwmacro' }
+# The button stubs that the operator imports into PolyWorks once (File > Visual Layout > Customize, Macro
+# Scripts): VLC_Measure_Button (scenario A) and VLC_Station_Button (PolyWorks station of the network
+# scenario). They only call the installed macro, so updates of VL Connector need no new import.
+function Get-VlcButtonStubPath([string]$Kind = 'Measure') { return Join-Path (Get-VlcPaths).InstallDir "VLC_${Kind}_Button.pwmacro" }
 
-function New-VlcButtonStub([string]$Path = (Get-VlcButtonStubPath)) {
+function New-VlcButtonStub([string]$Path = '', [ValidateSet('Measure', 'Station')] [string]$Kind = 'Measure') {
+    if (-not $Path) { $Path = Get-VlcButtonStubPath $Kind }
     $app = (Get-VlcPaths).AppDir
     if ($app.Contains('"')) { throw "The VL Connector folder '$app' cannot be used in a macro." }
+    $what = @{ Measure = 'Measure button'; Station = 'Station button (PolyWorks station of the network scenario)' }[$Kind]
     $text = @"
 version "7.0"
-# VL Connector for PolyWorks - Measure button. Import this file once into PolyWorks:
+# VL Connector for PolyWorks - $what. Import this file once into PolyWorks:
 #   File > Visual Layout > Customize > Customize, tab Macro Scripts > Import, then add it to the ribbon
 #   or the Quick Access Toolbar (icon: $app\assets\VLC_icon_32.png).
 # It runs the installed macro, so an update of VL Connector needs no new import.
 # Created by VL Connector $(Get-VlcVersion) for the folder $app
-MACRO EXEC ( "$app\polyworks\VLC_Measure.pwmacro", "$app" )
+MACRO EXEC ( "$app\polyworks\VLC_$Kind.pwmacro", "$app" )
 "@
     [IO.File]::WriteAllText($Path, ($text -replace "`r?`n", "`r`n"), (New-Object Text.UTF8Encoding($true)))
     return $Path

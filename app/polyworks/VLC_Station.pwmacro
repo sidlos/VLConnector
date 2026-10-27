@@ -1,0 +1,167 @@
+version "7.0"
+#==============================================================================
+# VLC_Station - VL Connector for PolyWorks: the PolyWorks station of the network scenario.
+#   $1 = VL Connector app folder (passed by the button stub VLC_Station_Button.pwmacro)
+#
+# Run it with the "VL Station" button in a PolyWorks|Inspector that is used only for the station (open it
+# from the Workspace Manager as usual). It takes the jobs from the shared folder one by one, evaluates each
+# with VLC_Evaluate.pwmacro (template from the parts list), publishes the PDF, CSV and verdict for the
+# scanner PC and waits for the next job - until you press Stop in the station window.
+# All file work (claiming, checking, publishing) is done by Station-Step.ps1.
+#==============================================================================
+MACRO END_ON_ERROR ( "Off" )
+
+DECLARE vApp $1
+DECLARE vSt
+DECLARE vErr
+DECLARE vCallId
+DECLARE vTemp ""
+DECLARE vCtx ""
+DECLARE vNext ""
+DECLARE vState ""
+DECLARE vShare ""
+DECLARE vPoll 3000
+DECLARE vStatusFile ""
+DECLARE vMsg ""
+DECLARE vList
+DECLARE vStop 0
+DECLARE vCancel "Off"
+DECLARE vCount 0
+DECLARE vIdle 0
+DECLARE vIdleMs 0
+DECLARE vFound 0
+DECLARE vJobId ""
+DECLARE vPart ""
+DECLARE vParams ""
+DECLARE vResult ""
+DECLARE vPwk ""
+DECLARE vTemplate ""
+DECLARE vVerdict ""
+DECLARE vSummary ""
+DECLARE vPiece ""
+DECLARE vKept "1"
+DECLARE vLast "No job yet."
+DECLARE vComputer ""
+DECLARE vUtc ""
+DECLARE vShareShow ""
+DECLARE vLastShow ""
+
+IF "$vApp" == ""
+    MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector: the station button is not set up correctly.", "Import VLC_Station_Button.pwmacro from the VL Connector folder again.", "" )
+    MACRO END ( "Error", "VL Connector folder missing" )
+ENDIF
+SYSTEM ENVIRONMENT_VARIABLE GET ( "TEMP", vTemp )
+SYSTEM ENVIRONMENT_VARIABLE GET ( "COMPUTERNAME", vComputer )
+SET vCtx "${vTemp}\VLConnector_station_context.txt"
+SET vNext "${vTemp}\VLConnector_station_next.txt"
+SYSTEM COMMAND EXEC SYNC ( "IF", { "EXIST", "${_QUOTES}${vCtx}${_QUOTES}", "DEL", "/Q", "${_QUOTES}${vCtx}${_QUOTES}" } )
+SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Context", "-Out", "${_QUOTES}${vCtx}${_QUOTES}" }, vCallId )
+DATA_FILE READ LINE_FIELD ( $vCtx, 1, 2, vState, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 2, 2, vShare, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 3, 2, vPoll, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 4, 2, vStatusFile, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 5, 2, vMsg, "=", "On" )
+IF "$vState" != "OK"
+    IF "$vMsg" == ""
+        SET vMsg "PowerShell could not run ${vApp}\polyworks\Station-Step.ps1."
+    ENDIF
+    MACRO INPUT ERROR_MESSAGE ( "Error", "The VL Connector station cannot start.", "$vMsg", "" )
+    MACRO END ( "Error", "Station context" )
+ENDIF
+IF $vPoll < 1000
+    SET vPoll 1000
+ENDIF
+# the PolyWorks progress window shows "_" only when doubled (a single one marks a keyboard shortcut)
+MACRO STRING REPLACE ( $vShare, "_", "__", 1, , vShareShow )
+
+MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShareShow", 0, 100, "Stop" )
+MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLast" )
+WHILE $vStop == 0
+    MACRO PROGRESS CANCEL_REQUESTED GET ( vCancel )
+    IF $vCancel == "On"
+        SET vStop 1
+    ELSE
+        SET vFound 0
+        SYSTEM DIRECTORY CONTENT GET ( "${vShare}\jobs", vList, "Off", "\.job${_DOLLAR}" )
+        IF SIZE(vList) >= 1
+            IF "$vList[1]" != ""
+                SET vFound 1
+            ENDIF
+        ENDIF
+        IF $vFound == 1
+            SET vState ""
+            SET vMsg ""
+            SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Next", "-Out", "${_QUOTES}${vNext}${_QUOTES}" }, vCallId )
+            DATA_FILE READ LINE_FIELD ( $vNext, 1, 2, vState, "=", "On" )
+            DATA_FILE READ LINE_FIELD ( $vNext, 2, 2, vJobId, "=", "On" )
+            DATA_FILE READ LINE_FIELD ( $vNext, 3, 2, vPart, "=", "On" )
+            DATA_FILE READ LINE_FIELD ( $vNext, 4, 2, vParams, "=", "On" )
+            DATA_FILE READ LINE_FIELD ( $vNext, 5, 2, vResult, "=", "On" )
+            DATA_FILE READ LINE_FIELD ( $vNext, 6, 2, vMsg, "=", "On" )
+            IF "$vState" == "JOB"
+                MACRO PROGRESS STATUS MESSAGE ( "Evaluating $vPart ($vJobId)..." )
+                MACRO PROGRESS HIDE
+                MACRO EXEC ( "${vApp}\polyworks\VLC_Evaluate.pwmacro", $vParams )
+                MACRO INTERACTIVITY ( "Off" )
+                SET vVerdict ""
+                SET vSummary ""
+                SET vPiece ""
+                SET vKept "1"
+                DATA_FILE READ LINE_FIELD ( $vResult, 2, 2, vVerdict, "=", "On" )
+                DATA_FILE READ LINE_FIELD ( $vResult, 3, 2, vSummary, "=", "On" )
+                DATA_FILE READ LINE_FIELD ( $vResult, 6, 2, vPiece, "=", "On" )
+                DATA_FILE READ LINE_FIELD ( $vResult, 7, 2, vKept, "=", "On" )
+                # piece not kept (setting "Keep measured pieces"): back to the template, remove the piece
+                IF "$vKept" == "0" AND "$vPiece" != ""
+                    DATA_FILE READ LINE_FIELD ( $vParams, 1, 2, vPwk, "=", "On" )
+                    DATA_FILE READ LINE_FIELD ( $vParams, 2, 2, vTemplate, "=", "On" )
+                    IF "$vPiece" != "$vTemplate"
+                        FILE OPEN_PROJECT_IN_PWK ( $vPwk, $vTemplate )
+                        MACRO GET_ERROR_STATUS ( vSt, vErr )
+                        IF $vSt != "Error"
+                            MACRO EXEC REMOTE_COMMAND ( "EDIT OBJECT DELETE", "Off", $vPwk, $vPiece )
+                        ENDIF
+                    ENDIF
+                ENDIF
+                SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Publish", "-JobId", $vJobId, "-Result", "${_QUOTES}${vResult}${_QUOTES}" }, vCallId )
+                ++ vCount
+                IF "$vVerdict" == ""
+                    SET vLast "Last job: $vPart - error. Jobs done: $vCount."
+                ELSE
+                    SET vLast "Last job: $vPart - $vVerdict ($vSummary). Jobs done: $vCount."
+                ENDIF
+                MACRO ECHO ( "VL Connector station: $vJobId $vPart $vVerdict $vSummary" )
+                MACRO STRING REPLACE ( $vLast, "_", "__", 1, , vLastShow )
+                MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShareShow", 0, 100, "Stop" )
+                MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLastShow" )
+            ENDIF
+            IF "$vState" == "ERROR"
+                MACRO PROGRESS STATUS MESSAGE ( "Problem with the shared folder: $vMsg" )
+                MACRO SLEEP ( $vPoll )
+            ENDIF
+        ELSE
+            # heartbeat about every 30 s, so the scanner PCs see that the station is online
+            ++ vIdle
+            SET vIdleMs EXPR ( $vIdle * $vPoll )
+            IF $vIdleMs >= 30000
+                SET vIdle 0
+                SYSTEM DATE_TIME_UTC GET ( vUtc )
+                DATA_FILE CREATE ( $vStatusFile, "Unicode", "Yes" )
+                DATA_FILE APPEND LINE ( $vStatusFile, { "STATION=$vComputer" } )
+                DATA_FILE APPEND LINE ( $vStatusFile, { "STATE=Idle" } )
+                DATA_FILE APPEND LINE ( $vStatusFile, { "JOB=" } )
+                DATA_FILE APPEND LINE ( $vStatusFile, { "UPDATED_UTC=$vUtc" } )
+            ENDIF
+            MACRO SLEEP ( $vPoll )
+        ENDIF
+    ENDIF
+ENDWHILE
+MACRO PROGRESS HIDE
+SYSTEM DATE_TIME_UTC GET ( vUtc )
+DATA_FILE CREATE ( $vStatusFile, "Unicode", "Yes" )
+DATA_FILE APPEND LINE ( $vStatusFile, { "STATION=$vComputer" } )
+DATA_FILE APPEND LINE ( $vStatusFile, { "STATE=Stopped" } )
+DATA_FILE APPEND LINE ( $vStatusFile, { "JOB=" } )
+DATA_FILE APPEND LINE ( $vStatusFile, { "UPDATED_UTC=$vUtc" } )
+MACRO INTERACTIVITY ( "On" )
+MACRO ECHO ( "VL Connector station stopped after $vCount job(s)." )

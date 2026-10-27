@@ -5,3 +5,4 @@ tests/_work/
 *.log
 /VLC_Measure_Button.pwmacro
 /layouts/
+/VLC_Station_Button.pwmacro

@@ -15,8 +15,8 @@
        internet" mark from these files,
     3. limits write access to the install folder to administrators, SYSTEM and the installing user
        (all users may only read and run it; the report layouts folder stays writable for all users),
-    4. creates the PolyWorks Measure button file and, when PolyWorks is installed, the report layouts,
-    5. creates the Start menu entries VL Connector, VL Connector - Scan, VL Connector - Station and
+    4. creates the PolyWorks button files (Measure, Station) and, when PolyWorks is installed, the report layouts,
+    5. creates the Start menu entries VL Connector (settings), VL Connector - Scan (network scenario) and
        Uninstall VL Connector.
 #>
 param(
@@ -126,8 +126,10 @@ if ($LASTEXITCODE -ne 0) { Say "     Could not set all permissions: $($acl1 + $a
 Say '4/5  Preparing PolyWorks...'
 $app = Join-Path $InstallDir 'app'
 foreach ($lib in 'Settings', 'PolyWorksSetup') { . (Join-Path $app "lib\$lib.ps1") }
-$stub = New-VlcButtonStub
+$stub = New-VlcButtonStub -Kind Measure
 Say "     Measure button file: $stub" Green
+$stub = New-VlcButtonStub -Kind Station
+Say "     Station button file: $stub" Green
 $pw = Get-PolyWorksInfo
 if ($pw) {
     try {
@@ -149,7 +151,6 @@ $icon = Join-Path $app 'assets\VLC_icon.ico'
 $entries = [ordered]@{
     'VL Connector'           = @{ Args = "-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File `"$app\VLConnector.ps1`""; Description = 'VL Connector for PolyWorks - settings' }
     'VL Connector - Scan'    = @{ Args = "-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File `"$app\VLConnector.ps1`" -Show Scan"; Description = 'VL Connector - scan window (network scenario, scanner PC)' }
-    'VL Connector - Station' = @{ Args = "-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File `"$app\VLConnector.ps1`" -Show Station"; Description = 'VL Connector - PolyWorks station (network scenario)' }
 }
 foreach ($name in $entries.Keys) {
     $lnk = $shell.CreateShortcut((Join-Path $menu "$name.lnk"))

@@ -50,6 +50,28 @@ function Get-AppImage([string]$File) {
     return $bmp
 }
 
+# Runs a script block in a background runspace and calls $Done with (output, error text) on the UI thread,
+# so slow work (network folders) does not freeze the window.
+function Start-UiJob([scriptblock]$Work, [object[]]$Arguments, [scriptblock]$Done) {
+    $ps = [PowerShell]::Create()
+    [void]$ps.AddScript($Work.ToString())
+    foreach ($a in $Arguments) { [void]$ps.AddArgument($a) }
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(150)
+    $timer.Tag = [pscustomobject]@{ PS = $ps; Handle = $ps.BeginInvoke(); Done = $Done }
+    $timer.Add_Tick({
+        $job = $this.Tag
+        if (-not $job.Handle.IsCompleted) { return }
+        $this.Stop()
+        $out = $null; $err = $null
+        try { $out = $job.PS.EndInvoke($job.Handle) } catch { $err = $_.Exception.Message }
+        if (-not $err -and $job.PS.Streams.Error.Count) { $err = $job.PS.Streams.Error[0].ToString() }
+        $job.PS.Dispose()
+        & $job.Done $out $err
+    })
+    $timer.Start()
+}
+
 function Get-Brush([string]$Key) { return [System.Windows.Application]::Current.Resources[$Key] }
 
 # Renders a window offscreen to a PNG (documentation screenshots, no window is shown).

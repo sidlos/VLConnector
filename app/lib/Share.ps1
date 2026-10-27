@@ -5,7 +5,7 @@
 #   work\        jobs the station is evaluating
 #   reports\     results for the scanner PCs (<JobId>.pdf, .csv, .result)
 #   processed\   finished jobs        failed\   jobs that could not be evaluated
-#   status\      station heartbeat    parts.csv   part -> PolyWorks template and VL program
+#   status\      station heartbeat    parts.csv   part -> PolyWorks workspace and template, VL program
 # See docs\Protocol.md.
 
 $script:ShareFolders = 'jobs', 'work', 'reports', 'processed', 'failed', 'status'
@@ -33,25 +33,28 @@ function Test-VlcShare([string]$Path) {
 
 function Get-VlcPartsFile([string]$Share) { return Join-Path $Share 'parts.csv' }
 
-# parts.csv: Part;Template;VlProgram;Options (semicolon separated, UTF-8 with BOM, first line = header).
+# parts.csv: Part;Workspace;Template;VlProgram;Options (semicolon separated, UTF-8 with BOM, first line = header).
+#   Workspace and Template: the PolyWorks workspace file (path on the station) and the template project in it.
+#   VlProgram: the AI Replay program (.vld4 name or path on the scanner PC). Options: like the "VL options" property.
 function Get-VlcParts([string]$Share) {
     $file = Get-VlcPartsFile $Share
     if (-not (Test-Path -LiteralPath $file)) { return @() }
     $rows = @(Import-Csv -LiteralPath $file -Delimiter ';' -Encoding UTF8)
     return @($rows | Where-Object { $_.Part -and $_.Template } | ForEach-Object {
-        [pscustomobject]@{ Part = $_.Part.Trim(); Template = $_.Template.Trim(); VlProgram = ([string]$_.VlProgram).Trim(); Options = ([string]$_.Options).Trim() }
+        [pscustomobject]@{ Part = $_.Part.Trim(); Workspace = ([string]$_.Workspace).Trim(); Template = $_.Template.Trim()
+            VlProgram = ([string]$_.VlProgram).Trim(); Options = ([string]$_.Options).Trim() }
     })
 }
 
 function Save-VlcParts([string]$Share, $Parts) {
     $file = Get-VlcPartsFile $Share
     $lines = New-Object Collections.Generic.List[string]
-    $lines.Add('Part;Template;VlProgram;Options')
+    $lines.Add('Part;Workspace;Template;VlProgram;Options')
     foreach ($p in $Parts) {
-        foreach ($v in $p.Part, $p.Template, $p.VlProgram, $p.Options) {
-            if ([string]$v -match '[;\r\n"]') { throw "The value '$v' must not contain ; or quotes." }
+        foreach ($v in $p.Part, $p.Workspace, $p.Template, $p.VlProgram, $p.Options) {
+            if ([string]$v -match '[;\r\n"=]') { throw "The value '$v' must not contain ; = or quotes." }
         }
-        $lines.Add(('{0};{1};{2};{3}' -f $p.Part, $p.Template, $p.VlProgram, $p.Options))
+        $lines.Add(('{0};{1};{2};{3};{4}' -f $p.Part, $p.Workspace, $p.Template, $p.VlProgram, $p.Options))
     }
     $temp = "$file.part"
     [IO.File]::WriteAllLines($temp, [string[]]$lines, (New-Object Text.UTF8Encoding($true)))
