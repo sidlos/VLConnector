@@ -1,0 +1,13 @@
+{
+    "fakevl":  {
+                   "exitAtPosition":  2
+               },
+    "expect":  {
+                   "exitCode":  1,
+                   "eventsInclude":  [
+                                         "exit:crash"
+                                     ],
+                   "stl":  false,
+                   "state":  "ERROR"
+               }
+}

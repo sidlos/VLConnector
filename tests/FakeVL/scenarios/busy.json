@@ -1,0 +1,12 @@
+{
+    "expectByFlavor":  {
+                           "proto":  {
+                                         "state":  "none"
+                                     }
+                       },
+    "expect":  {
+                   "stl":  false,
+                   "exitCode":  4
+               },
+    "holdMutex":  true
+}

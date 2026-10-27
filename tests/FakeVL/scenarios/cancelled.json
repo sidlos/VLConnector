@@ -1,0 +1,13 @@
+{
+    "fakevl":  {
+                   "cancelAtPosition":  2
+               },
+    "expect":  {
+                   "exitCode":  2,
+                   "eventsInclude":  [
+                                         "start-screen:cancelled"
+                                     ],
+                   "stl":  false,
+                   "state":  "CANCELLED"
+               }
+}

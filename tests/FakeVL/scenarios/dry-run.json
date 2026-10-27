@@ -1,0 +1,14 @@
+{
+    "launcher":  {
+                     "dryRun":  true
+                 },
+    "expect":  {
+                   "vlRunning":  true,
+                   "exitCode":  0,
+                   "eventsInclude":  [
+                                         "start-screen:open-cancelled"
+                                     ],
+                   "stl":  false,
+                   "state":  "DRYRUN"
+               }
+}

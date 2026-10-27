@@ -1,0 +1,15 @@
+{
+    "fakevl":  {
+                   "exportFailCount":  1
+               },
+    "expect":  {
+                   "eventsOrder":  [
+                                       "export:failed",
+                                       "operator:export-error-ok",
+                                       "exported:"
+                                   ],
+                   "exitCode":  0,
+                   "stl":  true,
+                   "state":  "OK"
+               }
+}

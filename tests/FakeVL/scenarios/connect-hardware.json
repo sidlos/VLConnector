@@ -1,0 +1,13 @@
+{
+    "fakevl":  {
+                   "connectHardware":  true
+               },
+    "expect":  {
+                   "exitCode":  1,
+                   "eventsInclude":  [
+                                         "dialog:connect-hardware"
+                                     ],
+                   "stl":  false,
+                   "state":  "ERROR"
+               }
+}

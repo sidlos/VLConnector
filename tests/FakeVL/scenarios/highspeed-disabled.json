@@ -1,0 +1,13 @@
+{
+    "fakevl":  {
+                   "highSpeedEnabled":  false
+               },
+    "expect":  {
+                   "exitCode":  0,
+                   "eventsInclude":  [
+                                         "mode:Standard"
+                                     ],
+                   "stl":  true,
+                   "state":  "OK"
+               }
+}

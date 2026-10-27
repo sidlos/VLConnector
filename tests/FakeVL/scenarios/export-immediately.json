@@ -1,0 +1,20 @@
+{
+    "fakevl":  {
+                   "alignSec":  15
+               },
+    "launcher":  {
+                     "exportImmediately":  true
+                 },
+    "expect":  {
+                   "eventsOrder":  [
+                                       "final-stl-ready",
+                                       "exported:"
+                                   ],
+                   "exitCode":  0,
+                   "eventsExclude":  [
+                                         "template-applied"
+                                     ],
+                   "stl":  true,
+                   "state":  "OK"
+               }
+}

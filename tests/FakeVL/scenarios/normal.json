@@ -1,0 +1,21 @@
+{
+    "fakevl":  {
+
+               },
+    "expect":  {
+                   "eventsOrder":  [
+                                       "replay-form:2/2",
+                                       "final-stl-ready",
+                                       "template-applied",
+                                       "exported:"
+                                   ],
+                   "exitCode":  0,
+                   "eventsInclude":  [
+                                         "mode:HighSpeed",
+                                         "answer:rotate:1",
+                                         "stl-options:thin=0 binary=True"
+                                     ],
+                   "stl":  true,
+                   "state":  "OK"
+               }
+}

@@ -1,0 +1,18 @@
+{
+    "fakevl":  {
+                   "startWithData":  true
+               },
+    "launcher":  {
+                     "exportOnly":  true
+                 },
+    "prestartFakeVl":  true,
+    "expect":  {
+                   "exitCode":  0,
+                   "eventsInclude":  [
+                                         "data-loaded",
+                                         "exported:"
+                                     ],
+                   "stl":  true,
+                   "state":  "OK"
+               }
+}
