@@ -137,8 +137,9 @@ function Read-ZipText([string]$Zip, [string]$Entry) {
     finally { $z.Dispose() }
 }
 
-# Copies a layout ZIP, replaces layout.xml and leaves out the entries named in $Drop.
-function Write-LayoutWithXml([string]$Source, [string]$Target, [string]$Xml, [string[]]$Drop = @()) {
+# Copies a layout ZIP, replaces layout.xml and the entries named in $Replace (name = bytes) and leaves out
+# the entries named in $Drop.
+function Write-LayoutWithXml([string]$Source, [string]$Target, [string]$Xml, [string[]]$Drop = @(), [hashtable]$Replace = @{}) {
     Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
     if (Test-Path -LiteralPath $Target) { Remove-Item -LiteralPath $Target -Force }
     $in = [IO.Compression.ZipFile]::OpenRead($Source)
@@ -150,12 +151,51 @@ function Write-LayoutWithXml([string]$Source, [string]$Target, [string]$Xml, [st
             $ws = $ne.Open()
             try {
                 if ($e.FullName -eq 'layout.xml') { $b = (New-Object Text.UTF8Encoding($false)).GetBytes($Xml); $ws.Write($b, 0, $b.Length) }
+                elseif ($Replace.ContainsKey($e.FullName)) { $b = [byte[]]$Replace[$e.FullName]; $ws.Write($b, 0, $b.Length) }
                 else { $rs = $e.Open(); try { $rs.CopyTo($ws) } finally { $rs.Dispose() } }
             }
             finally { $ws.Dispose() }
         }
     }
     finally { $out.Dispose(); $in.Dispose() }
+}
+
+# The icon entry of a macro in a layout ZIP: [UInt16 length][SVG][UInt32 1].
+function Get-VlcIconEntry([byte[]]$Svg) {
+    $icon = New-Object byte[] (2 + $Svg.Length + 4)
+    [BitConverter]::GetBytes([uint16]$Svg.Length).CopyTo($icon, 0); $Svg.CopyTo($icon, 2); [BitConverter]::GetBytes([uint32]1).CopyTo($icon, 2 + $Svg.Length)
+    return , $icon
+}
+
+# The picture of a ribbon button as layout.xml holds it (<CustomIcon><Icon Data="..."/>): a count, then the
+# normal and the disabled (grey) picture, each [UInt16 a][UInt32 b][UInt16 length][SVG][UInt32 1], every
+# byte written as two letters A-P, low half first.
+function ConvertTo-VlcIconData([byte[]]$Svg) {
+    $grey = [regex]::Replace([Text.Encoding]::UTF8.GetString($Svg), '#([0-9A-Fa-f]{6})\b', [Text.RegularExpressions.MatchEvaluator] {
+            param($m)
+            $v = [Convert]::ToInt32($m.Groups[1].Value, 16)
+            $l = 0.299 * (($v -shr 16) -band 255) + 0.587 * (($v -shr 8) -band 255) + 0.114 * ($v -band 255)
+            '#' + ([int][Math]::Round(255 - (255 - $l) * 0.3)).ToString('X2') * 3
+        })
+    $ms = New-Object IO.MemoryStream
+    $w = New-Object IO.BinaryWriter($ms)
+    $w.Write([uint16]2)
+    $w.Write([uint16]0xFFFF); $w.Write([uint32]0x2D); $w.Write([uint16]$Svg.Length); $w.Write($Svg); $w.Write([uint32]1)
+    $g = [Text.Encoding]::UTF8.GetBytes($grey)
+    $w.Write([uint16]0); $w.Write([uint32]0); $w.Write([uint16]$g.Length); $w.Write($g); $w.Write([uint32]1)
+    $w.Flush()
+    $sb = New-Object Text.StringBuilder ([int]$ms.Length * 2)
+    foreach ($b in $ms.ToArray()) { [void]$sb.Append([char](65 + ($b -band 15))).Append([char](65 + ($b -shr 4))) }
+    return $sb.ToString()
+}
+
+# $true when the picture data of a button control (layout.xml) holds the given SVG.
+function Test-VlcIconData([string]$Control, [byte[]]$Svg) {
+    $d = [regex]::Match($Control, '<CustomIcon><Icon [^>]*?Data="([A-P]+)"').Groups[1].Value
+    if (-not $d) { return $false }
+    $b = New-Object byte[] ([int]($d.Length / 2))
+    for ($i = 0; $i -lt $b.Length; $i++) { $b[$i] = [byte](([int]$d[2 * $i + 1] - 65) * 16 + ([int]$d[2 * $i] - 65)) }
+    return [Text.Encoding]::UTF8.GetString($b).Contains([Text.Encoding]::UTF8.GetString($Svg))
 }
 
 # A minimal visual layout with only the VL Connector button macro: macro text, icon (SVG) and description,
@@ -166,9 +206,7 @@ function New-VlcButtonLayout([string]$Path, [string]$Kind, [string]$InfoXml, [st
     $stubPath = Get-VlcButtonStubPath $Kind
     if (-not (Test-Path -LiteralPath $stubPath)) { [void](New-VlcButtonStub -Kind $Kind) }
     $macro = [IO.File]::ReadAllBytes($stubPath)
-    $svg = [IO.File]::ReadAllBytes((Join-Path (Get-VlcPaths).AppDir 'assets\VLC_icon.svg'))
-    $icon = New-Object byte[] (2 + $svg.Length + 4)
-    [BitConverter]::GetBytes([uint16]$svg.Length).CopyTo($icon, 0); $svg.CopyTo($icon, 2); [BitConverter]::GetBytes([uint32]1).CopyTo($icon, 2 + $svg.Length)
+    $icon = Get-VlcIconEntry ([IO.File]::ReadAllBytes((Join-Path (Get-VlcPaths).AppDir 'assets\VLC_icon.svg')))
     $descText = @{ Measure = 'VL Connector - Measure'; Station = 'VL Connector - Station' }[$Kind]
     $chars = [Text.Encoding]::Unicode.GetBytes($descText)
     $desc = New-Object byte[] (4 + $chars.Length)
@@ -249,6 +287,18 @@ function Install-VlcPolyWorksTab([ValidateSet('Measure', 'Station')] [string]$Ki
     $esc = [regex]::Escape($newName)
     $caption = @{ Measure = 'Measure'; Station = 'VL Station' }[$Kind]
     $control = $ctl.Value -replace ('Caption="' + $esc + '"'), ('Caption="' + $caption + '"')
+    # In a long Inspector session PolyWorks can give the new button the picture slot of an earlier button and
+    # keep that button's picture (an old logo stays). Then the button gets VL Connector's picture in a slot no
+    # other picture uses (above every id in the layout), and the macro gets the same picture.
+    $svg = [IO.File]::ReadAllBytes((Join-Path (Get-VlcPaths).AppDir 'assets\VLC_icon.svg'))
+    $replace = @{}
+    if ($control -match 'CustomIconId="\d+"' -and $control -match '<CustomIcon><Icon [^>]*?Data="[A-P]+"' -and -not (Test-VlcIconData $control $svg)) {
+        $ids = @([regex]::Matches($xml, '\s(?:Id|IconId|CustomIconId)="(\d+)"') | ForEach-Object { [int]$_.Groups[1].Value })
+        $iconId = [int]($ids | Measure-Object -Maximum).Maximum + 1000
+        $control = [regex]::Replace($control, 'CustomIconId="\d+"', "CustomIconId=`"$iconId`"")
+        $control = [regex]::Replace($control, '(<CustomIcon><Icon [^>]*?Data=")[A-P]+', ('${1}' + (ConvertTo-VlcIconData $svg)))
+        $replace["icon/$newName"] = Get-VlcIconEntry $svg
+    }
     # the hidden toolbar of the import and an older VL Connector tab are replaced
     $xml = Remove-VlcLayoutParts $xml
     $tab = '<Tab Class="CIMXtRibbonTab" Caption="VL Connector" tabType="2"><Groups><Group Class="CIMXtRibbonGroup" Caption="VL Connector" groupType="2"><Controls>' +
@@ -260,7 +310,7 @@ function Install-VlcPolyWorksTab([ValidateSet('Measure', 'Station')] [string]$Ki
     # earlier copies of VL Connector button macros that no button uses any more are left out. (A layout
     # without any macro button makes PolyWorks drop its whole ribbon, so this happens only here, together
     # with the new button, never in a step of its own.)
-    Write-LayoutWithXml $exported $final $xml @(Get-VlcUnusedButtonEntries $exported $xml)
+    Write-LayoutWithXml $exported $final $xml @(Get-VlcUnusedButtonEntries $exported $xml) $replace
 
     # 5) load it and check
     $check = Join-Path $work "check_$stamp"

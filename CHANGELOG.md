@@ -43,3 +43,8 @@ Fixed after the live test at the scanner (2026-10-29, 1.0.0-rc4):
   macro "<name> (2)", "(3)", ..., the tab kept the old button and the copies piled up in the PolyWorks macro list;
   now earlier copies that no button uses are removed. It also works more than once in the same Inspector session
   (PolyWorks refuses a second import of the same macro name there; the button then gets a name with a time stamp).
+
+1.0.0-rc9 (2026-10-29):
+- **Add to PolyWorks** shows the current logo on the button also in a PolyWorks|Inspector that has been open for
+  a long time. PolyWorks could give the new button the picture slot of an earlier button and keep the old picture;
+  the button then gets its picture from VL Connector in a slot of its own.
