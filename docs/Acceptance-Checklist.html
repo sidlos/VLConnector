@@ -41,7 +41,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <li class="task">&#9744; <strong>Measure</strong> in the template: VL starts AI Replay with the right program and mode.</li>
 <li class="task">&#9744; Progress window in PolyWorks shows the VL steps; scanning works as usual.</li>
 <li class="task">&#9744; After the last position: STL exported, PolyWorks comes to the front, evaluation runs.</li>
-<li class="task">&#9744; Verdict message and PDF: cover page with color map and OK/NOK, control table, views; CSV next to it.</li>
+<li class="task">&#9744; Verdict message (OK/NOK) and PDF in PolyWorks&#39; standard layout: control table, color map views; CSV next to it.</li>
 <li class="task">&#9744; Piece <code>&lt;template&gt;_&lt;date&gt;_&lt;time&gt;</code> saved; the template is unchanged.</li>
 <li class="task">&#9744; <strong>Measure</strong> again while the piece is open: starts from the template.</li>
 <li class="task">&#9744; <strong>Cancel</strong> in the progress window during the scan: the run stops with &quot;cancelled&quot;.</li>
@@ -49,12 +49,12 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <li class="task">&#9744; Optional: <em>Confirm stage movement automatically</em> - the stage dialogs are answered (watch the safety!).</li>
 <li class="task">&#9744; Optional: <em>VL window after the export</em> = Close / Save and close - VL closes only after the export.</li>
 <li class="task">&#9744; Optional: keep pieces <em>Only NOK</em> - an OK piece is removed, the PDF stays.</li>
-<li class="task">&#9744; A NOK part (or tightened tolerance) gives a red NOK report.</li>
+<li class="task">&#9744; A NOK part (or tightened tolerance) gives the verdict NOK.</li>
 </ul>
 <h2 id="scenario-b-polyworks-on-another-pc">Scenario B (PolyWorks on another PC)</h2>
 <ul>
 <li class="task">&#9744; Shared folder entered on both PCs; <strong>Test</strong> is green on both.</li>
-<li class="task">&#9744; <code>programs.csv</code> filled (VL program -&gt; workspace and template on the station).</li>
+<li class="task">&#9744; Measurement Programs List (<code>programs.csv</code>) filled (VL program -&gt; workspace and template on the station).</li>
 <li class="task">&#9744; Station PC: wizard (PolyWorks station) &gt; <strong>Add to PolyWorks</strong> - tab &quot;VL Connector&quot; with <strong>VL Station</strong>; it runs and shows the shared folder.</li>
 <li class="task">&#9744; Scanner PC: agent switched on (<em>Start with Windows</em>), icon in the notification area; after a Windows logon it starts by itself.</li>
 <li class="task">&#9744; Agent menu shows <em>station online</em>.</li>
@@ -63,7 +63,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <li class="task">&#9744; A second scanner PC (if any) does <strong>not</strong> open the reports of the first one.</li>
 <li class="task">&#9744; Shared folder unreachable during a scan: the STL waits in the outbox and is sent later.</li>
 <li class="task">&#9744; Station stopped: agent menu shows <em>station offline</em>; the scan is evaluated after the station starts.</li>
-<li class="task">&#9744; VL program missing in <code>programs.csv</code>: a notification &quot;not evaluated&quot; with the reason.</li>
+<li class="task">&#9744; VL program missing in the Measurement Programs List: a notification &quot;not evaluated&quot; with the reason.</li>
 </ul>
 <h2 id="result">Result</h2>
 <table>

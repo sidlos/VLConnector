@@ -39,10 +39,10 @@ another VL Connector run (the run mutex is taken) is left alone.
 ## 2. PolyWorks macros
 
 **Get-MacroContext.ps1 output** (for VLC_Measure): `STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR,
-LAYOUT_DIR, KEEP_PIECES, OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE`.
+KEEP_PIECES, OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE`.
 
-**VLC_Evaluate.pwmacro parameters** (`$1` = file): `PWK, TEMPLATE, STL, RUN, REPORT_DIR, LAYOUT_DIR,
-OPERATOR, PROGRAM, UTC, KEEP_PIECES, COLOR_SCALE, DEVICE, RESULT, JOBID`.
+**VLC_Evaluate.pwmacro parameters** (`$1` = file): `PWK, TEMPLATE, STL, RUN, REPORT_DIR, OPERATOR, PROGRAM,
+UTC, KEEP_PIECES, COLOR_SCALE, DEVICE, RESULT, JOBID`.
 The piece is named `<TEMPLATE>_<RUN>`; PDF and CSV get the same name in `REPORT_DIR`.
 
 **VLC_Evaluate result** (file `RESULT`, UTF-16, written last): `STATE (OK/ERROR), VERDICT (OK/NOK), SUMMARY,
@@ -74,9 +74,9 @@ those JobIds. A PDF is copied and opened only when it starts with `%PDF-` and en
 updated about every 30 s and at each job; the agent shows a station as online when the file is newer
 than 2 minutes and the state is not `Stopped`.
 
-**programs.csv** (UTF-8 with BOM, `;`-separated, header line): `Program;Workspace;Template` - the program
-is the .vld4 file name without extension (case does not matter).
+**programs.csv**, the Measurement Programs List (UTF-8 with BOM, `;`-separated, header line):
+`Program;Workspace;Template` - the program is the .vld4 file name without extension (case does not matter).
 
 Both sides treat each other's files as untrusted input: names are checked against the JobId pattern, paths
 are built locally, the STL is checked by hash and format, and the station takes the template only from its
-own programs list.
+own Measurement Programs List.

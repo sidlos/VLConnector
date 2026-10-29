@@ -9,15 +9,14 @@ version "7.0"
 #         3 STL          scan to evaluate
 #         4 RUN          run name (date_time), used for the piece name and the report file names
 #         5 REPORT_DIR   folder for the PDF and CSV
-#         6 LAYOUT_DIR   folder with VL_Report_OK.ezl / VL_Report_NOK.ezl ("" = PolyWorks default layout)
-#         7 OPERATOR     operator name for the report
-#         8 PROGRAM      VL program file name for the report
-#         9 UTC          measurement time (ISO 8601, UTC) for the piece date
-#        10 KEEP_PIECES  All | Nok | None
-#        11 COLOR_SCALE  color map range in mm (e.g. 0.5)
-#        12 DEVICE       device text for the report
-#        13 RESULT       result file to write
-#        14 JOBID        job id (network scenario) or empty
+#         6 OPERATOR     operator name for the report
+#         7 PROGRAM      VL program file name for the CSV
+#         8 UTC          measurement time (ISO 8601, UTC) for the piece date
+#         9 KEEP_PIECES  All | Nok | None
+#        10 COLOR_SCALE  color map range in mm (e.g. 0.5)
+#        11 DEVICE       device text for the report
+#        12 RESULT       result file to write
+#        13 JOBID        job id (network scenario) or empty
 #   Result file (written last): STATE, VERDICT, SUMMARY, PDF, CSV, PIECE, PIECE_KEPT, MESSAGE.
 #
 # The measured piece is a copy of the template (<template>_<run>), made before anything is changed:
@@ -33,7 +32,6 @@ DECLARE vTemplate ""
 DECLARE vStl ""
 DECLARE vRun ""
 DECLARE vReportDir ""
-DECLARE vLayoutDir ""
 DECLARE vUser ""
 DECLARE vProgram ""
 DECLARE vUtc ""
@@ -73,12 +71,9 @@ DECLARE vWarn 0
 DECLARE vSummary ""
 DECLARE vVerdictAll "OK"
 DECLARE vDetail ""
-DECLARE vLayout ""
-DECLARE vCover ""
 DECLARE vNfr 0
 DECLARE vRepErr ""
 DECLARE vDest ""
-DECLARE vZoom 0
 DECLARE vKept 1
 DECLARE vNegScale -0.5
 
@@ -87,15 +82,14 @@ DATA_FILE READ LINE_FIELD ( $vParams, 2, 2, vTemplate, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 3, 2, vStl, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 4, 2, vRun, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 5, 2, vReportDir, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 6, 2, vLayoutDir, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 7, 2, vUser, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 8, 2, vProgram, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 9, 2, vUtc, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 10, 2, vKeep, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 11, 2, vScale, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 12, 2, vDevice, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 13, 2, vResult, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 14, 2, vJobId, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 6, 2, vUser, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 7, 2, vProgram, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 8, 2, vUtc, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 9, 2, vKeep, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 10, 2, vScale, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 11, 2, vDevice, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 12, 2, vResult, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 13, 2, vJobId, "=", "On" )
 MACRO GET_ERROR_STATUS ( vSt, vErr )
 IF "$vResult" == ""
     MACRO END ( "Error", "VLC_Evaluate: the parameters file $vParams could not be read." )
@@ -257,11 +251,11 @@ SET vSummary "$vVerdictAll - $vDetail"
 DATA_FILE APPEND LINE ( $vCsv, { "RESULT;$vSummary;;;;;;" } )
 
 # --- 6) PDF report --------------------------------------------------------------
-# p. 1 isometric view with the verdict, p. 2 control table, then top and front views.
+# PolyWorks' own report layout: control snapshot and table, then top and front views of the color map.
 # New report items go to the tree view temporarily (the default destination "Active Formatted
-# Report" would put them into an automatically created "report 1" without a layout); the report
-# is then built from them with the layout. Without a selection, CREATE_AUTOMATIC takes all items
-# except the header and footer (SELECT ALL would select only those two).
+# Report" would put them into an automatically created "report 1"); the report is then built from
+# them. Without a selection, CREATE_AUTOMATIC takes all items except the header and footer
+# (SELECT ALL would select only those two).
 REPORT_ITEM OPTIONS DESTINATION GET ( vDest )
 REPORT_ITEM OPTIONS DESTINATION ( "Tree View" )
 MEASURE CONTROL_VIEW CREATE FROM_ALL_CONTROLS ( "Controls", "Dimensions and points with tolerances" )
@@ -276,45 +270,11 @@ VIEW POSE ISOMETRIC ( "+X-Y+Z", "+Z" )
 VIEW POSE CENTER
 TREEVIEW OBJECT SELECT NONE
 TREEVIEW REPORT_ITEM SELECT NONE
-SET vLayout ""
-IF "$vLayoutDir" != ""
-    SET vLayout "${vLayoutDir}\VL_Report_${vVerdictAll}.ezl"
-    FORMATTED_REPORT CREATE_AUTOMATIC USING_LAYOUT ( "Report", $vLayout )
-    MACRO GET_ERROR_STATUS ( vSt, vErr )
-    IF $vSt == "Error"
-        SET vRepErr "$vErr"
-        SET vLayout ""
-    ENDIF
-ENDIF
-IF "$vLayout" == ""
-    TREEVIEW REPORT_ITEM SELECT NONE
-    FORMATTED_REPORT CREATE_AUTOMATIC ( "Report" )
-ENDIF
+FORMATTED_REPORT CREATE_AUTOMATIC ( "Report" )
 TREEVIEW FORMATTED_REPORT COUNT GET ( vNfr )
 TREEVIEW FORMATTED_REPORT NAME GET ( $vNfr, vFr )
 FORMATTED_REPORT PROPERTIES STANDARD ( $vFr, "Title", "Inspection Report - $vTemplate" )
 FORMATTED_REPORT PROPERTIES STANDARD ( $vFr, "Author", $vUser )
-IF "$vLayout" != ""
-    # cover snapshot only after the report is created, so that it is not repeated in the content;
-    # the scene is rendered in the aspect ratio of the cover box (1440 x 1450 px), scan at 90 %
-    SET vCover "Deviation color map - isometric"
-    VIEW POSE CENTER_ON_OBJECTS ZOOM GET ( vZoom )
-    VIEW POSE CENTER_ON_OBJECTS ZOOM ( 90 )
-    VIEW POSE CENTER_ON_OBJECTS ( { "Scan" } )
-    REPORT_ITEM SNAPSHOT CAPTURE_REGION ( 0, 0, 1450, 1440, 1450, 1440, $vCover )
-    IF $vZoom > 0
-        VIEW POSE CENTER_ON_OBJECTS ZOOM ( $vZoom )
-    ENDIF
-    FORMATTED_REPORT ITEM ASSIGN_ITEM ( $vCover, $vFr, "snapshot 0" )
-    MACRO GET_ERROR_STATUS ( vSt, vErr )
-    IF $vSt == "Error"
-        SET vRepErr "cover snapshot: $vErr"
-    ENDIF
-    FORMATTED_REPORT PROPERTIES CUSTOM ADD ( $vFr, "RESULT", $vVerdictAll )
-    FORMATTED_REPORT PROPERTIES CUSTOM ADD ( $vFr, "SUMMARY", $vDetail )
-    FORMATTED_REPORT PROPERTIES CUSTOM ADD ( $vFr, "PROGRAM", $vProgram )
-    FORMATTED_REPORT PROPERTIES CUSTOM ADD ( $vFr, "SCAN", "$vStl:t" )
-ENDIF
 FILE EXPORT_FORMATTED_REPORT PDF ( $vPdf, "Off", $vFr )
 MACRO GET_ERROR_STATUS ( vSt, vErr )
 IF $vSt == "Error"

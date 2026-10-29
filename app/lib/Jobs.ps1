@@ -209,7 +209,7 @@ function Get-VlcNextJob([string]$Share) {
             if (-not (Test-BinaryStlFile $stlWork)) { throw 'The STL is not a complete binary STL.' }
             $program = [IO.Path]::GetFileNameWithoutExtension([string]$j.PROGRAM)
             $map = Find-VlcProgram $Share $program
-            if (-not $map) { throw "The VL program '$program' is not in the programs list of the shared folder (programs.csv)." }
+            if (-not $map) { throw "The VL program '$program' is not in the Measurement Programs List of the shared folder (programs.csv)." }
             if (-not (Test-Path -LiteralPath $map.Workspace)) { throw "The workspace $($map.Workspace) of VL program '$program' was not found on this station." }
             return [pscustomobject]@{ JobId = $id; Job = $j; Map = $map; Stl = $stlWork; JobFile = $claimed }
         }

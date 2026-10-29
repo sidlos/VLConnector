@@ -46,19 +46,17 @@ switch ($Action) {
                 $o.STATE = 'JOB'; $o.JOBID = $id; $o.PART = $next.Map.Program
                 $reports = Join-Path $work 'reports'
                 New-Item -ItemType Directory -Force -Path $reports | Out-Null
-                $layouts = (Get-VlcPaths).LayoutDir
-                $hasLayouts = (Test-Path -LiteralPath (Join-Path $layouts 'VL_Report_OK.ezl')) -and (Test-Path -LiteralPath (Join-Path $layouts 'VL_Report_NOK.ezl'))
                 $resultFile = Join-Path $work "$id.result"
                 if (Test-Path -LiteralPath $resultFile) { Remove-Item -LiteralPath $resultFile -Force }
                 $run = ($id -split '_', 3)[2]   # yyyyMMdd-HHmmss_hhhh: unique piece name per job
                 $params = [ordered]@{
                     PWK = $next.Map.Workspace; TEMPLATE = $next.Map.Template; STL = $next.Stl; RUN = $run; REPORT_DIR = $reports
-                    LAYOUT_DIR = $(if ($hasLayouts) { $layouts } else { '' }); OPERATOR = "$($next.Job.USER) ($($next.Job.COMPUTER))"
+                    OPERATOR = "$($next.Job.USER) ($($next.Job.COMPUTER))"
                     PROGRAM = $next.Job.PROGRAM; UTC = $next.Job.CREATED_UTC; KEEP_PIECES = [string]$cfg.polyworks.keepPieces
                     COLOR_SCALE = ([double]$cfg.polyworks.colorScaleMm).ToString([Globalization.CultureInfo]::InvariantCulture)
                     DEVICE = [string]$cfg.polyworks.deviceText; RESULT = $resultFile; JOBID = $id
                 }
-                foreach ($k in 'PWK', 'STL', 'REPORT_DIR', 'LAYOUT_DIR', 'RESULT') { if ([string]$params[$k] -match '=') { throw "The path $($params[$k]) contains '=', which the macro cannot read." } }
+                foreach ($k in 'PWK', 'STL', 'REPORT_DIR', 'RESULT') { if ([string]$params[$k] -match '=') { throw "The path $($params[$k]) contains '=', which the macro cannot read." } }
                 $o.PARAMS = Join-Path $work "$id.params"
                 $o.RESULT = $resultFile
                 Write-KeyValueFile $o.PARAMS $params

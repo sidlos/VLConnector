@@ -2,7 +2,7 @@
 
 VL Connector starts **AI Replay** in the KEYENCE VL Application, exports the scan as an STL file and has
 **PolyWorks|Inspector** evaluate it against the part template: alignment to the CAD, all controls of the
-template, a color map and an A4 PDF report with a green **OK** or red **NOK** verdict, plus a CSV table.
+template, a color map, the **OK** or **NOK** verdict, a PDF report in PolyWorks' standard layout and a CSV table.
 
 > Unofficial tool - not an official KEYENCE or InnovMetric product and not covered by their warranty or
 > support. KEYENCE, VL-800 and PolyWorks are trademarks of their respective owners.
@@ -42,15 +42,15 @@ the program folders of VL or PolyWorks (VL Connector is not a PolyWorks plug-in)
 3. The installer checks every file against its manifest and shows the **package fingerprint**. Compare it with
    the fingerprint you received with the package, then confirm.
 4. It installs to `C:\ProgramData\VLConnector` (another folder: `Install.cmd -InstallDir D:\VLConnector`),
-   builds the report layouts from your PolyWorks installation, creates the PolyWorks button files and the
-   Start menu entries **VL Connector** (settings), **VL Connector agent** and **Uninstall VL Connector**.
+   creates the PolyWorks button files and the Start menu entries **VL Connector** (settings), **VL Connector
+   agent** and **Uninstall VL Connector**.
 
 5. At the end it offers the **setup wizard** (also later: settings window > Setup > *Setup wizard*). The wizard
-   asks for the scenario and the main options, builds the report layouts, **adds the VL Connector tab with the
+   asks for the scenario and the main options, **adds the VL Connector tab with the
    Measure or Station button to PolyWorks** (open PolyWorks|Inspector first; your PolyWorks layout is saved
    before and the wizard can undo it) and, for the network scenario, sets the shared folder and the agent.
 
-**Update:** run Install.cmd of the new version. Settings, report layouts and the imported PolyWorks buttons stay.
+**Update:** run Install.cmd of the new version. Settings and the imported PolyWorks buttons stay.
 **Check an installation:** `Install.cmd -Verify` (in the program folder) compares all files with the manifest
 and shows the status of the PC. **Uninstall:** Start menu > Uninstall VL Connector. Scans, reports and
 PolyWorks projects are never removed.
@@ -63,10 +63,10 @@ Start menu > **VL Connector**. Every change is saved immediately ("Saved" appear
 
 | Page | What you set |
 |---|---|
-| **Setup** | Scenario A or B; in scenario B whether this PC is the scanner PC or the PolyWorks station. The status list checks this PC and offers the next step (for example *Build* for missing report layouts). **Setup wizard** runs the guided setup again. |
+| **Setup** | Scenario A or B; in scenario B whether this PC is the scanner PC or the PolyWorks station. The status list checks this PC and offers the next step (for example *Locate* when the VL Application is not found). **Setup wizard** runs the guided setup again. |
 | **Scanning** | AI Replay mode (High speed, Standard, or let the operator choose in VL), export right after the scan, automatic confirmation of the stage movement, what happens to the VL window after the export, where VL programs are. |
-| **PolyWorks** | Report layouts, which measured pieces to keep, opening the PDF, the Measure (or Station) button. |
-| **Network** | The shared folder (scenario B), opening reports automatically, the agent (start with Windows), the programs list. |
+| **PolyWorks** | Which measured pieces to keep, opening the PDF, the Measure (or Station) button. |
+| **Network** | The shared folder (scenario B), opening reports automatically, the agent (start with Windows), the **Measurement Programs List**. |
 | **Diagnostics** | Log folder, a support ZIP, versions. |
 
 ### Scanning options in detail
@@ -105,10 +105,11 @@ Save the template afterwards. Every measured piece is a **copy** of the template
 `<template>_<date>_<time>`; the template itself is never changed. The piece gets the property `VL template`,
 so pressing Measure in an open piece starts the next part from the template again.
 
-**Report:** page 1 shows a large isometric color map with the verdict (green OK / red NOK) and the summary,
-page 2 the table of all controls, then top and front views. The CSV has one line per control with nominal,
-measured, deviation, tolerances and result. The verdict is NOK when a control is out of tolerance or could not
-be measured.
+**Report:** the PDF uses PolyWorks' standard report layout: the table of all controls with a snapshot, then top
+and front views of the color map. The CSV has one line per control with nominal, measured, deviation,
+tolerances and result, and the verdict in its last line. The verdict is NOK when a control is out of tolerance
+or could not be measured; PolyWorks shows it after the evaluation (scenario A), the agent in its notification
+(scenario B).
 
 ## 5. Scenario A: the Measure button
 
@@ -156,11 +157,11 @@ scanner PCs and of the station can **read, create, change and delete files** in.
 every PC: page **Setup** > *PolyWorks on another PC*, page **Network** > enter the folder > **Test**.
 VL Connector creates the subfolders `jobs`, `work`, `reports`, `processed`, `failed` and `status`.
 
-### Programs list
+### Measurement Programs List
 
 The station finds the PolyWorks template of a scan by its **VL program**. Page **Network** > **Edit list**
-opens `programs.csv` in the shared folder. One line per VL program, separated by semicolons; the first line is
-the header:
+opens the Measurement Programs List, the file `programs.csv` in the shared folder. One line per VL program,
+separated by semicolons; the first line is the header:
 
 ```
 Program;Workspace;Template
@@ -200,9 +201,9 @@ with the **VL Station** button (by hand: import `VLC_Station_Button.pwmacro` lik
 
 To run the station, open a PolyWorks|Inspector **used only for the station** (from the Workspace Manager as
 usual) and press **VL Station**. A small window shows the shared folder, the last job and a **Stop** button.
-The station takes the scans one by one, opens the template of the VL program from the programs list, evaluates
-the scan and sends the report back; it uses the PolyWorks settings of the station PC (keep pieces, report
-layouts, color scale). Keep the station PC logged on (a locked screen is fine) while scanning.
+The station takes the scans one by one, opens the template of the VL program from the Measurement Programs
+List, evaluates the scan and sends the report back; it uses the PolyWorks settings of the station PC (keep
+pieces, color scale). Keep the station PC logged on (a locked screen is fine) while scanning.
 
 ## 7. Options per part
 
@@ -232,11 +233,10 @@ Example: `-Mode Standard -AfterExport Minimize`. An unknown option stops the sca
 | *VL Connector could not start* (in PolyWorks) | Open the settings window: the Setup page shows what is missing. |
 | *PowerShell runs in ConstrainedLanguage mode* | Ask IT: VL Connector needs FullLanguage mode (see Notes for IT). |
 | *Template ... could not be opened* | The template name or workspace is wrong, or the template is open in another PolyWorks. |
-| The report uses the plain PolyWorks layout | Page PolyWorks > Report layouts > **Build**. |
 | Scenario B: no STL after AI Replay | Is the agent running (icon in the notification area)? Settings > page Network > Start now. |
 | Scenario B: *station offline* in the agent menu | Start the station (VL Station button) and check the shared folder on the station PC. |
 | Scenario B: no report arrives | The station is busy or stopped; the scan is evaluated as soon as it runs. |
-| Scenario B: *not in the programs list* | Add the VL program (the .vld4 name without extension) to `programs.csv`. |
+| Scenario B: *not in the Measurement Programs List* | Add the VL program (the .vld4 name without extension) to the list (page Network > Edit list). |
 | VL does not react to VL Connector | VL must show its English user interface; close extra dialogs in VL. |
 
 Logs: `%LOCALAPPDATA%\VLConnector\logs` (page Diagnostics > Open folder), one file per day and part of
@@ -244,6 +244,6 @@ VL Connector, kept for 30 days.
 
 ## 9. Support
 
-Contact your local sales engineer, who forwards questions to the local technical team. Please attach the
-support ZIP: settings window > **Diagnostics** > **Create ZIP** (logs, settings, status and file list; no
-scans or reports).
+VL Connector is not official software. You can try contacting your local sales engineer, who can forward
+questions to the local technical team. Please attach the support ZIP: settings window > **Diagnostics** >
+**Create ZIP** (logs, settings, status and file list; no scans or reports).

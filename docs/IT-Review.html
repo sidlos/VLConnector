@@ -36,7 +36,6 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <tr><td><code>app\VLReplay.ps1</code></td><td>started by the PolyWorks Measure macro or by the agent (<code>-Watch</code>)</td><td>Drives AI Replay in the VL Application (or follows a replay the operator started) and exports the STL.</td></tr>
 <tr><td><code>app\polyworks\*.pwmacro</code></td><td>inside PolyWorks, when the user presses the button</td><td>Evaluation, report, network station loop.</td></tr>
 <tr><td><code>app\polyworks\Get-MacroContext.ps1</code>, <code>Station-Step.ps1</code></td><td>started by the macros</td><td>Read settings, move job files (PolyWorks macros cannot read JSON).</td></tr>
-<tr><td><code>app\polyworks\Make-ReportLayouts.ps1</code></td><td>installer / settings window</td><td>Builds the report layouts from the installed PolyWorks A4 layout.</td></tr>
 <tr><td><code>app\lib\*.ps1</code></td><td>loaded by the scripts above</td><td>Shared code. <code>Native.ps1</code> holds all Windows API declarations; <code>PolyWorksLayout.ps1</code> the PolyWorks COM declarations (used only by <em>Add to PolyWorks</em>).</td></tr>
 <tr><td><code>Install.ps1</code>, <code>Uninstall.ps1</code></td><td>once, by the user</td><td>Installation, removal.</td></tr>
 <tr><td><code>tools\Sign-Scripts.ps1</code></td><td>by IT, optional</td><td>Signs the scripts with your certificate (AllSigned environments).</td></tr>
@@ -65,7 +64,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <h2 id="4-what-is-written-where">4. What is written where</h2>
 <table>
 <tr><th>Path</th><th>Content</th></tr>
-<tr><td><code>C:\ProgramData\VLConnector\</code></td><td>The program (read and execute for all users; write only for administrators, SYSTEM and the installing user), <code>layouts\</code> (report layouts, writable for all users), the PolyWorks button files, <code>install-info.txt</code>.</td></tr>
+<tr><td><code>C:\ProgramData\VLConnector\</code></td><td>The program (read and execute for all users; write only for administrators, SYSTEM and the installing user), the PolyWorks button files, <code>install-info.txt</code>.</td></tr>
 <tr><td><code>C:\ProgramData\VLConnector\machine.json</code></td><td>Optional, created by IT: settings for all users of the PC.</td></tr>
 <tr><td><code>%APPDATA%\VLConnector\settings.json</code></td><td>Settings of the user (settings window).</td></tr>
 <tr><td><code>%LOCALAPPDATA%\VLConnector\</code></td><td><code>logs\</code> (30 days), agent outbox and pending list, station work files, <code>polyworks-layout\</code> (backups of the PolyWorks visual layout made before <em>Add to PolyWorks</em>).</td></tr>

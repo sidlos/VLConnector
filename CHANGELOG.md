@@ -5,16 +5,17 @@
 First release for a closed group of users.
 
 - **Scenario A** (PolyWorks on the scanner PC): Measure button in PolyWorks - AI Replay in VL, automatic STL
-  export, evaluation against the part template (pre-alignment, best-fit, all controls, color map), A4 PDF report
-  with OK/NOK verdict and CSV, optional removal of measured pieces, optional PDF opening.
+  export, evaluation against the part template (pre-alignment, best-fit, all controls, color map), OK/NOK
+  verdict, PDF report in PolyWorks' standard layout and CSV, optional removal of measured pieces, optional PDF
+  opening.
 - **Scenario B** (PolyWorks on another PC): the operator scans with AI Replay in VL as usual; the VL Connector
   agent (notification area, optionally started with Windows) exports the STL named after the .vld4 program,
   sends it to a shared network folder (outbox, hash check) and opens the returned PDF (only own scans). The
-  PolyWorks station runs in its own Inspector and picks the template by the VL program (programs list).
-- Setup wizard (opens after the installation): scenario, scanning options, report layouts, shared folder and agent,
+  PolyWorks station runs in its own Inspector and picks the template by the VL program (Measurement Programs List).
+- Setup wizard (opens after the installation): scenario, scanning options, shared folder and agent,
   and **Add to PolyWorks** - a ribbon tab "VL Connector" with the Measure or Station button in PolyWorks|Inspector,
   added with PolyWorks' own macro commands after saving the visual layout (undo possible).
-- Settings window with status check, report layout builder, PolyWorks button files, network test and support ZIP.
+- Settings window with status check, PolyWorks button files, network test and support ZIP.
 - Launcher options: replay mode (High speed / Standard / Ask), export right after the scan, automatic
   confirmation of the stage dialogs, VL window after the export (leave, minimize, close, save and close with
   STL re-check), options per part.
@@ -48,3 +49,12 @@ Fixed after the live test at the scanner (2026-10-29, 1.0.0-rc4):
 - **Add to PolyWorks** shows the current logo on the button also in a PolyWorks|Inspector that has been open for
   a long time. PolyWorks could give the new button the picture slot of an earlier button and keep the old picture;
   the button then gets its picture from VL Connector in a slot of its own.
+
+1.0.0-rc10 (2026-10-29):
+- The VL Connector report layouts are gone (settings window, setup wizard, installer, `Make-ReportLayouts.ps1`):
+  they suited one demo part, and every company reports its parts its own way. The PDF uses PolyWorks' standard
+  report layout; the OK/NOK verdict stays in the PolyWorks message, the agent notification and the CSV. An
+  update removes the `layouts` folder of earlier versions. Macro protocol: `LAYOUT_DIR` is no longer in the
+  Get-MacroContext output nor in the VLC_Evaluate parameters.
+- The programs list of the network scenario is now called **Measurement Programs List**.
+- Support text: VL Connector is not official software; you can try contacting your local sales engineer.

@@ -14,7 +14,6 @@ function Get-VlcPaths {
         InstallDir  = Split-Path $script:VlcAppDir
         Defaults    = Join-Path $script:VlcAppDir 'config\defaults.json'
         MachineFile = Join-Path $env:ProgramData 'VLConnector\machine.json'
-        LayoutDir   = Join-Path (Split-Path $script:VlcAppDir) 'layouts'
         UserFile    = Join-Path $env:APPDATA 'VLConnector\settings.json'
         DataDir     = $data
         LogDir      = Join-Path $data 'logs'

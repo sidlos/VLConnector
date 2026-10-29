@@ -53,7 +53,6 @@ foreach ($f in $shipped | Where-Object { $textExt -contains $_.Extension }) {
 $allowedBinary = '.png', '.ico'
 foreach ($f in $shipped) {
     if ($textExt -contains $f.Extension -or $f.Name -in 'LICENSE', 'VERSION' -or $allowedBinary -contains $f.Extension) { continue }
-    if ($f.Extension -in '.ezl') { continue }
     Add-Problem $f.FullName "unexpected file type '$($f.Extension)' in the shipped set"
 }
 

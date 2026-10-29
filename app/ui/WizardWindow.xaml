@@ -137,16 +137,6 @@
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Report layouts" Style="{StaticResource BodyText}"/>
-                                <TextBlock x:Name="LayoutsText" Style="{StaticResource CaptionText}" Text="A4 report with a large color map and a green OK or red NOK verdict."/>
-                            </StackPanel>
-                            <Button x:Name="BuildLayouts" Grid.Column="1" Content="Build" VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
                                 <TextBlock Text="Keep measured pieces" Style="{StaticResource BodyText}"/>
                                 <TextBlock Text="The PDF and CSV are always kept." Style="{StaticResource CaptionText}"/>
                             </StackPanel>
@@ -204,7 +194,7 @@
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Programs list" Style="{StaticResource BodyText}"/>
+                                <TextBlock Text="Measurement Programs List" Style="{StaticResource BodyText}"/>
                                 <TextBlock x:Name="ProgramsText" Text="Which PolyWorks template evaluates the scans of each VL program (.vld4)." Style="{StaticResource CaptionText}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <Button x:Name="EditPrograms" Grid.Column="1" Content="Edit list" VerticalAlignment="Center"/>

@@ -17,7 +17,6 @@ Unofficial tool - not an official KEYENCE or InnovMetric product. License: MIT.
 | `app\VLReplay.ps1` | started by the PolyWorks Measure macro or by the agent (`-Watch`) | Drives AI Replay in the VL Application (or follows a replay the operator started) and exports the STL. |
 | `app\polyworks\*.pwmacro` | inside PolyWorks, when the user presses the button | Evaluation, report, network station loop. |
 | `app\polyworks\Get-MacroContext.ps1`, `Station-Step.ps1` | started by the macros | Read settings, move job files (PolyWorks macros cannot read JSON). |
-| `app\polyworks\Make-ReportLayouts.ps1` | installer / settings window | Builds the report layouts from the installed PolyWorks A4 layout. |
 | `app\lib\*.ps1` | loaded by the scripts above | Shared code. `Native.ps1` holds all Windows API declarations; `PolyWorksLayout.ps1` the PolyWorks COM declarations (used only by *Add to PolyWorks*). |
 | `Install.ps1`, `Uninstall.ps1` | once, by the user | Installation, removal. |
 | `tools\Sign-Scripts.ps1` | by IT, optional | Signs the scripts with your certificate (AllSigned environments). |
@@ -63,7 +62,7 @@ It **never writes** KEYENCE files and never terminates VL.
 
 | Path | Content |
 |---|---|
-| `C:\ProgramData\VLConnector\` | The program (read and execute for all users; write only for administrators, SYSTEM and the installing user), `layouts\` (report layouts, writable for all users), the PolyWorks button files, `install-info.txt`. |
+| `C:\ProgramData\VLConnector\` | The program (read and execute for all users; write only for administrators, SYSTEM and the installing user), the PolyWorks button files, `install-info.txt`. |
 | `C:\ProgramData\VLConnector\machine.json` | Optional, created by IT: settings for all users of the PC. |
 | `%APPDATA%\VLConnector\settings.json` | Settings of the user (settings window). |
 | `%LOCALAPPDATA%\VLConnector\` | `logs\` (30 days), agent outbox and pending list, station work files, `polyworks-layout\` (backups of the PolyWorks visual layout made before *Add to PolyWorks*). |

@@ -262,28 +262,9 @@
                         <!-- ===== PolyWorks ===== -->
                         <StackPanel x:Name="PagePolyWorks" Visibility="Collapsed">
                             <TextBlock Text="PolyWorks" Style="{StaticResource TitleText}"/>
-                            <TextBlock Text="Report, measured pieces and the Measure button." Style="{StaticResource CaptionText}" FontSize="14" Margin="0,4,0,8"/>
+                            <TextBlock Text="Measured pieces, the PDF report and the Measure button." Style="{StaticResource CaptionText}" FontSize="14" Margin="0,4,0,8"/>
 
-                            <TextBlock Text="Report" Style="{StaticResource SectionText}"/>
-                            <Border Style="{StaticResource Card}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="44"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="&#xE8A5;" Style="{StaticResource IconText}"/>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
-                                        <TextBlock Text="Report layouts" Style="{StaticResource BodyText}"/>
-                                        <TextBlock Text="A4 report with a large color map and a green OK or red NOK verdict, built from your PolyWorks installation." Style="{StaticResource CaptionText}"/>
-                                    </StackPanel>
-                                    <Border x:Name="LayoutPill" Grid.Column="2" Style="{StaticResource Pill}" Background="{StaticResource SuccessBackBrush}" VerticalAlignment="Center" Margin="0,0,10,0">
-                                        <TextBlock x:Name="LayoutPillText" Text="Ready" FontSize="12" Foreground="{StaticResource SuccessBrush}"/>
-                                    </Border>
-                                    <Button x:Name="GenerateLayouts" Grid.Column="3" Content="Generate" VerticalAlignment="Center"/>
-                                </Grid>
-                            </Border>
+                            <TextBlock Text="Results" Style="{StaticResource SectionText}"/>
                             <Border Style="{StaticResource Card}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -428,7 +409,7 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="&#xE8FD;" Style="{StaticResource IconText}"/>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
-                                        <TextBlock Text="Programs list" Style="{StaticResource BodyText}"/>
+                                        <TextBlock Text="Measurement Programs List" Style="{StaticResource BodyText}"/>
                                         <TextBlock x:Name="ProgramsSummary" Text="Which PolyWorks template evaluates the scans of each VL program (.vld4)." Style="{StaticResource CaptionText}"/>
                                     </StackPanel>
                                     <Button x:Name="EditPrograms" Grid.Column="2" Content="Edit list" VerticalAlignment="Center"/>
@@ -511,7 +492,7 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="&#xE77B;" Style="{StaticResource IconText}"/>
                                     <TextBlock Grid.Column="1" Style="{StaticResource BodyText}" VerticalAlignment="Center"
-                                               Text="Contact your local sales engineer, who forwards questions to the local technical team."/>
+                                               Text="This is not official software. You can try contacting your local sales engineer, who can forward questions to the local technical team." TextWrapping="Wrap"/>
                                 </Grid>
                             </Border>
                             <TextBlock Text="Documents" Style="{StaticResource SectionText}"/>

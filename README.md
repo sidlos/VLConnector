@@ -1,7 +1,7 @@
 # VL Connector for PolyWorks
 
 VL Connector links **KEYENCE VL-800 AI Replay** scans with **PolyWorks|Inspector** evaluation and reports:
-press one button, scan the part in VL as usual, and get an A4 PDF report with a clear OK/NOK verdict.
+press one button, scan the part in VL as usual, and get a clear OK/NOK verdict with a PDF report.
 
 > **Unofficial tool.** It is not an official KEYENCE or InnovMetric product and is not covered by their
 > warranty or support. KEYENCE, VL-800 and PolyWorks are trademarks of their respective owners.
@@ -34,12 +34,12 @@ is never changed.
 2. Extract the ZIP and run **Install.cmd**. It checks every file, shows the package fingerprint (compare it
    with the one you received), installs to `C:\ProgramData\VLConnector` and creates the Start menu entries.
 3. The **setup wizard** opens at the end (later: Start menu > VL Connector > Setup wizard). It asks for the
-   scenario and the main options, builds the report layouts and **adds the VL Connector tab with the Measure or
+   scenario and the main options and **adds the VL Connector tab with the Measure or
    Station button to PolyWorks** (PolyWorks|Inspector must be open; the PolyWorks layout is saved before and
    can be restored). The settings window only holds settings (modes, options, start with Windows); scanning
    stays in VL and evaluating in PolyWorks.
 
-Update: run Install.cmd of the new version (settings, report layouts and the PolyWorks buttons stay).
+Update: run Install.cmd of the new version (settings and the PolyWorks buttons stay).
 Uninstall: Start menu > Uninstall VL Connector.
 
 ## Documents
@@ -52,8 +52,9 @@ Uninstall: Start menu > Uninstall VL Connector.
 
 ## Support
 
-Contact your local sales engineer, who forwards questions to the local technical team. In the settings window,
-**Diagnostics > Create ZIP** collects the logs and settings for them (no scans or reports).
+VL Connector is not official software. You can try contacting your local sales engineer, who can forward
+questions to the local technical team. In the settings window, **Diagnostics > Create ZIP** collects the logs
+and settings for them (no scans or reports).
 
 ## License
 

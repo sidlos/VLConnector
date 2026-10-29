@@ -11,11 +11,11 @@
     1. checks every file of the package against MANIFEST.sha256 and shows the package fingerprint
        (compare it with the fingerprint you received with the package),
     2. copies app\, docs\, the license and the uninstaller to the install folder (an older app\ is
-       replaced; report layouts and machine settings are kept) and removes the "downloaded from the
-       internet" mark from these files,
+       replaced, the layouts\ folder of earlier versions is removed; machine settings are kept) and
+       removes the "downloaded from the internet" mark from these files,
     3. limits write access to the install folder to administrators, SYSTEM and the installing user
-       (all users may only read and run it; the report layouts folder stays writable for all users),
-    4. creates the PolyWorks button files (Measure, Station) and, when PolyWorks is installed, the report layouts,
+       (all users may only read and run it),
+    4. creates the PolyWorks button files (Measure, Station),
     5. creates the Start menu entries VL Connector (settings), VL Connector agent (network scenario) and
        Uninstall VL Connector. The agent starts with Windows only when you switch it on in the settings.
 #>
@@ -103,7 +103,8 @@ if ([System.Threading.EventWaitHandle]::TryOpenExisting('Local\VLConnector_Agent
 }
 try {
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-    foreach ($old in 'app', 'docs', 'tools') {
+    # layouts\ held the report layouts that versions before 1.0.0-rc10 built from PolyWorks
+    foreach ($old in 'app', 'docs', 'tools', 'layouts') {
         $path = Join-Path $InstallDir $old
         if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
     }
@@ -122,13 +123,10 @@ catch {
 # 3) permissions: everybody may read and run, only administrators, SYSTEM and the installing user may change
 Say '3/5  Setting folder permissions...'
 $me = '*' + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-$layouts = Join-Path $InstallDir 'layouts'
-New-Item -ItemType Directory -Force -Path $layouts | Out-Null
-$acl1 = & icacls.exe $InstallDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' "${me}:(OI)(CI)M" '*S-1-5-32-545:(OI)(CI)RX' 2>&1
-$acl2 = & icacls.exe $layouts /grant '*S-1-5-32-545:(OI)(CI)M' 2>&1
-if ($LASTEXITCODE -ne 0) { Say "     Could not set all permissions: $($acl1 + $acl2 | Out-String)" Yellow } else { Say '     Done.' Green }
+$acl = & icacls.exe $InstallDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' "${me}:(OI)(CI)M" '*S-1-5-32-545:(OI)(CI)RX' 2>&1
+if ($LASTEXITCODE -ne 0) { Say "     Could not set all permissions: $($acl | Out-String)" Yellow } else { Say '     Done.' Green }
 
-# 4) PolyWorks: button file and report layouts
+# 4) PolyWorks: button files
 Say '4/5  Preparing PolyWorks...'
 $app = Join-Path $InstallDir 'app'
 foreach ($lib in 'Settings', 'PolyWorksSetup') { . (Join-Path $app "lib\$lib.ps1") }
@@ -137,13 +135,7 @@ Say "     Measure button file: $stub" Green
 $stub = New-VlcButtonStub -Kind Station
 Say "     Station button file: $stub" Green
 $pw = Get-PolyWorksInfo
-if ($pw) {
-    try {
-        & (Join-Path $app 'polyworks\Make-ReportLayouts.ps1') -Target $layouts | Out-Null
-        Say "     Report layouts built from $($pw.Name)." Green
-    }
-    catch { Say "     Report layouts not built: $($_.Exception.Message)" Yellow }
-}
+if ($pw) { Say "     $($pw.Name) found." Green }
 else { Say '     PolyWorks is not installed on this PC (fine for a scanner PC in the network scenario).' }
 
 # 5) Start menu

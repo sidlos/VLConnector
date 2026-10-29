@@ -74,14 +74,6 @@ function Update-SettingsStatus {
 
 function Update-PolyWorksPage {
     $c = $script:sc
-    if (Test-VlcReportLayouts) {
-        $c.LayoutPill.Background = Get-Brush 'SuccessBackBrush'; $c.LayoutPillText.Foreground = Get-Brush 'SuccessBrush'; $c.LayoutPillText.Text = 'Ready'
-        $c.GenerateLayouts.Content = 'Rebuild'
-    }
-    else {
-        $c.LayoutPill.Background = Get-Brush 'WarningBackBrush'; $c.LayoutPillText.Foreground = Get-Brush 'WarningBrush'; $c.LayoutPillText.Text = 'Not built'
-        $c.GenerateLayouts.Content = 'Build'
-    }
     if (Test-Path -LiteralPath (Get-VlcButtonStubPath)) {
         $c.ButtonPill.Background = Get-Brush 'SuccessBackBrush'; $c.ButtonPillText.Foreground = Get-Brush 'SuccessBrush'; $c.ButtonPillText.Text = 'Button file ready'
     }
@@ -97,7 +89,7 @@ function Update-ProgramsSummary([string]$Share) {
         $programs = @(Get-VlcPrograms $Share)
         $c.ProgramsSummary.Text = if ($programs.Count) { "$($programs.Count) program(s): " + (($programs | Select-Object -First 5 | ForEach-Object Program) -join ', ') } else { 'No programs yet.' }
     }
-    catch { $c.ProgramsSummary.Text = "The programs list cannot be read: $($_.Exception.Message)" }
+    catch { $c.ProgramsSummary.Text = "The Measurement Programs List cannot be read: $($_.Exception.Message)" }
 }
 
 function Update-AgentStatus {
@@ -111,7 +103,6 @@ function Invoke-StatusAction([string]$Id) {
             $dlg.Filter = 'VL Application (VLApplication4.exe)|VLApplication4.exe|Programs (*.exe)|*.exe'
             if ($dlg.ShowDialog($script:sw)) { Save-SettingValue 'vl.exe' $dlg.FileName; Update-SettingsStatus }
         }
-        'layouts' { Show-SettingsPage 'PolyWorks' }
         'button' { Show-SettingsPage 'PolyWorks' }
         'share' { Show-SettingsPage 'Network' }
         'programs' { Show-SettingsPage 'Network' }
@@ -206,14 +197,6 @@ function Show-SettingsWindow {
     })
 
     # --- PolyWorks ------------------------------------------------------------------------------
-    $c.GenerateLayouts.Add_Click({
-        try {
-            & (Join-Path (Get-VlcPaths).AppDir 'polyworks\Make-ReportLayouts.ps1') | Out-Null
-            Show-SettingsToast 'Report layouts built'
-        }
-        catch { [void][System.Windows.MessageBox]::Show($script:sw, $_.Exception.Message, 'VL Connector', 'OK', 'Warning') }
-        Update-PolyWorksPage
-    })
     $c.KeepPieces.Add_SelectionChanged({ Save-SettingValue 'polyworks.keepPieces' ([string]$this.SelectedItem.Tag) })
     $c.OpenPdf.Add_Checked({ Save-SettingValue 'polyworks.openPdf' $true }); $c.OpenPdf.Add_Unchecked({ Save-SettingValue 'polyworks.openPdf' $false })
     $c.CopyMacroPath.Add_Click({

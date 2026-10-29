@@ -38,7 +38,6 @@ DECLARE vUser ""
 DECLARE vUtc ""
 DECLARE vReportDir ""
 DECLARE vScanDir ""
-DECLARE vLayoutDir ""
 DECLARE vKeep "All"
 DECLARE vOpenPdf "1"
 DECLARE vScale "0.5"
@@ -98,7 +97,7 @@ SYSTEM COMMAND EXEC SYNC ( "IF", { "EXIST", "${_QUOTES}${vCtx}${_QUOTES}", "DEL"
 SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Get-MacroContext.ps1${_QUOTES}", "-Out", "${_QUOTES}${vCtx}${_QUOTES}", "-Pwk", "${_QUOTES}${vPwk}${_QUOTES}" }, vCallId )
 DATA_FILE READ LINE_FIELD ( $vCtx, 1, 2, vCtxState, "=", "On" )
 IF "$vCtxState" != "OK"
-    DATA_FILE READ LINE_FIELD ( $vCtx, 13, 2, vMsg, "=", "On" )
+    DATA_FILE READ LINE_FIELD ( $vCtx, 12, 2, vMsg, "=", "On" )
     IF "$vMsg" == ""
         SET vMsg "PowerShell could not run ${vApp}\polyworks\Get-MacroContext.ps1."
     ENDIF
@@ -110,11 +109,10 @@ DATA_FILE READ LINE_FIELD ( $vCtx, 3, 2, vUser, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 4, 2, vUtc, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 5, 2, vReportDir, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 6, 2, vScanDir, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 7, 2, vLayoutDir, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 8, 2, vKeep, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 9, 2, vOpenPdf, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 10, 2, vScale, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 11, 2, vDevice, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 7, 2, vKeep, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 8, 2, vOpenPdf, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 9, 2, vScale, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 10, 2, vDevice, "=", "On" )
 IF "$vPdfDir" != ""
     SET vReportDir $vPdfDir
 ENDIF
@@ -211,7 +209,6 @@ DATA_FILE APPEND LINE ( $vParams, { "TEMPLATE=$vTemplate" } )
 DATA_FILE APPEND LINE ( $vParams, { "STL=$vStl" } )
 DATA_FILE APPEND LINE ( $vParams, { "RUN=$vRun" } )
 DATA_FILE APPEND LINE ( $vParams, { "REPORT_DIR=$vReportDir" } )
-DATA_FILE APPEND LINE ( $vParams, { "LAYOUT_DIR=$vLayoutDir" } )
 DATA_FILE APPEND LINE ( $vParams, { "OPERATOR=$vUser" } )
 DATA_FILE APPEND LINE ( $vParams, { "PROGRAM=$vProgName" } )
 DATA_FILE APPEND LINE ( $vParams, { "UTC=$vUtc" } )

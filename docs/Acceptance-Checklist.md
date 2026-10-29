@@ -18,7 +18,7 @@ AI Replay program. Tick each line; note deviations.
 - [ ] **Measure** in the template: VL starts AI Replay with the right program and mode.
 - [ ] Progress window in PolyWorks shows the VL steps; scanning works as usual.
 - [ ] After the last position: STL exported, PolyWorks comes to the front, evaluation runs.
-- [ ] Verdict message and PDF: cover page with color map and OK/NOK, control table, views; CSV next to it.
+- [ ] Verdict message (OK/NOK) and PDF in PolyWorks' standard layout: control table, color map views; CSV next to it.
 - [ ] Piece `<template>_<date>_<time>` saved; the template is unchanged.
 - [ ] **Measure** again while the piece is open: starts from the template.
 - [ ] **Cancel** in the progress window during the scan: the run stops with "cancelled".
@@ -26,12 +26,12 @@ AI Replay program. Tick each line; note deviations.
 - [ ] Optional: *Confirm stage movement automatically* - the stage dialogs are answered (watch the safety!).
 - [ ] Optional: *VL window after the export* = Close / Save and close - VL closes only after the export.
 - [ ] Optional: keep pieces *Only NOK* - an OK piece is removed, the PDF stays.
-- [ ] A NOK part (or tightened tolerance) gives a red NOK report.
+- [ ] A NOK part (or tightened tolerance) gives the verdict NOK.
 
 ## Scenario B (PolyWorks on another PC)
 
 - [ ] Shared folder entered on both PCs; **Test** is green on both.
-- [ ] `programs.csv` filled (VL program -> workspace and template on the station).
+- [ ] Measurement Programs List (`programs.csv`) filled (VL program -> workspace and template on the station).
 - [ ] Station PC: wizard (PolyWorks station) > **Add to PolyWorks** - tab "VL Connector" with **VL Station**;
       it runs and shows the shared folder.
 - [ ] Scanner PC: agent switched on (*Start with Windows*), icon in the notification area; after a Windows
@@ -43,7 +43,7 @@ AI Replay program. Tick each line; note deviations.
 - [ ] A second scanner PC (if any) does **not** open the reports of the first one.
 - [ ] Shared folder unreachable during a scan: the STL waits in the outbox and is sent later.
 - [ ] Station stopped: agent menu shows *station offline*; the scan is evaluated after the station starts.
-- [ ] VL program missing in `programs.csv`: a notification "not evaluated" with the reason.
+- [ ] VL program missing in the Measurement Programs List: a notification "not evaluated" with the reason.
 
 ## Result
 

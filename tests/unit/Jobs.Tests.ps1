@@ -68,13 +68,13 @@ Describe 'network job protocol' {
         $id | Should Match '_Part-A-1-left_'
         Test-VlcJobId '..\evil_job' | Should Be $false
     }
-    It 'prepares the shared folder and the programs list' {
+    It 'prepares the shared folder and the Measurement Programs List' {
         (Test-VlcShare $share).Ok | Should Be $true
         Save-VlcPrograms $share @([pscustomobject]@{ Program = 'ABC'; Workspace = $workspace; Template = 'ABC template' })
         (Find-VlcProgram $share 'C:\VL\Programs\abc.vld4').Template | Should Be 'ABC template'
         Find-VlcProgram $share 'other.vld4' | Should Be $null
     }
-    It 'refuses programs list values with separators' {
+    It 'refuses Measurement Programs List values with separators' {
         { Save-VlcPrograms $share @([pscustomobject]@{ Program = 'A;B'; Workspace = $workspace; Template = 'T' }) } | Should Throw
     }
 
@@ -129,7 +129,7 @@ Describe 'network job protocol' {
         $id4 = New-VlcJobId 'XYZ'
         [void](New-VlcOutboxJob $id4 'XYZ' $stl 'xyz.vld4'); [void](Send-VlcOutbox $share)
         Get-VlcNextJob $share | Should Be $null
-        (Read-KeyValueFile (Join-Path $share "reports\$id4.result")).MESSAGE | Should Match 'not in the programs list'
+        (Read-KeyValueFile (Join-Path $share "reports\$id4.result")).MESSAGE | Should Match 'not in the Measurement Programs List'
     }
     It 'recognizes complete and truncated PDF and STL files' {
         $p1 = Join-Path $root 'ok.pdf'; New-TestPdf $p1

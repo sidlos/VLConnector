@@ -1,4 +1,4 @@
-# PolyWorks side of the setup: finds PolyWorks, writes the Measure button stub, checks the report layouts.
+# PolyWorks side of the setup: finds PolyWorks and writes the Measure and Station button stubs.
 # Dot-source this file (it has no param block); it needs lib\Settings.ps1.
 
 # The PolyWorks installation (folder and version) from the COM registration of the Workspace Manager.
@@ -39,9 +39,4 @@ MACRO EXEC ( "$app\polyworks\VLC_$Kind.pwmacro", "$app" )
 "@
     [IO.File]::WriteAllText($Path, ($text -replace "`r?`n", "`r`n"), (New-Object Text.UTF8Encoding($true)))
     return $Path
-}
-
-function Test-VlcReportLayouts {
-    $dir = (Get-VlcPaths).LayoutDir
-    return (Test-Path -LiteralPath (Join-Path $dir 'VL_Report_OK.ezl')) -and (Test-Path -LiteralPath (Join-Path $dir 'VL_Report_NOK.ezl'))
 }

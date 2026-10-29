@@ -38,7 +38,7 @@ function New-VlcDiagnosticsZip([string]$Folder = [Environment]::GetFolderPath('D
             Get-ChildItem -LiteralPath $paths.LogDir -Filter '*.log' | Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-14) } |
                 Copy-Item -Destination $logs
         }
-        Get-ChildItem -LiteralPath $paths.InstallDir -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\(layouts|\.git|tests|dist)\\' } |
+        Get-ChildItem -LiteralPath $paths.InstallDir -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\(\.git|tests|dist)\\' } |
             ForEach-Object { '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash, $_.FullName.Substring($paths.InstallDir.Length + 1) } |
             Set-Content -LiteralPath (Join-Path $temp 'installed-files.sha256') -Encoding UTF8
         $zip = Join-Path $Folder "VLConnector_diagnostics_$($env:COMPUTERNAME)_$stamp.zip"

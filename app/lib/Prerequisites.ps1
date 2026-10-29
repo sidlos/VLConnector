@@ -26,11 +26,7 @@ function Get-VlcStatusItems($Settings) {
 
     if ($needsPolyWorks) {
         $pw = Get-PolyWorksInfo
-        if ($pw) {
-            $items.Add((New-VlcStatusItem 'pw' 'Ok' "$($pw.Name) (Inspector $($pw.InspectorVersion))" $pw.Dir))
-            if (Test-VlcReportLayouts) { $items.Add((New-VlcStatusItem 'layouts' 'Ok' 'Report layouts' 'Built from your PolyWorks A4 layout.')) }
-            else { $items.Add((New-VlcStatusItem 'layouts' 'Warning' 'Report layouts missing' 'Reports use the plain PolyWorks layout until the VL Connector layouts are built.' 'Build')) }
-        }
+        if ($pw) { $items.Add((New-VlcStatusItem 'pw' 'Ok' "$($pw.Name) (Inspector $($pw.InspectorVersion))" $pw.Dir)) }
         else { $items.Add((New-VlcStatusItem 'pw' 'Error' 'PolyWorks not found' 'PolyWorks Metrology Suite must be installed on this PC for this scenario.')) }
     }
 
@@ -55,8 +51,8 @@ function Get-VlcStatusItems($Settings) {
             $items.Add((New-VlcStatusItem 'share' $level "Shared folder $share" $test.Text $(if ($test.Ok) { '' } else { 'Set up' })))
             if ($test.Ok) {
                 $programs = @(Get-VlcPrograms $share)
-                if ($programs.Count) { $items.Add((New-VlcStatusItem 'programs' 'Ok' "$($programs.Count) VL program(s) in the programs list" (($programs | Select-Object -First 4 | ForEach-Object Program) -join ', '))) }
-                else { $items.Add((New-VlcStatusItem 'programs' 'Warning' 'Programs list is empty' 'Add which PolyWorks template evaluates each VL program (page Network).' 'Edit list')) }
+                if ($programs.Count) { $items.Add((New-VlcStatusItem 'programs' 'Ok' "$($programs.Count) VL program(s) in the Measurement Programs List" (($programs | Select-Object -First 4 | ForEach-Object Program) -join ', '))) }
+                else { $items.Add((New-VlcStatusItem 'programs' 'Warning' 'Measurement Programs List is empty' 'Add which PolyWorks template evaluates each VL program (page Network).' 'Edit list')) }
             }
             if (-not $station) {
                 $auto = Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('Startup')) 'VL Connector agent.lnk')

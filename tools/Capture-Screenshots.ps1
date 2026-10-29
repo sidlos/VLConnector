@@ -39,7 +39,6 @@ $c.StatusList.ItemsSource = @(
     [pscustomobject]@{ Id = 'vl'; Title = 'VL Application 4.6.1'; Detail = 'C:\Program Files\KEYENCE\VL-800 Series\VL Application'; Glyph = $check; Fore = $ok; Back = $okBack; Action = ''; ActionVisibility = 'Collapsed' }
     [pscustomobject]@{ Id = 'pw'; Title = 'PolyWorks MS 2026 (Inspector 26.5)'; Detail = 'C:\Program Files\InnovMetric\PolyWorks MS 2026'; Glyph = $check; Fore = $ok; Back = $okBack; Action = ''; ActionVisibility = 'Collapsed' }
     [pscustomobject]@{ Id = 'ps'; Title = 'PowerShell full language mode'; Detail = 'Scripts can use Windows and PolyWorks interfaces.'; Glyph = $check; Fore = $ok; Back = $okBack; Action = ''; ActionVisibility = 'Collapsed' }
-    [pscustomobject]@{ Id = 'layouts'; Title = 'Report layouts'; Detail = 'Generated from your PolyWorks A4 layout.'; Glyph = $check; Fore = $ok; Back = $okBack; Action = ''; ActionVisibility = 'Collapsed' }
     [pscustomobject]@{ Id = 'button'; Title = 'Measure button in PolyWorks'; Detail = 'Not found in your PolyWorks ribbon yet.'; Glyph = $alert; Fore = $warn; Back = $warnBack; Action = 'Show me how'; ActionVisibility = 'Visible' }
 )
 
