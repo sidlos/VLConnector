@@ -33,3 +33,13 @@ Fixed after the live test at the scanner (2026-10-29, 1.0.0-rc4):
 - Station: **Stop** stays usable after a job that could not be evaluated (the progress window was left
   disabled).
 - PolyWorks progress windows show names with "_" correctly (they were doubled).
+
+1.0.0-rc8 (2026-10-29):
+- New VL Connector logo, our own drawing: the letters "VL" in slate grey with a thin white outline (readable on a
+  dark taskbar). Used for the shortcuts, the notification area, the windows, the PolyWorks button and the
+  screenshots in the documentation; `tools\Make-Icons.ps1` draws all icon files from one drawing.
+- The PolyWorks button icon is a small vector SVG: PolyWorks draws only vector SVG icons of at most 32767 bytes.
+- **Add to PolyWorks** again (wizard, settings) takes the newly imported button. Before, PolyWorks named the new
+  macro "<name> (2)", "(3)", ..., the tab kept the old button and the copies piled up in the PolyWorks macro list;
+  now earlier copies that no button uses are removed. It also works more than once in the same Inspector session
+  (PolyWorks refuses a second import of the same macro name there; the button then gets a name with a time stamp).

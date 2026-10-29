@@ -137,14 +137,15 @@ function Read-ZipText([string]$Zip, [string]$Entry) {
     finally { $z.Dispose() }
 }
 
-# Copies a layout ZIP and replaces layout.xml.
-function Write-LayoutWithXml([string]$Source, [string]$Target, [string]$Xml) {
+# Copies a layout ZIP, replaces layout.xml and leaves out the entries named in $Drop.
+function Write-LayoutWithXml([string]$Source, [string]$Target, [string]$Xml, [string[]]$Drop = @()) {
     Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
     if (Test-Path -LiteralPath $Target) { Remove-Item -LiteralPath $Target -Force }
     $in = [IO.Compression.ZipFile]::OpenRead($Source)
     $out = [IO.Compression.ZipFile]::Open($Target, 'Create')
     try {
         foreach ($e in $in.Entries) {
+            if ($Drop -contains $e.FullName) { continue }
             $ne = $out.CreateEntry($e.FullName)
             $ws = $ne.Open()
             try {
@@ -159,9 +160,9 @@ function Write-LayoutWithXml([string]$Source, [string]$Target, [string]$Xml) {
 
 # A minimal visual layout with only the VL Connector button macro: macro text, icon (SVG) and description,
 # in the format PolyWorks itself exports.
-function New-VlcButtonLayout([string]$Path, [string]$Kind, [string]$InfoXml) {
+function New-VlcButtonLayout([string]$Path, [string]$Kind, [string]$InfoXml, [string]$Suffix = '') {
     Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-    $name = "VLC_${Kind}_Button.pwmacro"
+    $name = "VLC_${Kind}_Button$Suffix.pwmacro"
     $stubPath = Get-VlcButtonStubPath $Kind
     if (-not (Test-Path -LiteralPath $stubPath)) { [void](New-VlcButtonStub -Kind $Kind) }
     $macro = [IO.File]::ReadAllBytes($stubPath)
@@ -184,6 +185,26 @@ function New-VlcButtonLayout([string]$Path, [string]$Kind, [string]$InfoXml) {
     return $name
 }
 
+# layout.xml without the VL Connector tab and without the hidden toolbars of earlier button imports.
+function Remove-VlcLayoutParts([string]$Xml) {
+    $Xml = [regex]::Replace($Xml, '<CommandBar Class="CIMXtToolBar"[^>]*Title="Macros from VL Connector buttons[^"]*".*?</CommandBar>', '', 'Singleline')
+    return [regex]::Replace($Xml, '<Tab Class="CIMXtRibbonTab" Caption="VL Connector".*?</Tab>', '', 'Singleline')
+}
+
+# ZIP entries (macro text, icon, description) of VL Connector button macros that no control in $Xml uses.
+# A button the user placed elsewhere (e.g. the Quick Access Toolbar) still uses its macro, so it stays.
+function Get-VlcUnusedButtonEntries([string]$Zip, [string]$Xml) {
+    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+    $used = @([regex]::Matches($Xml, 'resString="([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+    $z = [IO.Compression.ZipFile]::OpenRead($Zip)
+    try {
+        return @($z.Entries | Where-Object {
+            $_.FullName -match '^(macro\\|icon/|desc/)(VLC_[A-Za-z]+_Button[^\\/]*\.pwmacro.*)$' -and $used -notcontains $Matches[2] } |
+            ForEach-Object { $_.FullName })
+    }
+    finally { $z.Dispose() }
+}
+
 # Adds (or renews) the "VL Connector" ribbon tab with the button of $Kind (Measure or Station) in the open
 # PolyWorks|Inspector. Returns the path of the backup of the previous layout.
 function Install-VlcPolyWorksTab([ValidateSet('Measure', 'Station')] [string]$Kind = 'Measure') {
@@ -202,33 +223,44 @@ function Install-VlcPolyWorksTab([ValidateSet('Measure', 'Station')] [string]$Ki
     $info = Read-ZipText $backup 'info.xml'
     if (-not $info) { throw 'The PolyWorks visual layout has an unknown format (no info.xml).' }
 
-    # 2) + 3) import the button macro, export the result
-    $macroName = New-VlcButtonLayout $buttons $Kind $info
+    # 2) + 3) import the button macro, export the result. PolyWorks refuses a second import of a macro name
+    #    in the same Inspector session ("Command failed"), so a repeated Add takes a name with a time stamp.
     $script = "version `"7.0`"`r`nMACRO END_ON_ERROR ( `"Off`" )`r`nDECLARE vSt `"`"`r`nDECLARE vErr `"`"`r`nDECLARE vSt2 `"`"`r`nDECLARE vErr2 `"`"`r`n" +
         "WINDOW VISUAL_LAYOUT IMPORT_MACRO_SCRIPTS FROM_LAYOUT ( `"$buttons`" )`r`nMACRO GET_ERROR_STATUS ( vSt, vErr )`r`n" +
         "WINDOW VISUAL_LAYOUT EXPORT ( `"$exported`" )`r`nMACRO GET_ERROR_STATUS ( vSt2, vErr2 )`r`n"
+    $macroName = New-VlcButtonLayout $buttons $Kind $info
     $r = Invoke-VlcInspectorScript $insp $script @('vSt', 'vErr', 'vSt2', 'vErr2')
+    if ($r.vSt -ne 'No Error') {
+        $macroName = New-VlcButtonLayout $buttons $Kind $info "_$stamp"
+        $r = Invoke-VlcInspectorScript $insp $script @('vSt', 'vErr', 'vSt2', 'vErr2')
+    }
     if ($r.vSt -ne 'No Error') { throw "PolyWorks could not import the button: $($r.vErr)" }
     if ($r.vSt2 -ne 'No Error' -or -not (Test-Path -LiteralPath $exported)) { throw "The PolyWorks visual layout could not be read: $($r.vErr2)" }
 
-    # 4) the button control PolyWorks created (with its icon), moved into a "VL Connector" ribbon tab
+    # 4) the button control PolyWorks created (with its icon), moved into a "VL Connector" ribbon tab. It is
+    #    taken from the toolbar of this import: when an earlier copy of the macro exists, PolyWorks names the new
+    #    one "<name> (2)", "(3)", ..., and a search by name would find the old button with the old icon.
     $xml = Read-ZipText $exported 'layout.xml'
-    $esc = [regex]::Escape($macroName)
-    $ctl = [regex]::Match($xml, '<Control Class="CIMXtControlButtonMacro"[^>]*resString="' + $esc + '".*?</Control>', 'Singleline')
+    $bar = [regex]::Match($xml, '<CommandBar Class="CIMXtToolBar"[^>]*Title="Macros from VL Connector buttons[^"]*".*?</CommandBar>', 'Singleline')
+    $ctl = [regex]::Match($bar.Value, '<Control Class="CIMXtControlButtonMacro"[^>]*resString="([^"]+)".*?</Control>', 'Singleline')
+    if (-not $ctl.Success) { $ctl = [regex]::Match($xml, '<Control Class="CIMXtControlButtonMacro"[^>]*resString="(' + [regex]::Escape($macroName) + ')".*?</Control>', 'Singleline') }
     if (-not $ctl.Success) { throw 'PolyWorks did not create the button (layout format unknown). Add it by hand, see the User Guide.' }
+    $newName = $ctl.Groups[1].Value
+    $esc = [regex]::Escape($newName)
     $caption = @{ Measure = 'Measure'; Station = 'VL Station' }[$Kind]
     $control = $ctl.Value -replace ('Caption="' + $esc + '"'), ('Caption="' + $caption + '"')
-    # the hidden toolbars that the import created ("Macros from ...") are not needed
-    $xml = [regex]::Replace($xml, '<CommandBar Class="CIMXtToolBar"[^>]*Title="Macros from VL Connector buttons[^"]*".*?</CommandBar>', '', 'Singleline')
-    # an older VL Connector tab is replaced
-    $xml = [regex]::Replace($xml, '<Tab Class="CIMXtRibbonTab" Caption="VL Connector".*?</Tab>', '', 'Singleline')
+    # the hidden toolbar of the import and an older VL Connector tab are replaced
+    $xml = Remove-VlcLayoutParts $xml
     $tab = '<Tab Class="CIMXtRibbonTab" Caption="VL Connector" tabType="2"><Groups><Group Class="CIMXtRibbonGroup" Caption="VL Connector" groupType="2"><Controls>' +
         $control + '</Controls><ControlGroupOption Flags="16" HideFlags="129" Width="0" Height="0"/><ControlGroupPopup Type="3" Id="0" Flags="24" HideFlags="128" Caption="VL Connector" Width="0" Height="0"/></Group></Groups></Tab>'
-    $anchor = [regex]::Matches($xml, '<Tab Class="CIMXtRibbonTab" Caption="[^"]*" tabType="2">.*?</Tab>', 'Singleline') | Select-Object -Last 1
+    $anchor = [regex]::Matches($xml, '<Tab Class="CIMXtRibbonTab" Caption="[^"]*"[^>]*tabType="2">.*?</Tab>', 'Singleline') | Select-Object -Last 1
     if (-not $anchor) { $anchor = [regex]::Match($xml, '<Tab Class="CIMXtRibbonTab" Caption="Help".*?</Tab>', 'Singleline') }
     if (-not $anchor -or -not $anchor.Success) { throw 'The ribbon of this PolyWorks version has an unknown format. Add the button by hand, see the User Guide.' }
     $xml = $xml.Insert($anchor.Index + $anchor.Length, $tab)
-    Write-LayoutWithXml $exported $final $xml
+    # earlier copies of VL Connector button macros that no button uses any more are left out. (A layout
+    # without any macro button makes PolyWorks drop its whole ribbon, so this happens only here, together
+    # with the new button, never in a step of its own.)
+    Write-LayoutWithXml $exported $final $xml @(Get-VlcUnusedButtonEntries $exported $xml)
 
     # 5) load it and check
     $check = Join-Path $work "check_$stamp"
@@ -237,7 +269,9 @@ function Install-VlcPolyWorksTab([ValidateSet('Measure', 'Station')] [string]$Ki
     $r = Invoke-VlcInspectorScript $insp $script @('vSt', 'vErr')
     $ok = $false
     if ($r.vSt -eq 'No Error' -and (Test-Path -LiteralPath $check)) {
-        $ok = [regex]::IsMatch((Read-ZipText $check 'layout.xml'), ('Caption="VL Connector" tabType="2"><Groups>.*?resString="' + $esc + '"'), 'Singleline')
+        $loaded = Read-ZipText $check 'layout.xml'
+        $ok = [regex]::IsMatch($loaded, '<Tab Class="CIMXtRibbonTab" Caption="Help"') -and
+              [regex]::IsMatch($loaded, ('Caption="VL Connector"[^>]*tabType="2"><Groups>.*?resString="' + $esc + '"'), 'Singleline')
     }
     if (-not $ok) {
         [void](Invoke-VlcInspectorScript $insp ("version `"7.0`"`r`nWINDOW VISUAL_LAYOUT LOAD ( `"$backup`", `"Off`" )`r`n") @())

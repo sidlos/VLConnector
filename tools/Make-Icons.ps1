@@ -1,7 +1,13 @@
 <#
-  Development tool: draws the VL Connector icon (scanner head, laser fan, part, green check) and
-  writes app\assets\VLC_icon_<size>.png and VLC_icon.ico (PNG-compressed icon entries).
-  The SVG version (app\assets\VLC_icon.svg) shows the same drawing.
+  Development tool: draws the VL Connector logo - the letters "VL" as two plain shapes in slate grey with a thin
+  white outline (unseen on light backgrounds, readable on a dark taskbar) - and writes every icon file in
+  app\assets from that one drawing:
+      VLC_icon.ico       16, 24, 32, 48, 64 and 256 px (PNG entries): shortcuts, notification area
+      VLC_icon_256.png   settings window, setup wizard
+      VLC_icon_64.png, VLC_icon_32.png
+      VLC_icon.svg       the PolyWorks ribbon button. PolyWorks draws only vector SVG icons of at most 32767
+                         bytes (a picture inside the SVG stays empty), so the SVG holds the same two shapes.
+  The logo is our own drawing: VL Connector must not look like official KEYENCE software.
 #>
 param([string]$OutDir = (Join-Path (Split-Path $PSScriptRoot) 'app\assets'))
 
@@ -9,48 +15,60 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-function New-IconBitmap([int]$Px) {
-    $s = $Px / 32.0
+$color = '#334155'
+# the two letters in a 100 x 100 grid (V with a flat foot, L), stroke width 13
+$sw = 13; $top = 20; $bottom = 80
+$v = @(@(6, $top), @((6 + $sw * 1.15), $top), @(30, ($bottom - $sw * 1.25)), @((54 - $sw * 1.15), $top), @(54, $top), @((30 + $sw * 0.62), $bottom), @((30 - $sw * 0.62), $bottom))
+$l = @(@(61, $top), @((61 + $sw), $top), @((61 + $sw), ($bottom - $sw)), @(94, ($bottom - $sw)), @(94, $bottom), @(61, $bottom))
+$letters = @(, $v) + @(, $l)
+
+function New-LogoBitmap([int]$Px) {
     $bmp = New-Object Drawing.Bitmap $Px, $Px
     $g = [Drawing.Graphics]::FromImage($bmp)
-    $g.SmoothingMode = 'AntiAlias'
+    $g.SmoothingMode = 'AntiAlias'; $g.PixelOffsetMode = 'HighQuality'
     $g.Clear([Drawing.Color]::Transparent)
-    $g.ScaleTransform($s, $s)
-    function C([string]$Hex, [int]$A = 255) {
-        [Drawing.Color]::FromArgb($A, [Convert]::ToInt32($Hex.Substring(0, 2), 16), [Convert]::ToInt32($Hex.Substring(2, 2), 16), [Convert]::ToInt32($Hex.Substring(4, 2), 16))
+    $g.ScaleTransform($Px / 100.0, $Px / 100.0)
+    $brush = New-Object Drawing.SolidBrush ([Drawing.ColorTranslator]::FromHtml($color))
+    # a thin white outline: invisible on light backgrounds, keeps the letters readable on a dark taskbar
+    $halo = New-Object Drawing.Pen ([Drawing.Color]::White), ([single][Math]::Max(6, 200.0 / $Px))
+    $halo.LineJoin = 'Round'
+    foreach ($shape in $letters) {
+        $points = [Drawing.PointF[]]@($shape | ForEach-Object { New-Object Drawing.PointF ([single]$_[0]), ([single]$_[1]) })
+        $g.DrawPolygon($halo, $points)
     }
-    $dark = New-Object Drawing.SolidBrush (C '37474f')
-    $g.FillRectangle($dark, 9, 1.5, 14, 5.5)
-    $g.FillRectangle($dark, 14, 7, 4, 1.5)
-    $fan = [Drawing.PointF[]]@((New-Object Drawing.PointF 16, 8.5), (New-Object Drawing.PointF 3.5, 21), (New-Object Drawing.PointF 28.5, 21))
-    $g.FillPolygon((New-Object Drawing.SolidBrush (C 'ff8f00' 72)), $fan)
-    $orange = New-Object Drawing.Pen (C 'ff6f00'), 1
-    $g.DrawLine($orange, 16, 8.5, 3.5, 21)
-    $g.DrawLine($orange, 16, 8.5, 28.5, 21)
-    $g.FillRectangle((New-Object Drawing.SolidBrush (C '90a4ae')), 3, 21.5, 26, 7)
-    $g.FillRectangle((New-Object Drawing.SolidBrush (C 'b0bec5')), 3, 21.5, 26, 2)
-    $g.DrawLine((New-Object Drawing.Pen (C 'e53935'), 1.6), 3.5, 21, 28.5, 21)
-    $g.FillEllipse((New-Object Drawing.SolidBrush (C '2e7d32')), 18, 18, 13, 13)
-    $g.DrawEllipse((New-Object Drawing.Pen ([Drawing.Color]::White), 1.2), 18, 18, 13, 13)
-    $check = New-Object Drawing.Pen ([Drawing.Color]::White), 2
-    $check.StartCap = 'Round'; $check.EndCap = 'Round'; $check.LineJoin = 'Round'
-    $g.DrawLines($check, [Drawing.PointF[]]@((New-Object Drawing.PointF 21.3, 24.6), (New-Object Drawing.PointF 23.7, 27), (New-Object Drawing.PointF 27.8, 22.2)))
+    foreach ($shape in $letters) { $g.FillPolygon($brush, [Drawing.PointF[]]@($shape | ForEach-Object { New-Object Drawing.PointF ([single]$_[0]), ([single]$_[1]) })) }
     $g.Dispose()
     return $bmp
+}
+
+# Icon entry as a 32-bit bitmap (bottom-up BGRA rows, then an empty AND mask): small sizes must not be PNG,
+# System.Drawing (notification area icon) cannot draw PNG entries below 256 px
+function Get-BmpEntry($Bmp) {
+    $n = $Bmp.Width
+    $ms = New-Object IO.MemoryStream
+    $w = New-Object IO.BinaryWriter($ms)
+    $w.Write([uint32]40); $w.Write([int32]$n); $w.Write([int32]($n * 2)); $w.Write([uint16]1); $w.Write([uint16]32)
+    $w.Write([uint32]0); $w.Write([uint32]0); $w.Write([int32]0); $w.Write([int32]0); $w.Write([uint32]0); $w.Write([uint32]0)
+    for ($y = $n - 1; $y -ge 0; $y--) {
+        for ($x = 0; $x -lt $n; $x++) { $c = $Bmp.GetPixel($x, $y); $w.Write([byte]$c.B); $w.Write([byte]$c.G); $w.Write([byte]$c.R); $w.Write([byte]$c.A) }
+    }
+    $w.Write((New-Object byte[] ([int][Math]::Ceiling($n / 32.0) * 4 * $n)))
+    $w.Flush()
+    return , $ms.ToArray()   # the comma keeps PowerShell from unrolling the byte array
 }
 
 $sizes = 16, 24, 32, 48, 64, 256
 $pngs = @{}
 foreach ($size in $sizes) {
-    $bmp = New-IconBitmap $size
+    $bmp = New-LogoBitmap $size
     $ms = New-Object IO.MemoryStream
     $bmp.Save($ms, [Drawing.Imaging.ImageFormat]::Png)
-    $pngs[$size] = $ms.ToArray()
-    if ($size -in 32, 64, 256) { [IO.File]::WriteAllBytes((Join-Path $OutDir "VLC_icon_$size.png"), $pngs[$size]) }
+    if ($size -in 32, 64, 256) { [IO.File]::WriteAllBytes((Join-Path $OutDir "VLC_icon_$size.png"), $ms.ToArray()) }
+    if ($size -eq 256) { $pngs[$size] = [byte[]]$ms.ToArray() } else { $pngs[$size] = [byte[]](Get-BmpEntry $bmp) }
     $bmp.Dispose()
 }
 
-# ICO: header, one directory entry per size, then the PNG data
+# ICO: header, one directory entry per size, then the image data (256 px as PNG, the others as bitmaps)
 $ico = New-Object IO.MemoryStream
 $w = New-Object IO.BinaryWriter($ico)
 $w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]$sizes.Count)
@@ -65,4 +83,13 @@ foreach ($size in $sizes) {
 foreach ($size in $sizes) { $w.Write($pngs[$size]) }
 $w.Flush()
 [IO.File]::WriteAllBytes((Join-Path $OutDir 'VLC_icon.ico'), $ico.ToArray())
+
+# SVG with the same two shapes
+$inv = [Globalization.CultureInfo]::InvariantCulture
+$d = ($letters | ForEach-Object { 'M' + (($_ | ForEach-Object { $_[0].ToString('0.##', $inv) + ' ' + $_[1].ToString('0.##', $inv) }) -join ' L') + ' Z' }) -join ' '
+$svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 100 100">' + "`n" +
+       "  <path fill=`"#FFFFFF`" stroke=`"#FFFFFF`" stroke-width=`"6.25`" stroke-linejoin=`"round`" d=`"$d`"/>" + "`n" +
+       "  <path fill=`"$color`" d=`"$d`"/>" + "`n" + '</svg>' + "`n"
+if ($svg.Length -gt 32767) { throw "The SVG icon has $($svg.Length) bytes; PolyWorks takes at most 32767." }
+[IO.File]::WriteAllText((Join-Path $OutDir 'VLC_icon.svg'), $svg, (New-Object Text.UTF8Encoding($false)))
 Get-ChildItem $OutDir -Filter 'VLC_icon*' | ForEach-Object { '{0} {1} B' -f $_.Name, $_.Length }
