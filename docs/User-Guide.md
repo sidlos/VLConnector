@@ -133,7 +133,8 @@ The button only calls the installed macro, so updates of VL Connector need no ne
 ### Measuring
 
 1. Open the part template (or the last measured piece of the part) in PolyWorks|Inspector.
-2. Press **Measure**. A progress window shows what VL is doing; **Cancel** stops the scan.
+2. Press **Measure**. A progress window shows what VL is doing; **Cancel** stops the measurement in PolyWorks.
+   AI Replay in VL is not stopped by it: finish or close it in VL.
 3. Scan the part in VL as usual (place the part, press Measure in VL for each position).
 4. After the last position the STL is exported, PolyWorks evaluates it (about 15-30 s) and shows the verdict.
    The PDF opens if this is switched on.

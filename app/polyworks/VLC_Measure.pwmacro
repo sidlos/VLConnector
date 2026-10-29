@@ -70,8 +70,6 @@ DECLARE vKept "1"
 DECLARE vRMsg ""
 DECLARE vIcon "Information"
 DECLARE vNote ""
-DECLARE vShowTemplate ""
-DECLARE vShowProgram ""
 
 IF "$vApp" == ""
     MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector: the Measure button is not set up correctly.", "Import VLC_Measure_Button.pwmacro from the VL Connector folder again.", "See the User Guide, chapter 'Measure button'." )
@@ -141,32 +139,32 @@ ELSE
     SET vMarker "${vScanDir}\vlc_${vRun}.done"
     SET vStatus "${vMarker}.status"
     SYSTEM COMMAND EXEC ASYNC ( "powershell.exe", { "-NoProfile", "-STA", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\VLReplay.ps1${_QUOTES}", "${_QUOTES}${vProgram}${_QUOTES}", "-MarkerFile", "${_QUOTES}${vMarker}${_QUOTES}", "-OutputDir", "${_QUOTES}${vScanDir}${_QUOTES}", "-Options", "${_QUOTES}${vOptions}${_QUOTES}" }, vCallId )
-    # the PolyWorks progress window shows "_" only when doubled (a single one marks a keyboard shortcut)
-    MACRO STRING REPLACE ( $vTemplate, "_", "__", 1, , vShowTemplate )
-    MACRO STRING REPLACE ( $vProgName, "_", "__", 1, , vShowProgram )
-    MACRO PROGRESS SHOW ( "VL Connector - $vShowTemplate", "Program: $vShowProgram", 0, $vTimeoutS, "Cancel" )
+    MACRO PROGRESS SHOW ( "VL Connector - $vTemplate", "Program: $vProgName", 0, $vTimeoutS, "Cancel" )
     MACRO PROGRESS STATUS MESSAGE ( "Starting AI Replay in VL..." )
     WHILE $vFound == 0
         MACRO SLEEP ( 1000 )
         ++ vElapsed
-        MACRO PROGRESS VALUE ( $vElapsed )
-        SET vText ""
-        DATA_FILE READ LINE_FIELD ( $vStatus, 2, 2, vText, "=", "On" )
-        IF "$vText" != "" AND "$vText" != "$vLastText"
-            MACRO PROGRESS STATUS MESSAGE ( $vText )
-            SET vLastText $vText
+        # Cancel first: PolyWorks closes the progress window when Cancel is pressed; MACRO PROGRESS VALUE and
+        # STATUS MESSAGE then stop the macro with the message "No progress window is currently active".
+        IF $vCancelled == 0
+            MACRO PROGRESS CANCEL_REQUESTED GET ( vCancel )
+            IF $vCancel == "On"
+                # VLReplay.ps1 sees the .cancel file and ends with a CANCELLED marker
+                DATA_FILE CREATE ( "${vMarker}.cancel", "Ascii", "Yes" )
+                SET vCancelled 1
+            ENDIF
         ENDIF
-        # Cancel: VLReplay.ps1 sees the .cancel file and ends with a CANCELLED marker
-        MACRO PROGRESS CANCEL_REQUESTED GET ( vCancel )
-        IF $vCancel == "On" AND $vCancelled == 0
-            DATA_FILE CREATE ( "${vMarker}.cancel", "Ascii", "Yes" )
-            SET vCancelled 1
-            MACRO PROGRESS STATUS MESSAGE ( "Cancelling..." )
-        ENDIF
-        IF $vCancelled == 1
+        IF $vCancelled == 0
+            MACRO PROGRESS VALUE ( $vElapsed )
+            SET vText ""
+            DATA_FILE READ LINE_FIELD ( $vStatus, 2, 2, vText, "=", "On" )
+            IF "$vText" != "" AND "$vText" != "$vLastText"
+                MACRO PROGRESS STATUS MESSAGE ( $vText )
+                SET vLastText $vText
+            ENDIF
+        ELSE
             ++ vCancelWait
             IF $vCancelWait >= 30
-                MACRO PROGRESS HIDE
                 MACRO END ( "Error", "Measurement cancelled." )
             ENDIF
         ENDIF
@@ -183,7 +181,9 @@ ELSE
             ENDIF
         ENDIF
     ENDWHILE
-    MACRO PROGRESS HIDE
+    IF $vCancelled == 0
+        MACRO PROGRESS HIDE
+    ENDIF
     DATA_FILE READ LINE_FIELD ( $vMarker, 1, 2, vState, "=", "On" )
     DATA_FILE READ LINE_FIELD ( $vMarker, 2, 2, vStl, "=", "On" )
     DATA_FILE READ LINE_FIELD ( $vMarker, 6, 2, vMsg, "=", "On" )
@@ -191,6 +191,8 @@ ELSE
     IF "$vState" == "CANCELLED"
         IF $vCancelled == 0
             MACRO INPUT ERROR_MESSAGE ( "Information", "The scan was cancelled in VL.", "$vMsg", "" )
+        ELSE
+            MACRO INPUT ERROR_MESSAGE ( "Information", "The measurement was cancelled.", "AI Replay may still be running in VL: finish or close it there.", "" )
         ENDIF
         MACRO END ( "Error", "Measurement cancelled." )
     ENDIF

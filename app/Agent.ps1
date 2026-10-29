@@ -110,10 +110,16 @@ function Complete-Watcher {
     }
     switch ($m.STATE) {
         'OK' {
-            $program = if ($m.PROGRAM) { [IO.Path]::GetFileNameWithoutExtension($m.PROGRAM) } else { 'VL' }
+            if (-not $m.PROGRAM) {
+                # without the program the station cannot pick the template; a guess could pick a wrong one
+                Write-VlcLog "Scan $($m.STL): the VL program was not recognized, not sent."
+                Show-Note 'Scan not sent' "The VL program of the scan was not recognized. The STL is saved: $($m.STL)" 'Warning'
+                return
+            }
+            $program = [IO.Path]::GetFileNameWithoutExtension($m.PROGRAM)
             try {
                 $id = New-VlcJobId $program
-                [void](New-VlcOutboxJob $id $program $m.STL $(if ($m.PROGRAM) { $m.PROGRAM } else { $program }))
+                [void](New-VlcOutboxJob $id $program $m.STL $m.PROGRAM)
                 Add-VlcPendingJob $id $program
                 Write-VlcLog "Scan $program ($($m.STL)) -> job $id."
                 Show-Note 'Scan saved' "$program - sent to the PolyWorks station for evaluation."

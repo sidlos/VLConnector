@@ -160,7 +160,8 @@ function Get-FileStamp([string]$Path) {
     return ''
 }
 
-# Program paths from the VL list of recently used programs.
+# Program paths from the VL list of recently used programs, oldest first (VL moves the program it applies to
+# the end).
 function Get-RecentTemplatePaths {
     try {
         $fs = [IO.File]::Open($templateList, 'Open', 'Read', 'ReadWrite, Delete')
@@ -571,13 +572,27 @@ function Wait-ReplayFinished($Proc) {
 
 # --- Watch mode: follow an AI Replay that the operator starts in VL ---------------------------------------
 
-# Program file name in VL's program dialog (File name box) while it is open; '' otherwise.
-function Get-OpenDialogFileName([int]$ProcId) {
+# VL's program dialog (a file dialog with a File name box) of a VL process: @{ Dialog; Edit }, $null if none.
+function Find-ProgramDialog([int]$ProcId) {
     foreach ($w in @(Get-Tops $ProcId | Where-Object { $_.Class -eq '#32770' })) {
         $edit = Find-FileNameEdit $w.Handle
-        if ($edit) { $t = [string][Vl]::GetText($edit); if ($t.Trim()) { return $t.Trim() } }
+        if ($edit) { return @{ Dialog = $w.Handle; Edit = $edit } }
     }
-    return ''
+    return $null
+}
+
+# Reads the File name box every 30 ms until the program dialog closes and returns the last name in it. A
+# program chosen by double-click stands in the box only for a moment before the dialog closes.
+function Read-ProgramDialog($Found) {
+    $last = ''
+    $n = 0
+    while ([Vl]::IsWindow($Found.Dialog) -and [Vl]::IsWindowVisible($Found.Dialog)) {
+        $t = ([string][Vl]::GetText($Found.Edit)).Trim()
+        if ($t) { $last = $t }
+        if ((++$n % 30) -eq 0) { Test-CancelRequested }
+        Start-Sleep -Milliseconds 30
+    }
+    return $last
 }
 
 function Test-ReplayRunning($State) {
@@ -589,6 +604,7 @@ function Test-ReplayRunning($State) {
 # started (the Measure button holds the run mutex) is left to that run.
 function Wait-WatchedReplay {
     $program = ''
+    $stamp = Get-FileStamp $templateList
     $modeDialogs = @{}
     Write-Status 'watching' 'Waiting for AI Replay in VL.'
     while ($true) {
@@ -599,17 +615,20 @@ function Wait-WatchedReplay {
             $state = Get-VlState $p.Id
             foreach ($d in @($state.Tops | Where-Object { $_.Name -eq 'SelectReplayModeDialog' })) {
                 if (-not $modeDialogs.ContainsKey([string]$d.Handle)) {
-                    $modeDialogs[[string]$d.Handle] = $true; $program = ''
+                    $modeDialogs[[string]$d.Handle] = $true; $program = ''; $stamp = Get-FileStamp $templateList
                     Write-Log "AI Replay started in VL (PID $($p.Id)), waiting for the program."
                 }
             }
-            $name = Get-OpenDialogFileName $p.Id
-            if ($name -and $name -ne $program) { $program = $name; Write-Log "Program seen in VL: $program" }
+            $dialog = Find-ProgramDialog $p.Id
+            if ($dialog) {
+                $name = Read-ProgramDialog $dialog
+                if ($name -and $name -ne $program) { $program = $name; Write-Log "Program chosen in VL: $program" }
+            }
             if (Test-ReplayRunning $state) {
                 $mutex = New-Object System.Threading.Mutex($false, 'Local\VLConnector_VLReplay')
                 $owned = $false
                 try { $owned = $mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
-                if ($owned) { $script:mutex = $mutex; return @{ Proc = $p; Program = $program } }
+                if ($owned) { $script:mutex = $mutex; return @{ Proc = $p; Program = $program; TemplateStamp = $stamp } }
                 $mutex.Dispose()
                 Write-Log 'This AI Replay belongs to another VL Connector run (Measure button), not exported here.'
                 [void](Wait-Until 86400 { Test-CancelRequested; $p.HasExited -or -not (Test-ReplayRunning (Get-VlState $p.Id)) } 1000)
@@ -620,18 +639,23 @@ function Wait-WatchedReplay {
     }
 }
 
-# Program of a watched run: the name seen in VL's program dialog (looked up like a program given to the
-# launcher), else the data name in the VL window title (VL names the data after the .vld4), else the most
-# recently used program of VL.
-function Resolve-WatchedProgram([string]$Seen, $Proc) {
+# Program of a watched run: the name chosen in VL's program dialog (looked up like a program given to the
+# launcher), else the data name in the VL window title (VL names the data after the .vld4), else the program
+# VL applies after this scan: the newest entry of VL's list of recent programs (the last one; VL keeps the
+# list oldest first), but only once VL has rewritten that list during this run (waits up to 90 s). An older entry may belong to another part, so it is never used:
+# then the program stays unknown and the station reports it instead of using a wrong template.
+function Resolve-WatchedProgram([string]$Seen, $Proc, [string]$StampAtStart) {
     if ($Seen) {
         try { $path = Resolve-Program $Seen; if ($path) { return $path } } catch { }
         return $Seen
     }
     $main = (Get-VlState $Proc.Id).Main
     if ($main -and $main.Title -match '^\W*(.+?)\W*\s-\sVL-800') { Write-Log "Program taken from the VL window title: $($Matches[1])" Yellow; return $Matches[1] }
+    Write-Log 'The program was not seen in VL; waiting until VL applies it (list of recent programs).' Yellow
+    $applied = Wait-Until 90 { Test-CancelRequested; (Get-FileStamp $templateList) -ne $StampAtStart } 1000
     $recent = @(Get-RecentTemplatePaths)
-    if ($recent.Count) { Write-Log "No program seen in VL, using VL's most recent program: $($recent[0])" Yellow; return $recent[0] }
+    if ($applied -and $recent.Count) { Write-Log "Program applied by VL in this run: $($recent[-1])" Yellow; return $recent[-1] }
+    Write-Log 'The VL program of this scan is not known (VL did not apply a program within 90 s).' Yellow
     return ''
 }
 
@@ -1016,6 +1040,7 @@ try {
         $script:opOffset = 0L; $script:opPending = ''
         if (Test-Path -LiteralPath $operationLog) { $script:opOffset = (Get-Item -LiteralPath $operationLog).Length }
         $script:watchedProgram = $watched.Program
+        $script:watchedStamp = $watched.TemplateStamp
         Write-Log "AI Replay is running in VL (PID $($proc.Id))." Green
     }
     else {
@@ -1042,7 +1067,7 @@ try {
     if ($finish.Message) { Write-Log $finish.Message Yellow }
     if ($Watch) {
         # the STL is named after the .vld4 program (+ date and time); the PolyWorks station finds the template by it
-        $script:programPath = Resolve-WatchedProgram $script:watchedProgram $proc
+        $script:programPath = Resolve-WatchedProgram $script:watchedProgram $proc $script:watchedStamp
         $programName = if ($script:programPath) { [IO.Path]::GetFileNameWithoutExtension($script:programPath) } else { 'VL' }
         $runName = '{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName $programName), $startTime
         Write-Log "Program: $script:programPath"

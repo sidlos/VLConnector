@@ -21,3 +21,15 @@ First release for a closed group of users.
 - Installer without administrator rights (manifest check, package fingerprint, permissions, Start menu),
   uninstaller, release build with SHA-256, script signing helper for IT.
 - Documentation: user guide, notes for IT, protocol, acceptance checklist.
+
+Fixed after the live test at the scanner (2026-10-29, 1.0.0-rc4):
+- Measure: **Cancel** in the progress window no longer stops on the PolyWorks message "No progress window is
+  currently active"; the cancel reaches VL Connector at once and a short note says that AI Replay may still
+  run in VL.
+- Network scenario: the agent reads the program chosen in VL's program dialog until the dialog closes (a
+  double-clicked program was missed). Without it, only a program that VL applied during this scan is used
+  (VL's list of recent programs is oldest first; the oldest entry was taken before). A scan whose program is
+  not known is not sent, so the station never evaluates it with a wrong template.
+- Station: **Stop** stays usable after a job that could not be evaluated (the progress window was left
+  disabled).
+- PolyWorks progress windows show names with "_" correctly (they were doubled).

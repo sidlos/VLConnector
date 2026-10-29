@@ -43,8 +43,6 @@ DECLARE vKept "1"
 DECLARE vLast "No job yet."
 DECLARE vComputer ""
 DECLARE vUtc ""
-DECLARE vShareShow ""
-DECLARE vLastShow ""
 
 IF "$vApp" == ""
     MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector: the station button is not set up correctly.", "Import VLC_Station_Button.pwmacro from the VL Connector folder again.", "" )
@@ -71,10 +69,8 @@ ENDIF
 IF $vPoll < 1000
     SET vPoll 1000
 ENDIF
-# the PolyWorks progress window shows "_" only when doubled (a single one marks a keyboard shortcut)
-MACRO STRING REPLACE ( $vShare, "_", "__", 1, , vShareShow )
 
-MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShareShow", 0, 100, "Stop" )
+MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShare", 0, 100, "Stop" )
 MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLast" )
 WHILE $vStop == 0
     MACRO PROGRESS CANCEL_REQUESTED GET ( vCancel )
@@ -98,6 +94,12 @@ WHILE $vStop == 0
             DATA_FILE READ LINE_FIELD ( $vNext, 4, 2, vParams, "=", "On" )
             DATA_FILE READ LINE_FIELD ( $vNext, 5, 2, vResult, "=", "On" )
             DATA_FILE READ LINE_FIELD ( $vNext, 6, 2, vMsg, "=", "On" )
+            # the synchronous command leaves the progress window disabled (Stop greyed out): show it again
+            IF "$vState" != "JOB"
+                MACRO PROGRESS HIDE
+                MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShare", 0, 100, "Stop" )
+                MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLast" )
+            ENDIF
             IF "$vState" == "JOB"
                 MACRO PROGRESS STATUS MESSAGE ( "Evaluating $vPart ($vJobId)..." )
                 MACRO PROGRESS HIDE
@@ -131,9 +133,8 @@ WHILE $vStop == 0
                     SET vLast "Last job: $vPart - $vVerdict ($vSummary). Jobs done: $vCount."
                 ENDIF
                 MACRO ECHO ( "VL Connector station: $vJobId $vPart $vVerdict $vSummary" )
-                MACRO STRING REPLACE ( $vLast, "_", "__", 1, , vLastShow )
-                MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShareShow", 0, 100, "Stop" )
-                MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLastShow" )
+                MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShare", 0, 100, "Stop" )
+                MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLast" )
             ENDIF
             IF "$vState" == "ERROR"
                 MACRO PROGRESS STATUS MESSAGE ( "Problem with the shared folder: $vMsg" )
