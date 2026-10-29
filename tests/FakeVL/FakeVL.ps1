@@ -174,6 +174,7 @@ $defaults = [ordered]@{
     operatorModeSec     = 0       # simulated operator picks the replay mode after this delay; 0 = never
     operatorMode        = 'Standard'
     operatorStartSec    = 0       # simulated operator starts AI Replay himself after this delay (watch mode); 0 = never
+    operatorProgramSec  = 1.0     # watch mode: the operator presses Open this long after typing the program (0.1 = double-click)
     corruptStlAfterSec  = 0       # truncate the exported STL after this delay (tests the check before closing)
     triangles           = 2000
     dataName            = 'demo'
@@ -354,11 +355,11 @@ function Select-Mode([string]$Mode) {
     $script:openDialog = New-Object FakeVlNative.AsyncFileDialog($script:main.Handle, $false, 'Open File', 'VL program (*.vld4)|*.vld4|All files (*.*)|*.*')
     if ($script:operatorStarted -and $env:FAKEVL_PROGRAM) {
         $script:fillTries = 0
-        # like an operator: type the program, look at it for a second, press Open
+        # like an operator: type the program, look at it (or double-click it), press Open
         $script:fillProgram = {
             if ($script:openDialog.Fill($env:FAKEVL_PROGRAM, $false)) {
                 Write-Event "operator:program:$env:FAKEVL_PROGRAM"
-                Invoke-After 1.0 { [void]$script:openDialog.Fill($null, $true) }
+                Invoke-After ([double]$cfg.operatorProgramSec) { [void]$script:openDialog.Fill($null, $true) }
             }
             else {
                 $script:fillTries++

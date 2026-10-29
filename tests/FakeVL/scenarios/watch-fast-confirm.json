@@ -1,0 +1,13 @@
+{
+    "prestartFakeVl":  true,
+    "launcher":  { "watch":  true },
+    "fakevl":  { "operatorStartSec":  2, "operatorModeSec":  0.8, "operatorMode":  "Standard", "operatorProgramSec":  0.1 },
+    "flavors":  [ "en" ],
+    "expect":  {
+                   "state":  "OK",
+                   "exitCode":  0,
+                   "stl":  true,
+                   "eventsInclude":  [ "operator:start-replay", "operator:program:", "exported:" ],
+                   "logIncludes":  [ "Program chosen in VL", "demo-part" ]
+               }
+}

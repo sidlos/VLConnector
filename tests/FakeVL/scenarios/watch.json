@@ -8,6 +8,6 @@
                    "exitCode":  0,
                    "stl":  true,
                    "eventsInclude":  [ "operator:start-replay", "operator:program:", "exported:" ],
-                   "logIncludes":  [ "Program seen in VL", "demo-part" ]
+                   "logIncludes":  [ "Program chosen in VL", "demo-part" ]
                }
 }
