@@ -2,6 +2,8 @@
 # PolyWorks or VL. Durable inbox (C78), outbox attempts (C79), reports only complete and marked as downloaded (C28),
 # queue order, claims, stale jobs and a station that never loses a claimed job (C34, C36), the Measurement Programs
 # List (C75, C29), the role test of the shared folder (C30) and station liveness by the heartbeat counter (C82, C83).
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $app = Join-Path (Split-Path (Split-Path $PSScriptRoot)) 'app'
 foreach ($lib in 'Settings', 'KeyValueFile', 'Share', 'Jobs') { . (Join-Path $app "lib\$lib.ps1") }
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'

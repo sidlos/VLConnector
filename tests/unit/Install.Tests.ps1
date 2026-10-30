@@ -3,6 +3,8 @@
 # rollback (C15), deleting without following links, the move of a 1.0.0-rc10 installation to forwarders (C17),
 # processes in use, permissions (C19-C21) and a whole installation, update and removal. Permissions, the event
 # source and a real Program Files installation are tested as administrator (CI, acceptance test).
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 . (Join-Path $repo 'app\lib\Install.ps1')
 

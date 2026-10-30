@@ -1,5 +1,7 @@
 # Pester 3.4 unit tests: the line-numbered files between the scripts and the PolyWorks macros (docs\Protocol.md).
 # PolyWorks macros read KEY=value files by line number, so writer and reader must agree on every line.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $poly = Join-Path $repo 'app\polyworks'
 $measure = [IO.File]::ReadAllText((Join-Path $poly 'VLC_Measure.pwmacro'))

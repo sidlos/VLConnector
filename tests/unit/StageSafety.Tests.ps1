@@ -1,6 +1,8 @@
 # Pester 3.4 unit tests: VL Connector answers VL's stage rotation questions only when the administrator's policy
 # allows it, and nothing else can switch that on (C38, C39, C25, C76). The FakeVL scenarios safety-*.json test the
 # same with the launcher driving a simulated VL.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $app = Join-Path $repo 'app'
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'

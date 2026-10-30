@@ -1,5 +1,7 @@
 # Pester 3.4 unit tests: the button picture in the format of a PolyWorks visual layout (layout.xml and the
 # icon entry of the macro), without PolyWorks.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $app = Join-Path (Split-Path (Split-Path $PSScriptRoot)) 'app'
 foreach ($lib in 'Settings', 'PolyWorksLayout') { . (Join-Path $app "lib\$lib.ps1") }
 

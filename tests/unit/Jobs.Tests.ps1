@@ -1,5 +1,7 @@
 ﻿# Pester 3.4 unit tests: key=value files, settings layers and the job protocol of the network scenario
 # (scanner PC -> shared folder -> station -> report), on a temporary folder without PolyWorks or VL.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $app = Join-Path (Split-Path (Split-Path $PSScriptRoot)) 'app'
 foreach ($lib in 'Settings', 'KeyValueFile', 'Share', 'Jobs') { . (Join-Path $app "lib\$lib.ps1") }
 

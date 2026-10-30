@@ -1,6 +1,8 @@
 # Pester 3.4 unit tests: every entry script stops at once with a clear message when PowerShell runs it in
 # ConstrainedLanguage mode, as an AppLocker or WDAC policy does with scripts it does not trust (C48). The
 # PolyWorks macros get their result file with STATE=ERROR and the message on the line they read.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $app = Join-Path $repo 'app'
 . (Join-Path $app 'lib\KeyValueFile.ps1')

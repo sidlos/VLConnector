@@ -1,4 +1,6 @@
 # Pester 3.4 unit tests: tools\Test-Static.ps1 finds the problems it is meant to find, on a small tree.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 

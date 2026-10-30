@@ -1,5 +1,7 @@
 # Pester 3.4 unit tests: parts of the launcher that need no VL (the FakeVL scenarios test the rest): finding the
 # AI Replay program (C43), the status file with its heartbeat (C80) and the checks of the options.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $app = Join-Path $repo 'app'
 foreach ($lib in 'KeyValueFile', 'VlPrograms') { . (Join-Path $app "lib\$lib.ps1") }

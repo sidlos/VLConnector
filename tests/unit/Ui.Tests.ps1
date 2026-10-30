@@ -1,5 +1,7 @@
 # Pester 3.4 unit tests: the windows load, and every control the window scripts use exists in their XAML (a
 # renamed or removed control would otherwise only fail when an operator opens the window).
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $app = Join-Path $repo 'app'
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'

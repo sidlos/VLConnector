@@ -34,12 +34,15 @@ if ($Unit) {
     $saved = @{ APPDATA = $env:APPDATA; LOCALAPPDATA = $env:LOCALAPPDATA }
     $profileDir = Join-Path ([IO.Path]::GetTempPath()) ('vlc_unit_' + [guid]::NewGuid().ToString('N'))
     foreach ($k in 'APPDATA', 'LOCALAPPDATA') { $d = Join-Path $profileDir $k; New-Item -ItemType Directory -Force -Path $d | Out-Null; Set-Item "env:$k" $d }
+    # every test file checks this first (unit\TestGuard.ps1): started on its own, it stops instead
+    $env:VLC_TEST_PROFILE = $profileDir
     try {
         $r = Invoke-Pester -Path (Join-Path $PSScriptRoot 'unit') -PassThru
         $failed += $r.FailedCount
     }
     finally {
         foreach ($k in $saved.Keys) { Set-Item "env:$k" $saved[$k] }
+        Remove-Item Env:\VLC_TEST_PROFILE -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $profileDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }

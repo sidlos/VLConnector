@@ -1,6 +1,8 @@
 # Pester 3.4 unit tests: the Windows and PolyWorks interfaces (app\interop\*.cs) are compiled once by the
 # installer, an installed copy only loads that DLL and refuses one that does not match its sources (C03, C64).
 # Loading happens in new PowerShell processes: a loaded assembly stays in the process for good.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $app = Join-Path $repo 'app'
 . (Join-Path $app 'lib\Interop.ps1')

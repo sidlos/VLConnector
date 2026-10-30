@@ -1,6 +1,8 @@
 ﻿# Pester 3.4 unit tests: the verdict of a measured piece is fail-closed (C40, C41, C84), the CSV is safe to open
 # in a spreadsheet (C55) and a replaced STL is detected (C26). Without PolyWorks: the control data that
 # VLC_Evaluate.pwmacro writes is made here.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $app = Join-Path $repo 'app'
 foreach ($lib in 'KeyValueFile', 'Verdict') { . (Join-Path $app "lib\$lib.ps1") }

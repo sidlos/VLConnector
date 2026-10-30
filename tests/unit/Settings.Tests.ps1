@@ -1,6 +1,8 @@
 # Pester 3.4 unit tests: the four settings layers, the schema check, machine-only keys, the administrator's
 # policy and the save functions (C23, C74, C39, C45, C56). They run on a copy of lib\Settings.ps1 and the config
 # files in a temporary folder, so machine.json (next to app\) never touches the development tree.
+# the real profile is never touched: only tests\Run-Tests.ps1 -Unit runs these tests (TestGuard.ps1)
+. (Join-Path $PSScriptRoot 'TestGuard.ps1')
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
