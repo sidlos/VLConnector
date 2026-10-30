@@ -57,7 +57,7 @@
                 <StackPanel x:Name="PageScanning" Visibility="Collapsed">
                     <Border x:Name="VlBar" Style="{StaticResource InfoBar}" Margin="0,8,0,8">
                         <DockPanel>
-                            <Button x:Name="LocateVl" DockPanel.Dock="Right" Content="Locate" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <Button x:Name="LocateVl" DockPanel.Dock="Right" Content="Change (administrator)" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="Asks for administrator rights"/>
                             <TextBlock x:Name="VlText" Style="{StaticResource BodyText}" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap"/>
                         </DockPanel>
                     </Border>
@@ -91,10 +91,20 @@
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Confirm stage movement automatically" Style="{StaticResource BodyText}"/>
-                                <TextBlock Text="Answers 'The stage will rotate. Continue?' with OK. The stage then moves without asking." Style="{StaticResource CaptionText}"/>
+                                <TextBlock Text="Confirm stage rotation automatically" Style="{StaticResource BodyText}"/>
+                                <TextBlock Text="Set by the administrator for all users of this PC. When on, VL Connector answers VL's stage questions with OK itself, with a warning window and a sound." Style="{StaticResource CaptionText}"/>
                             </StackPanel>
-                            <CheckBox x:Name="ConfirmStage" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border x:Name="StagePill" Style="{StaticResource Pill}" VerticalAlignment="Center" Background="{StaticResource InfoBackBrush}">
+                                    <TextBlock x:Name="StagePillText" Text="Off" FontSize="12"/>
+                                </Border>
+                                <Button x:Name="ChangeStagePolicy" Style="{StaticResource SubtleButton}" Margin="10,0,0,0" ToolTip="Asks for administrator rights">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xEA18;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBlock Text="Change (administrator)" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
                         </Grid>
                     </Border>
                     <Border Style="{StaticResource Card}">

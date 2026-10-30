@@ -1,8 +1,35 @@
 # VL Connector setup wizard: scenario -> scanning options -> PolyWorks (ribbon tab, measured pieces) or network
-# (shared folder, agent, Measurement Programs List) -> summary. Every step saves its settings when you go on.
+# (shared folder, agent, Measurement Programs List) -> summary. Every step saves the settings you changed when
+# you go on; settings the administrator locked for this PC are shown read-only and left alone.
 # Dot-source this file (it needs the libraries loaded by VLConnector.ps1) and call Show-SetupWizard.
 
 $script:WizardTitles = @{ Scenario = 'Scenario'; Scanning = 'Scanning'; PolyWorks = 'PolyWorks'; Network = 'Network'; Done = 'Done' }
+
+# setting key -> the wizard controls that change it (read-only while the administrator's policy sets the key)
+$script:WizardControls = [ordered]@{
+    'scenario' = 'ChooseLocal', 'ChooseScanner', 'ChooseStation'; 'role' = 'ChooseScanner', 'ChooseStation'
+    'vl.mode' = 'ModeHighSpeed', 'ModeStandard', 'ModeAsk'; 'vl.exportImmediately' = 'ExportImmediately'; 'vl.afterExport' = 'AfterExport'
+    'polyworks.keepPieces' = 'KeepPieces'; 'network.share' = 'SharePath', 'ShareBrowse'; 'network.autoOpenReports' = 'AutoOpenReports'
+}
+
+# Saves the values of a wizard page that differ from the current settings; locked keys are skipped.
+function Save-WizardValues([hashtable]$Values) {
+    $state = Get-VlcSettingsState
+    $set = @{}
+    foreach ($key in $Values.Keys) {
+        if ($state.Locked -contains $key) { continue }
+        if (-not (Test-VlcSameValue $Values[$key] $state.Values[$key])) { $set[$key] = $Values[$key] }
+    }
+    if ($set.Count) { [void](Set-VlcUserSettings -Set $set) }
+}
+
+function Update-WizardStage {
+    $c = $script:wc
+    $on = [bool](Read-VlcSettings).vl.confirmStageMotion
+    $c.StagePillText.Text = if ($on) { 'On (administrator)' } else { 'Off' }
+    $c.StagePill.Background = if ($on) { Get-Brush 'WarningBackBrush' } else { Get-Brush 'InfoBackBrush' }
+    $c.StagePillText.Foreground = if ($on) { Get-Brush 'WarningBrush' } else { Get-Brush 'TextBrush' }
+}
 
 function Get-WizardKind {
     $c = $script:wc
@@ -39,9 +66,10 @@ function Update-WizardPage([string]$Page) {
                 $c.LocateVl.Visibility = 'Collapsed'
             }
             else {
-                Set-WizardBar $c.VlBar $c.VlText "The VL Application was not found ($exe). Locate VLApplication4.exe." 'Warning'
+                Set-WizardBar $c.VlBar $c.VlText "The VL Application was not found ($exe). The administrator sets it for all users of this PC." 'Warning'
                 $c.LocateVl.Visibility = 'Visible'
             }
+            Update-WizardStage
         }
         'PolyWorks' {
             $what = if ($kind -eq 'Station') { 'Station' } else { 'Measure' }
@@ -102,18 +130,19 @@ function Save-WizardPage {
     switch ($page) {
         'Scenario' {
             $values = @{ Local = @{ scenario = 'Local' }; Scanner = @{ scenario = 'Network'; role = 'Scanner' }; Station = @{ scenario = 'Network'; role = 'Station' } }[$kind]
-            Save-VlcUserSettings $values
+            Save-WizardValues $values
         }
         'Scanning' {
             $mode = if ($c.ModeStandard.IsChecked) { 'Standard' } elseif ($c.ModeAsk.IsChecked) { 'Ask' } else { 'HighSpeed' }
-            Save-VlcUserSettings @{ 'vl.mode' = $mode; 'vl.exportImmediately' = [bool]$c.ExportImmediately.IsChecked
-                'vl.confirmStageMotion' = [bool]$c.ConfirmStage.IsChecked; 'vl.afterExport' = [string]$c.AfterExport.SelectedItem.Tag }
+            $values = @{ 'vl.mode' = $mode; 'vl.exportImmediately' = [bool]$c.ExportImmediately.IsChecked }
+            if ($c.AfterExport.SelectedItem) { $values['vl.afterExport'] = [string]$c.AfterExport.SelectedItem.Tag }
+            Save-WizardValues $values
         }
-        'PolyWorks' { Save-VlcUserSettings @{ 'polyworks.keepPieces' = [string]$c.KeepPieces.SelectedItem.Tag } }
+        'PolyWorks' { if ($c.KeepPieces.SelectedItem) { Save-WizardValues @{ 'polyworks.keepPieces' = [string]$c.KeepPieces.SelectedItem.Tag } } }
         'Network' {
             $share = $c.SharePath.Text.Trim()
             if (-not $share) { $c.ShareStatus.Text = 'Enter the shared folder.'; $c.ShareStatus.Foreground = Get-Brush 'ErrorBrush'; return $false }
-            Save-VlcUserSettings @{ 'network.share' = $share; 'network.autoOpenReports' = [bool]$c.AutoOpenReports.IsChecked }
+            Save-WizardValues @{ 'network.share' = $share; 'network.autoOpenReports' = [bool]$c.AutoOpenReports.IsChecked }
             if ($kind -eq 'Scanner') { Set-AgentAutostart ([bool]$c.AgentAutostart.IsChecked) }
         }
         'Done' {
@@ -128,7 +157,8 @@ function Show-SetupWizard {
     $script:ww = $ui.Window
     $script:wc = $ui.Controls
     $c = $script:wc
-    $cfg = Read-VlcSettings
+    $state = Get-VlcSettingsState
+    $cfg = $state.Settings
     $script:wizStep = 0
     $script:tabAdded = $false
     $script:lastBackup = ''
@@ -144,12 +174,12 @@ function Show-SetupWizard {
     $c.ModeStandard.IsChecked = $cfg.vl.mode -eq 'Standard'
     $c.ModeAsk.IsChecked = $cfg.vl.mode -eq 'Ask'
     $c.ExportImmediately.IsChecked = [bool]$cfg.vl.exportImmediately
-    $c.ConfirmStage.IsChecked = [bool]$cfg.vl.confirmStageMotion
     foreach ($item in $c.AfterExport.Items) { if ([string]$item.Tag -eq [string]$cfg.vl.afterExport) { $c.AfterExport.SelectedItem = $item } }
     foreach ($item in $c.KeepPieces.Items) { if ([string]$item.Tag -eq [string]$cfg.polyworks.keepPieces) { $c.KeepPieces.SelectedItem = $item } }
     $c.SharePath.Text = [string]$cfg.network.share
     $c.AutoOpenReports.IsChecked = [bool]$cfg.network.autoOpenReports
     $c.AgentAutostart.IsChecked = $true
+    [void](Set-VlcLockedControls $c $script:WizardControls $state.Locked)
 
     $c.NextButton.Add_Click({
         try {
@@ -163,11 +193,8 @@ function Show-SetupWizard {
     })
     $c.BackButton.Add_Click({ if ($script:wizStep -gt 0) { $script:wizStep--; Show-WizardStep } })
     $c.CancelButton.Add_Click({ $script:ww.Close() })
-    $c.LocateVl.Add_Click({
-        $dlg = New-Object Microsoft.Win32.OpenFileDialog
-        $dlg.Filter = 'VL Application (VLApplication4.exe)|VLApplication4.exe|Programs (*.exe)|*.exe'
-        if ($dlg.ShowDialog($script:ww)) { Save-VlcUserSettings @{ 'vl.exe' = $dlg.FileName }; Update-WizardPage 'Scanning' }
-    })
+    $c.LocateVl.Add_Click({ [void](Start-VlcPolicyTool 'VlExe' { Update-WizardPage 'Scanning' }) })
+    $c.ChangeStagePolicy.Add_Click({ [void](Start-VlcPolicyTool 'StageMotion' { Update-WizardStage }) })
     $c.AddTab.Add_Click({
         $kind = if ((Get-WizardKind) -eq 'Station') { 'Station' } else { 'Measure' }
         $c2 = $script:wc

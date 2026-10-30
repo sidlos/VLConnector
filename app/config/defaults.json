@@ -4,6 +4,7 @@
     "role": "Scanner",
     "vl": {
         "exe": "C:\\Program Files\\KEYENCE\\VL-800 Series\\VL Application\\VLApplication4.exe",
+        "args": "",
         "programFolders": [],
         "mode": "HighSpeed",
         "exportImmediately": true,
@@ -38,5 +39,10 @@
         "stationName": "",
         "pollSec": 3,
         "jobTimeoutMin": 15
+    },
+    "safety": {
+        "stageWarningSec": 4,
+        "stageSound": true,
+        "watchAllowClose": false
     }
 }

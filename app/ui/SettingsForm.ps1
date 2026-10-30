@@ -1,9 +1,20 @@
 # VL Connector settings window: loads app\ui\SettingsWindow.xaml, fills in the current settings and saves
-# every change straight away to %APPDATA%\VLConnector\settings.json (no Save button).
+# every change straight away to %APPDATA%\VLConnector\settings.json (no Save button). Settings the
+# administrator locked for this PC are shown read-only; the machine-only ones (stage rotation, VL Application)
+# are changed with Set-MachinePolicy.ps1 through Windows' administrator prompt.
 # Dot-source this file (it needs lib\Settings.ps1, Ui.ps1, PolyWorksSetup.ps1, Share.ps1, Prerequisites.ps1,
 # Diagnostics.ps1) and call Show-SettingsWindow.
 
 $script:SettingsPages = 'Setup', 'Scanning', 'PolyWorks', 'Network', 'Diagnostics', 'About'
+
+# setting key -> the controls that change it (read-only while the administrator's policy sets the key)
+$script:SettingControls = [ordered]@{
+    'scenario' = 'ScenarioLocal', 'ScenarioNetwork'; 'role' = 'RoleScanner', 'RoleStation'
+    'vl.mode' = 'ModeHighSpeed', 'ModeStandard', 'ModeAsk'; 'vl.exportImmediately' = 'ExportImmediately'
+    'vl.afterExport' = 'AfterExport'; 'vl.vldFolder' = 'VldFolder', 'VldFolderBrowse'; 'vl.returnFocus' = 'ReturnFocus'
+    'vl.programFolders' = 'ProgramFolder', 'ProgramFolderBrowse'; 'polyworks.keepPieces' = 'KeepPieces'; 'polyworks.openPdf' = 'OpenPdf'
+    'network.share' = 'SharePath', 'ShareBrowse'; 'network.autoOpenReports' = 'AutoOpenReports'
+}
 
 function Show-SettingsToast([string]$Text) {
     $c = $script:sc
@@ -18,8 +29,30 @@ function Show-SettingsToast([string]$Text) {
 
 function Save-SettingValue([string]$Key, $Value) {
     if ($script:loading) { return }
-    try { Save-VlcUserSettings @{ $Key = $Value }; Show-SettingsToast 'Saved' }
+    try { [void](Set-VlcUserSettings -Set @{ $Key = $Value }); Show-SettingsToast 'Saved' }
     catch { Show-SettingsToast "Not saved: $($_.Exception.Message)" }
+}
+
+# The stage card: state of the machine policy (read-only) and the warning while it is on.
+function Update-StageCard($Settings) {
+    $c = $script:sc
+    $on = [bool]$Settings.vl.confirmStageMotion
+    $c.StagePillText.Text = if ($on) { 'On (administrator)' } else { 'Off' }
+    $c.StagePill.Background = if ($on) { Get-Brush 'WarningBackBrush' } else { Get-Brush 'InfoBackBrush' }
+    $c.StagePillText.Foreground = if ($on) { Get-Brush 'WarningBrush' } else { Get-Brush 'TextBrush' }
+    $c.StageWarning.Visibility = if ($on) { 'Visible' } else { 'Collapsed' }
+}
+
+# After a change by the administrator tool: settings, read-only controls and the status check again.
+function Update-AfterPolicyChange {
+    $state = Get-VlcSettingsState
+    Update-StageCard $state.Settings
+    $script:sc.LockedNotice.Visibility = if (Set-VlcLockedControls $script:sc $script:SettingControls $state.Locked) { 'Visible' } else { 'Collapsed' }
+    Update-SettingsStatus
+}
+
+function Invoke-PolicyTool([string]$Show) {
+    if (-not (Start-VlcPolicyTool $Show { Update-AfterPolicyChange })) { Show-SettingsToast 'Not changed: the administrator prompt was cancelled' }
 }
 
 function Show-SettingsPage([string]$Name) {
@@ -50,7 +83,8 @@ function Select-VlcFolder([string]$Start) {
 $script:StatusWork = {
     param($AppDir)
     foreach ($lib in 'Settings', 'PolyWorksSetup', 'Share', 'Prerequisites') { . (Join-Path $AppDir "lib\$lib.ps1") }
-    Get-VlcStatusItems (Read-VlcSettings)
+    $state = Get-VlcSettingsState
+    Get-VlcStatusItems $state.Settings $state.Warnings
 }
 
 function Update-SettingsStatus {
@@ -98,11 +132,8 @@ function Update-AgentStatus {
 
 function Invoke-StatusAction([string]$Id) {
     switch ($Id) {
-        'vl' {
-            $dlg = New-Object Microsoft.Win32.OpenFileDialog
-            $dlg.Filter = 'VL Application (VLApplication4.exe)|VLApplication4.exe|Programs (*.exe)|*.exe'
-            if ($dlg.ShowDialog($script:sw)) { Save-SettingValue 'vl.exe' $dlg.FileName; Update-SettingsStatus }
-        }
+        'vl' { Invoke-PolicyTool 'VlExe' }
+        'settings' { Open-VlcPath (Get-VlcPaths).LogDir }
         'button' { Show-SettingsPage 'PolyWorks' }
         'share' { Show-SettingsPage 'Network' }
         'programs' { Show-SettingsPage 'Network' }
@@ -116,7 +147,8 @@ function Show-SettingsWindow {
     $script:sc = $ui.Controls
     $c = $script:sc
     $paths = Get-VlcPaths
-    $cfg = Read-VlcSettings
+    $state = Get-VlcSettingsState
+    $cfg = $state.Settings
     $script:loading = $true
 
     $icon = Get-AppImage 'VLC_icon_256.png'
@@ -136,8 +168,7 @@ function Show-SettingsWindow {
     $c.ModeStandard.IsChecked = $cfg.vl.mode -eq 'Standard'
     $c.ModeAsk.IsChecked = $cfg.vl.mode -eq 'Ask'
     $c.ExportImmediately.IsChecked = [bool]$cfg.vl.exportImmediately
-    $c.ConfirmStage.IsChecked = [bool]$cfg.vl.confirmStageMotion
-    $c.StageWarning.Visibility = if ($cfg.vl.confirmStageMotion) { 'Visible' } else { 'Collapsed' }
+    Update-StageCard $cfg
     Select-ComboTag $c.AfterExport ([string]$cfg.vl.afterExport)
     $c.VldFolderCard.Visibility = if ($cfg.vl.afterExport -eq 'SaveAndClose') { 'Visible' } else { 'Collapsed' }
     $c.VldFolder.Text = [string]$cfg.vl.vldFolder
@@ -153,6 +184,7 @@ function Show-SettingsWindow {
     Update-ProgramsSummary ([string]$cfg.network.share)
     $c.AgentAutostart.IsChecked = Test-AgentAutostart
     Update-AgentStatus
+    $c.LockedNotice.Visibility = if (Set-VlcLockedControls $c $script:SettingControls $state.Locked) { 'Visible' } else { 'Collapsed' }
 
     # --- navigation -----------------------------------------------------------------------------
     foreach ($p in $script:SettingsPages) { $c["Nav$p"].Add_Checked({ Show-SettingsPage ($this.Name -replace '^Nav', '') }) }
@@ -172,13 +204,7 @@ function Show-SettingsWindow {
     $c.ModeStandard.Add_Checked({ Save-SettingValue 'vl.mode' 'Standard' })
     $c.ModeAsk.Add_Checked({ Save-SettingValue 'vl.mode' 'Ask' })
     $c.ExportImmediately.Add_Checked({ Save-SettingValue 'vl.exportImmediately' $true }); $c.ExportImmediately.Add_Unchecked({ Save-SettingValue 'vl.exportImmediately' $false })
-    $onConfirmStage = {
-        $on = [bool]$this.IsChecked
-        $script:sc.StageWarning.Visibility = if ($on) { 'Visible' } else { 'Collapsed' }
-        Save-SettingValue 'vl.confirmStageMotion' $on
-    }
-    $c.ConfirmStage.Add_Checked($onConfirmStage)
-    $c.ConfirmStage.Add_Unchecked($onConfirmStage)
+    $c.ChangeStagePolicy.Add_Click({ Invoke-PolicyTool 'StageMotion' })
     $c.AfterExport.Add_SelectionChanged({
         $tag = [string]$this.SelectedItem.Tag
         $script:sc.VldFolderCard.Visibility = if ($tag -eq 'SaveAndClose') { 'Visible' } else { 'Collapsed' }
@@ -237,7 +263,7 @@ function Show-SettingsWindow {
     # --- Network --------------------------------------------------------------------------------
     $c.SharePath.Add_LostFocus({
         $path = $this.Text.Trim()
-        if ($path -ne [string](Read-VlcSettings).network.share) { Save-SettingValue 'network.share' $path; Update-ProgramsSummary $path }
+        if ($this.IsEnabled -and $path -ne [string](Read-VlcSettings).network.share) { Save-SettingValue 'network.share' $path; Update-ProgramsSummary $path }
     })
     $c.ShareBrowse.Add_Click({
         $f = Select-VlcFolder $script:sc.SharePath.Text

@@ -72,7 +72,8 @@ if ($Verify) {
     Say "Package fingerprint: $($check.Fingerprint)"
     foreach ($lib in 'Settings', 'PolyWorksSetup', 'Share', 'Prerequisites') { . (Join-Path $InstallDir "app\lib\$lib.ps1") }
     Say ''
-    foreach ($item in Get-VlcStatusItems (Read-VlcSettings)) {
+    $state = Get-VlcSettingsState
+    foreach ($item in Get-VlcStatusItems $state.Settings $state.Warnings) {
         $color = @{ Ok = 'Green'; Warning = 'Yellow'; Error = 'Red' }[$item.Level]
         Say ("{0,-8} {1} - {2}" -f $item.Level, $item.Title, $item.Detail) $color
     }

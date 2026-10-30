@@ -1,5 +1,4 @@
 {
-    "pending": "step 2 (settings policy): machine-only keys outside the policy",
     "flavors": [ "en" ],
     "machine": { "defaults": { "vl": { "confirmStageMotion": true } } },
     "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator" }

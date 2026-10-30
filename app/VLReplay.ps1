@@ -953,7 +953,9 @@ if ($Options) {
     catch { Exit-Run $EXIT_ARGS 'ERROR' "VL options '$Options': $($_.Exception.Message -replace '^Exception calling .*?: ', '')." }
 }
 try {
-    $cfg = Read-VlcSettings
+    $settingsState = Get-VlcSettingsState
+    $cfg = $settingsState.Settings
+    foreach ($w in $settingsState.Warnings) { Write-Log "Settings: $w" Yellow }
     if (-not $Mode) { $Mode = [string]$cfg.vl.mode }
     if (-not $OutputDir) { $OutputDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'VL Connector\Scans' }
     if (-not $ProgramDir) { $ProgramDir = @($cfg.vl.programFolders | Where-Object { $_ }) }
@@ -967,6 +969,7 @@ try {
     if (-not $ReturnFocus) { $ReturnFocus = if ($cfg.vl.returnFocus) { 'On' } else { 'Off' } }
     if (-not $Menu) { $Menu = [string]$cfg.vl.menuExportStl }
     if (-not $VlExe) { $VlExe = [string]$cfg.vl.exe }
+    if (-not $PSBoundParameters.ContainsKey('VlArgs')) { $VlArgs = [string]$cfg.vl.args }
     $script:menuSaveAs = [string]$cfg.vl.menuSaveAs
     $script:closeWaitSec = [int]$cfg.vl.closeWaitSec
     $script:dialogRules = @($cfg.vl.dialogRules)

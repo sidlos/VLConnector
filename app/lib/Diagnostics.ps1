@@ -24,11 +24,15 @@ function New-VlcDiagnosticsZip([string]$Folder = [Environment]::GetFolderPath('D
     $temp = Join-Path ([IO.Path]::GetTempPath()) "VLConnector_diag_$stamp"
     New-Item -ItemType Directory -Force -Path $temp | Out-Null
     try {
-        $settings = Read-VlcSettings
+        $state = Get-VlcSettingsState
+        $settings = $state.Settings
         Get-VlcVersionsText $settings | Set-Content -LiteralPath (Join-Path $temp 'versions.txt') -Encoding UTF8
-        Get-VlcStatusItems $settings | Format-Table Level, Title, Detail -AutoSize -Wrap | Out-String -Width 200 |
+        Get-VlcStatusItems $settings $state.Warnings | Format-Table Level, Title, Detail -AutoSize -Wrap | Out-String -Width 200 |
             Set-Content -LiteralPath (Join-Path $temp 'status.txt') -Encoding UTF8
         $settings | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $temp 'settings-effective.json') -Encoding UTF8
+        # where each value comes from, and what the settings check ignored
+        @(foreach ($key in $state.Values.Keys) { '{0,-26} {1,-18} {2}' -f $key, $state.Sources[$key], (ConvertTo-Json $state.Values[$key] -Compress -Depth 5) }) + '' +
+            @($state.Warnings | ForEach-Object { "ignored: $_" }) | Set-Content -LiteralPath (Join-Path $temp 'settings-sources.txt') -Encoding UTF8
         foreach ($f in $paths.MachineFile, $paths.UserFile) {
             if (Test-Path -LiteralPath $f) { Copy-Item -LiteralPath $f -Destination (Join-Path $temp ("settings-" + (Split-Path $f -Leaf))) }
         }

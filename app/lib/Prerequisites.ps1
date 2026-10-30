@@ -6,12 +6,18 @@ function New-VlcStatusItem([string]$Id, [string]$Level, [string]$Title, [string]
     return [pscustomobject]@{ Id = $Id; Level = $Level; Title = $Title; Detail = $Detail; Action = $Action }
 }
 
-function Get-VlcStatusItems($Settings) {
+# $Warnings: what the settings check ignored (Get-VlcSettingsState).
+function Get-VlcStatusItems($Settings, [string[]]$Warnings = @()) {
     $items = New-Object Collections.Generic.List[object]
     $network = $Settings.scenario -eq 'Network'
     $station = $network -and $Settings.role -eq 'Station'
     $needsVl = -not $station
     $needsPolyWorks = (-not $network) -or $station
+
+    if ($Warnings.Count) {
+        $more = if ($Warnings.Count -gt 2) { " (and $($Warnings.Count - 2) more, see the log)" } else { '' }
+        $items.Add((New-VlcStatusItem 'settings' 'Warning' "$($Warnings.Count) setting(s) ignored" ((@($Warnings | Select-Object -First 2) -join ' ') + $more) 'Open logs'))
+    }
 
     if ($needsVl) {
         $exe = [string]$Settings.vl.exe
@@ -21,7 +27,10 @@ function Get-VlcStatusItems($Settings) {
             if ($tested) { $items.Add((New-VlcStatusItem 'vl' 'Ok' "VL Application $version" (Split-Path $exe))) }
             else { $items.Add((New-VlcStatusItem 'vl' 'Warning' "VL Application $version" 'This VL version has not been tested with VL Connector. Run one test scan before production use.')) }
         }
-        else { $items.Add((New-VlcStatusItem 'vl' 'Error' 'VL Application not found' "Expected: $exe" 'Locate')) }
+        else { $items.Add((New-VlcStatusItem 'vl' 'Error' 'VL Application not found' "Expected: $exe. The administrator sets the VL Application for all users of this PC." 'Change (administrator)')) }
+        if ($Settings.vl.confirmStageMotion) {
+            $items.Add((New-VlcStatusItem 'stage' 'Warning' 'Stage rotation is confirmed automatically' 'Set by the administrator for all users of this PC: VL Connector answers the stage questions of VL itself, with a warning window and a sound.'))
+        }
     }
 
     if ($needsPolyWorks) {

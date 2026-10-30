@@ -1,5 +1,4 @@
 {
-    "pending": "step 3 (stage safety): user dialog rules can still confirm",
     "flavors": [ "en" ],
     "user": { "vl": { "confirmStageMotion": true, "dialogRules": [ { "match": "Continue?", "action": "ConfirmStageMotion" }, { "match": "stage", "action": "ConfirmStageMotion" } ] } },
     "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator" }

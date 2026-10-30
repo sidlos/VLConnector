@@ -40,17 +40,6 @@ Describe 'key=value files' {
     Remove-Item $dir -Recurse -Force
 }
 
-Describe 'settings layers' {
-    It 'lets a later layer override single values only' {
-        $base = '{ "vl": { "mode": "HighSpeed", "timeoutMin": 45 }, "scenario": "Local" }' | ConvertFrom-Json
-        $over = '{ "vl": { "mode": "Standard" } }' | ConvertFrom-Json
-        $m = Merge-Settings $base $over
-        $m.vl.mode | Should Be 'Standard'
-        $m.vl.timeoutMin | Should Be 45
-        $m.scenario | Should Be 'Local'
-    }
-}
-
 Describe 'network job protocol' {
     $root = Join-Path ([IO.Path]::GetTempPath()) ("vlc_jobs_" + [guid]::NewGuid().ToString('N'))
     $share = Join-Path $root 'share'

@@ -1,6 +1,8 @@
 # build output (dist: packages; bin: an interface DLL built in the development tree)
 dist/
 /bin/
+# machine settings of the administrator, next to app\ (a development tree may hold one for tests)
+/machine.json
 # test work folders and logs
 tests/_work/
 *.log

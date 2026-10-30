@@ -32,6 +32,9 @@ if (-not $owned) {
 [void](Initialize-VlcLog $Show)
 try {
     Import-VlcInterop
+    # user files of 1.0.0-rc10 and earlier hold every value, also keys only the administrator may set
+    $removed = @(Repair-VlcUserSettings)
+    if ($removed.Count) { Write-VlcLog "Settings cleaned up: $($removed -join ', ')" }
     switch ($Show) {
         'Settings' { . (Join-Path $PSScriptRoot 'ui\SettingsForm.ps1'); Show-SettingsWindow }
         'Wizard' { . (Join-Path $PSScriptRoot 'ui\WizardForm.ps1'); Show-SetupWizard }
