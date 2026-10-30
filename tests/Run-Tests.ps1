@@ -55,7 +55,13 @@ if ($Launcher) {
         if ($definition.flavors -and $definition.flavors -notcontains $Flavor) { continue }
         Write-Host ("{0,-24}" -f $f.BaseName) -NoNewline
         if ($definition.pending -and -not $IncludePending -and -not $Only) { Write-Host "PENDING  $($definition.pending)" -ForegroundColor Yellow; continue }
-        $r = & (Join-Path $PSScriptRoot 'integration\Invoke-LauncherScenario.ps1') -ScenarioFile $f.FullName -Flavor $Flavor
+        try { $r = & (Join-Path $PSScriptRoot 'integration\Invoke-LauncherScenario.ps1') -ScenarioFile $f.FullName -Flavor $Flavor }
+        catch {
+            # the real VL stops the whole run (no scenario may drive it); any other harness error fails this scenario only
+            if ($_.Exception.Message -like 'The real VL application is running*') { Write-Host ''; throw }
+            $r = [pscustomobject]@{ Scenario = $f.BaseName; Passed = $false; State = ''; ExitCode = $null; StlValid = $null; Triangles = $null
+                StlHash = ''; VlRunning = $null; Seconds = 0; Failures = @("harness: $($_.Exception.Message)") }
+        }
         if ($r.Passed) { Write-Host ("PASS  {0,6}s  {1}" -f $r.Seconds, $r.State) -ForegroundColor Green }
         else { Write-Host ("FAIL  {0,6}s  {1}" -f $r.Seconds, ($r.Failures -join '; ')) -ForegroundColor Red; $failed++ }
         $results += $r

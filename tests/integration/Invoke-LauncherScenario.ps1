@@ -78,8 +78,17 @@ function Get-FakeVlProcesses {
     @(Get-Process VLApplication4 -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -like "$bin*" })
 }
 
-$real = @(Get-Process VLApplication4 -ErrorAction SilentlyContinue | Where-Object { -not $_.Path -or $_.Path -notlike "$bin*" })
-if ($real) { throw "The real VL application is running (PID $($real.Id -join ', ')). Close it before running launcher tests." }
+# A VLApplication4 process outside the test folder is the real VL; one whose path cannot be read counts as real
+# too (an elevated VL). A fake VL of the previous scenario that is just ending has no path either, so look again
+# for a few seconds before giving up.
+function Get-RealVlProcesses {
+    @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'VLApplication4.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { -not $_.ExecutablePath -or $_.ExecutablePath -notlike "$bin*" })
+}
+
+$real = Get-RealVlProcesses
+for ($i = 0; $real.Count -and $i -lt 10; $i++) { Start-Sleep -Milliseconds 500; $real = Get-RealVlProcesses }
+if ($real.Count) { throw "The real VL application is running (PID $(@($real | ForEach-Object { $_.ProcessId }) -join ', ')). Close it before running launcher tests." }
 Get-FakeVlProcesses | Stop-Process -Force
 Start-Sleep -Milliseconds 300
 
