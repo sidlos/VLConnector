@@ -6,8 +6,10 @@
     1. finds a VL window on its start screen (AI Replay button), otherwise opens a new VL window,
     2. clicks AI Replay, chooses the mode (HighSpeed / Standard, or lets the operator choose: Ask)
        and enters the .vld4 program,
-    3. the operator works as usual (places the part, presses Measure); VL messages can be answered
-       automatically (stage movement) or end the run (scanner not connected),
+    3. the operator works as usual (places the part, presses Measure); VL's stage rotation questions are
+       answered by the operator, or by VL Connector with a warning window and a sound only when the
+       administrator's policy for this PC allows it (lib\StageWarning.ps1); "scanner not connected" ends
+       the run,
     4. when the part is finished, exports the STL via the menu File > Export > STL... (binary, no
        thinning) and checks it,
     5. writes the marker file (STATE=OK/ERROR/CANCELLED/DRYRUN/BUSY, STL=path; see docs\Protocol.md),
@@ -26,8 +28,13 @@
     VLReplay.cmd ABC -Options "-Mode Standard -AfterExport Minimize"
                                              the same options as one text (the PolyWorks project property
                                              "VL options"); options given directly win
+    VLReplay.cmd -LaunchFile <file> -MarkerFile <file> -OutputDir <folder>
+                                             the Measure button: the template's "VL program" and "VL options"
+                                             come in a file (PROGRAM=, OPTIONS=), never on the command line
     VLReplay.cmd -Watch -MarkerFile <file>   waits until the operator starts AI Replay in VL himself, then
                                              follows that run and exports the STL (network scenario agent)
+  Which VL Application is started, its menus and whether stage questions may be confirmed come only from
+  the settings (the last two only from the administrator's policy for this PC).
 
   Files next to the marker while the run is active: <marker>.status (current step, read by the callers)
   and <marker>.cancel (created by a caller to cancel the run).
@@ -47,7 +54,6 @@ param(
     [int]$TimeoutMin = 0,
     [double]$SettleSec = 0,
     [string]$ExportImmediately = '',
-    [string]$ConfirmStageMotion = '',
     [string]$AfterExport = '',
     [string]$VldFolder = '',
     [string]$ReturnFocus = '',
@@ -55,10 +61,8 @@ param(
     [switch]$NewWindow,
     [switch]$DryRun,
     [switch]$ExportOnly,
-    [string]$Menu = '',
-    [string]$VlExe = '',
-    [string]$VlArgs,
     [string]$Options = '',
+    [string]$LaunchFile = '',
     [switch]$Watch
 )
 
@@ -75,6 +79,7 @@ $EXIT_OK = 0; $EXIT_ERROR = 1; $EXIT_CANCELLED = 2; $EXIT_ARGS = 3; $EXIT_BUSY =
 . (Join-Path $PSScriptRoot 'lib\Log.ps1')
 . (Join-Path $PSScriptRoot 'lib\KeyValueFile.ps1')
 . (Join-Path $PSScriptRoot 'lib\Interop.ps1')
+. (Join-Path $PSScriptRoot 'lib\StageWarning.ps1')
 
 $logFile      = Initialize-VlcLog 'VLReplay'
 $operationLog = Join-Path $env:APPDATA 'KEYENCE\VL-800 Series\VL Application\VLOperation.log'
@@ -88,6 +93,7 @@ $script:programPath = ''
 $script:mutex = $null
 $script:lastStatus = ''
 $script:lastMessage = ''
+$script:stageWarning = $null
 
 # --- Helper functions -----------------------------------------------------------------
 
@@ -151,6 +157,7 @@ function Exit-Run([int]$Code, [string]$State, [string]$Message, [string]$StlPath
     Write-Marker $State $StlPath $Message
     Remove-RunFiles
     if ($script:mutex) { try { $script:mutex.ReleaseMutex() } catch { } }
+    Stop-VlcStageWarning $script:stageWarning
     exit $Code
 }
 
@@ -358,7 +365,8 @@ function Get-DialogText([IntPtr]$Dialog) {
     return ($text -replace '\s+', ' ').Trim()
 }
 
-# Rule for a VL message box from the settings (vl.dialogRules): ConfirmStageMotion, ScannerNotConnected or ''.
+# Rule for a VL message box from the settings (vl.dialogRules): ScannerNotConnected or ''. No rule can confirm
+# anything: only the two stage questions of lib\StageWarning.ps1 are ever confirmed, and only by the policy.
 function Get-DialogRule([string]$Text) {
     foreach ($rule in @($script:dialogRules)) {
         if ($rule.match -and $Text.IndexOf([string]$rule.match, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return [string]$rule.action }
@@ -378,11 +386,12 @@ function Get-StartScreenVl {
             }
         }
     }
-    if (-not (Test-Path -LiteralPath $VlExe)) { throw "VL is not installed: $VlExe" }
+    $exe = $script:vlExe
+    if (-not (Test-Path -LiteralPath $exe)) { throw "VL is not installed: $exe" }
     Write-Log 'No idle VL window on its start screen, opening a new VL window...'
     Write-Status 'starting' 'Starting VL...'
-    $p = if ($VlArgs) { Start-Process -FilePath $VlExe -ArgumentList $VlArgs -WorkingDirectory (Split-Path $VlExe) -PassThru }
-         else { Start-Process -FilePath $VlExe -WorkingDirectory (Split-Path $VlExe) -PassThru }
+    $p = if ($script:vlArgs) { Start-Process -FilePath $exe -ArgumentList $script:vlArgs -WorkingDirectory (Split-Path $exe) -PassThru }
+         else { Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru }
     $script:lastStartSig = ''
     $ready = Wait-Until 240 {
         Test-CancelRequested
@@ -454,41 +463,76 @@ function Start-AiReplay($Proc, [string]$ProgramPath) {
 
 # --- VL message boxes during the replay -----------------------------------------------------------
 
-# Handles the open VL message boxes by the dialog rules. Stage movement is confirmed (OK) only with
-# -ConfirmStageMotion On, at least 0.5 s after the box appeared, retried every 2 s up to 3 times.
-function Invoke-DialogRules($State, [hashtable]$Seen) {
+# Handles the open VL message boxes: the stage questions (Confirm-StageQuestion) and the dialog rules of the
+# settings, which can only end the run (scanner not connected). A text read empty right after the box appeared
+# is read again on the next pass.
+function Invoke-DialogRules($State, [hashtable]$Seen, $Proc) {
     foreach ($d in @($State.Tops | Where-Object { $_.Class -eq '#32770' })) {
         $h = [string]$d.Handle
-        if (-not $Seen.ContainsKey($h)) {
-            $text = Get-DialogText $d.Handle
-            $Seen[$h] = @{ Text = $text; First = Get-Date; Tries = 0; Last = [datetime]::MinValue }
-            if ($text) {
-                $script:lastMessage = "VL message '$($d.Title)': $text"
+        if (-not $Seen.ContainsKey($h)) { $Seen[$h] = @{ Text = ''; First = Get-Date; Tries = 0; Last = [datetime]::MinValue; Skipped = '' } }
+        $info = $Seen[$h]
+        if (-not $info.Text) {
+            $info.Text = Get-DialogText $d.Handle
+            if ($info.Text) {
+                $script:lastMessage = "VL message '$($d.Title)': $($info.Text)"
                 Write-Log "  $script:lastMessage" Yellow
-                Write-Status 'message' 'VL shows a message.' $text
+                Write-Status 'message' 'VL shows a message.' $info.Text
             }
         }
-        $info = $Seen[$h]
-        switch (Get-DialogRule $info.Text) {
-            'ScannerNotConnected' {
-                $ok = Find-OkButton $d.Handle
-                if ($ok) { [Vl]::Click($ok) }
-                Exit-Run $EXIT_ERROR 'ERROR' "The scanner is not connected (VL: '$($info.Text)'). Check the scanner cable and power, then start again."
-            }
-            'ConfirmStageMotion' {
-                if ($ConfirmStageMotion -ne 'On' -or $info.Tries -ge 3) { break }
-                $now = Get-Date
-                if (($now - $info.First).TotalMilliseconds -lt 500 -or ($now - $info.Last).TotalSeconds -lt 2) { break }
-                $ok = Find-OkButton $d.Handle
-                if (-not $ok) { break }
-                [void](Set-WindowToFront $d.Handle)
-                Start-Sleep -Milliseconds 200
-                [Vl]::Click($ok)
-                $info.Tries++; $info.Last = Get-Date
-                Write-Log "  Confirmed: $($info.Text)"
-            }
+        if (Test-VlcStageQuestion $info.Text) { Confirm-StageQuestion $d $info $Proc; continue }
+        if ((Get-DialogRule $info.Text) -eq 'ScannerNotConnected') {
+            $ok = Find-OkButton $d.Handle
+            if ($ok) { [Vl]::Click($ok) }
+            Exit-Run $EXIT_ERROR 'ERROR' "The scanner is not connected (VL: '$($info.Text)'). Check the scanner cable and power, then start again."
         }
     }
+}
+
+# A stage question of VL ("The stage will rotate. Continue?"). Answered by VL Connector only when the
+# administrator's policy allows it and nothing blocks it (Get-VlcStageConfirmBlocker); then, at least 0.5 s after
+# the question appeared: warning window and sound, and OK only after Windows reports the window on screen.
+# Otherwise the operator answers in VL; a policy that is on but blocked is logged with the reason (log and
+# Windows event log 1101). Every automatic answer goes to the log and the Windows event log (1100).
+function Confirm-StageQuestion($Dialog, $Info, $Proc) {
+    if ($Info.Tries -ge 3) { return }
+    $now = Get-Date
+    if (($now - $Info.First).TotalMilliseconds -lt 500 -or ($now - $Info.Last).TotalSeconds -lt 2) { return }
+    $blocker = Get-VlcStageConfirmBlocker $Proc
+    if ($blocker -eq 'off') { return }
+    $ok = $null
+    if (-not $blocker) {
+        $ok = Find-DialogButton $Dialog.Handle 1
+        if (-not $ok -or -not [Vl]::IsWindowEnabled($ok)) { $blocker = 'the OK button of the question is missing or disabled' }
+    }
+    if (-not $blocker -and -not ($script:stageWarning -and $script:stageWarning.Ready)) {
+        # the policy was switched on during the run
+        $script:stageWarning = Start-VlcStageWarning
+        if (-not $script:stageWarning.Ready) { $blocker = "the warning window cannot be shown ($($script:stageWarning.Error))" }
+    }
+    if (-not $blocker) {
+        $cfgNow = (Get-VlcSettingsState).Settings
+        $text = "VL asks '$($Info.Text)' - VL Connector answers OK (set by the administrator for this PC). Program: $([IO.Path]::GetFileName($script:programPath))"
+        $shown = Show-VlcStageWarning $script:stageWarning $text ([int]$cfgNow.safety.stageWarningSec) ([bool]$cfgNow.safety.stageSound) ([Vl]::Rect($Dialog.Handle))
+        if (-not $shown) { $blocker = 'Windows did not show the warning window within 1 s' }
+        # the question must still be the one checked above
+        elseif ((Get-DialogText $Dialog.Handle) -ne $Info.Text) { $blocker = 'the question changed' }
+    }
+    $who = "user $env:USERDOMAIN\$env:USERNAME, PC $env:COMPUTERNAME, program $script:programPath, VL question '$($Info.Text)'"
+    if ($blocker) {
+        if ($Info.Skipped -ne $blocker) {
+            $Info.Skipped = $blocker
+            Write-Log "  Not confirmed automatically, the operator answers in VL: $blocker." Yellow
+            [void](Write-VlcEventLog "VL Connector did not answer a stage question of VL itself because $blocker; the operator answers it in VL ($who)." 1101 'Warning')
+        }
+        $Info.Last = Get-Date
+        return
+    }
+    [void](Set-WindowToFront $Dialog.Handle)
+    Start-Sleep -Milliseconds 200
+    [Vl]::Click($ok)
+    $Info.Tries++; $Info.Last = Get-Date
+    Write-Log "  Confirmed: $($Info.Text) (automatically, administrator's policy for this PC; warning shown)"
+    [void](Write-VlcEventLog "VL Connector answered a stage question of VL with OK (administrator's policy for this PC, warning window shown; $who)." 1100)
 }
 
 # --- Waiting for the end of the part ------------------------------------------------------------
@@ -540,7 +584,7 @@ function Wait-ReplayFinished($Proc) {
             $lastChange = $now
             Write-Log "  VL windows: $($state.Signature)" DarkGray
         }
-        Invoke-DialogRules $state $seenDialogs
+        Invoke-DialogRules $state $seenDialogs $Proc
 
         # The window before each position (ReplayForm) has "AI Replay (k/n)" in its title.
         foreach ($w in $state.Tops) {
@@ -762,7 +806,7 @@ function Wait-FileSaved($Proc, $SaveDialog, [string]$Target, [string]$FinishText
 }
 
 function Export-StlFile($Proc, [string]$Target) {
-    $state = Invoke-VlMenu $Proc $Menu
+    $state = Invoke-VlMenu $Proc $script:menuExportStl
     $before = @($state.Tops | ForEach-Object { $_.Handle })
     $stlDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Name -eq 'StlExporterDialog' } 50
     if (-not $stlDialog) { throw 'The STL export window did not open after selecting Export > STL.' }
@@ -926,14 +970,24 @@ function Get-TargetPath([string]$RunName) {
 if ($MarkerFile) { Set-MarkerPath $MarkerFile }
 try { Import-VlcInterop }
 catch { Exit-Run $EXIT_ERROR 'ERROR' $_.Exception.Message }
+# -LaunchFile: the template's "VL program" and "VL options", written by the Measure button macro as PROGRAM= and
+# OPTIONS= lines. Template values never reach the command line, where a quote in a property could add launcher
+# parameters (C25).
+if ($LaunchFile) {
+    try { $launch = Read-KeyValueFile $LaunchFile } catch { Exit-Run $EXIT_ARGS 'ERROR' "The launch file cannot be read: $($_.Exception.Message)" }
+    if ($null -eq $launch) { Exit-Run $EXIT_ARGS 'ERROR' "The launch file $LaunchFile is missing." }
+    if (-not $Program) { $Program = [string]$launch['PROGRAM'] }
+    if (-not $Options) { $Options = [string]$launch['OPTIONS'] }
+}
 # -Options: a few options as one text, e.g. "-Mode Standard -AfterExport Minimize" from the PolyWorks
 # project property "VL options". Only these names are accepted; options given directly win.
 if ($Options) {
-    $valueOptions = 'Mode', 'ExportImmediately', 'ConfirmStageMotion', 'AfterExport', 'ReturnFocus', 'TimeoutMin', 'SettleSec'
+    $valueOptions = 'Mode', 'ExportImmediately', 'AfterExport', 'ReturnFocus', 'TimeoutMin', 'SettleSec'
     $tokens = @($Options.Trim() -split '\s+' | Where-Object { $_ })
     try {
         for ($i = 0; $i -lt $tokens.Count; $i++) {
             if ($tokens[$i] -notmatch '^-([A-Za-z]+)$') { throw "'$($tokens[$i])' is not an option" }
+            if ($Matches[1] -eq 'ConfirmStageMotion') { throw '-ConfirmStageMotion is not a template option any more: whether VL Connector may answer the stage questions of VL is set by the administrator for all users of this PC (settings window, page Scanning)' }
             $name = @($valueOptions + 'NewWindow' | Where-Object { $_ -eq $Matches[1] })[0]
             if (-not $name) { throw "unknown option $($tokens[$i]) (allowed: -$($valueOptions -join ', -'), -NewWindow)" }
             if ($name -eq 'NewWindow') {
@@ -963,13 +1017,13 @@ try {
     if ($TimeoutMin -le 0) { $TimeoutMin = [int]$cfg.vl.timeoutMin }
     if ($SettleSec -le 0) { $SettleSec = [double]$cfg.vl.settleSec }
     if (-not $ExportImmediately) { $ExportImmediately = if ($cfg.vl.exportImmediately) { 'On' } else { 'Off' } }
-    if (-not $ConfirmStageMotion) { $ConfirmStageMotion = if ($cfg.vl.confirmStageMotion) { 'On' } else { 'Off' } }
     if (-not $AfterExport) { $AfterExport = [string]$cfg.vl.afterExport }
     if (-not $VldFolder) { $VldFolder = [string]$cfg.vl.vldFolder }
     if (-not $ReturnFocus) { $ReturnFocus = if ($cfg.vl.returnFocus) { 'On' } else { 'Off' } }
-    if (-not $Menu) { $Menu = [string]$cfg.vl.menuExportStl }
-    if (-not $VlExe) { $VlExe = [string]$cfg.vl.exe }
-    if (-not $PSBoundParameters.ContainsKey('VlArgs')) { $VlArgs = [string]$cfg.vl.args }
+    # machine-only settings: VL Application, its menus, the stage questions (read again for every question)
+    $script:vlExe = [string]$cfg.vl.exe
+    $script:vlArgs = [string]$cfg.vl.args
+    $script:menuExportStl = [string]$cfg.vl.menuExportStl
     $script:menuSaveAs = [string]$cfg.vl.menuSaveAs
     $script:closeWaitSec = [int]$cfg.vl.closeWaitSec
     $script:dialogRules = @($cfg.vl.dialogRules)
@@ -981,7 +1035,6 @@ catch { Exit-Run $EXIT_ARGS 'ERROR' "Settings: $($_.Exception.Message)" }
 $checks = @(
     @('Mode', $Mode, @('HighSpeed', 'Standard', 'Ask')),
     @('ExportImmediately', $ExportImmediately, @('On', 'Off')),
-    @('ConfirmStageMotion', $ConfirmStageMotion, @('On', 'Off')),
     @('AfterExport', $AfterExport, @('None', 'Minimize', 'Close', 'SaveAndClose')),
     @('ReturnFocus', $ReturnFocus, @('On', 'Off')))
 foreach ($c in $checks) {
@@ -1002,12 +1055,18 @@ if (-not $Watch) {
 $Host.UI.RawUI.WindowTitle = 'VL Connector - AI Replay'
 $what = if ($ExportOnly) { "export only $Program".Trim() } elseif ($Watch) { 'watching for AI Replay' } else { $Program }
 $flags = @($(if ($DryRun) { 'DRY RUN' }), $(if ($NewWindow) { 'new window' })) | Where-Object { $_ }
-Write-Log ("=== VLReplay $(Get-VlcVersion) $what | account $env:USERNAME | mode $Mode | export immediately $ExportImmediately | confirm stage $ConfirmStageMotion | after export $AfterExport " + ($flags -join ' | ')).Trim() Cyan
-if (Test-Path -LiteralPath $VlExe) {
-    $vlVersion = (Get-Item -LiteralPath $VlExe).VersionInfo.FileVersion
+$stagePolicy = if ($cfg.vl.confirmStageMotion) { 'by VL Connector (administrator)' } else { 'by the operator' }
+Write-Log ("=== VLReplay $(Get-VlcVersion) $what | account $env:USERNAME | mode $Mode | export immediately $ExportImmediately | stage questions $stagePolicy | after export $AfterExport " + ($flags -join ' | ')).Trim() Cyan
+if (Test-Path -LiteralPath $script:vlExe) {
+    $vlVersion = (Get-Item -LiteralPath $script:vlExe).VersionInfo.FileVersion
     if ($vlVersion -and $script:testedVersions -and $script:testedVersions -notcontains $vlVersion) {
         Write-Log "VL version $vlVersion has not been tested with VL Connector (tested: $($script:testedVersions -join ', '))." Yellow
     }
+}
+# the warning window is prepared now, so that it appears at once when a stage question comes
+if ($cfg.vl.confirmStageMotion) {
+    $script:stageWarning = Start-VlcStageWarning
+    if (-not $script:stageWarning.Ready) { Write-Log "The stage warning window cannot be prepared ($($script:stageWarning.Error)); the operator answers the stage questions in VL." Yellow }
 }
 if ($script:cancelPath -and (Test-Path -LiteralPath $script:cancelPath)) { Remove-Item -LiteralPath $script:cancelPath -Force }
 
@@ -1053,6 +1112,7 @@ try {
         $script:mutex.ReleaseMutex(); $script:mutex = $null
         Invoke-AfterExport $proc $target $triangles $finish
         Write-Log 'Done.' Green
+        Stop-VlcStageWarning $script:stageWarning
         exit $EXIT_OK
     }
 
@@ -1076,7 +1136,7 @@ try {
             if ($started) {
                 $dryRunText = 'AI Replay -> mode -> program entered -> Cancel. VL is back on its start screen.'
                 if ($script:markerPath) { Exit-Run $EXIT_OK 'DRYRUN' $dryRunText }
-                Write-Log "DRY RUN: $dryRunText" Green; $script:mutex.ReleaseMutex(); exit $EXIT_OK
+                Write-Log "DRY RUN: $dryRunText" Green; $script:mutex.ReleaseMutex(); Stop-VlcStageWarning $script:stageWarning; exit $EXIT_OK
             }
             throw 'DRY RUN: the program selection dialog did not close.'
         }
@@ -1115,6 +1175,7 @@ try {
     $script:mutex.ReleaseMutex(); $script:mutex = $null
     Invoke-AfterExport $proc $target $triangles $finish
     Write-Log 'Done.' Green
+    Stop-VlcStageWarning $script:stageWarning
     exit $EXIT_OK
 }
 catch {

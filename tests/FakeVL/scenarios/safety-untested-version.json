@@ -1,0 +1,7 @@
+{
+    "flavors": [ "en" ],
+    "launcher": { "confirmStageMotion": true },
+    "machine": { "policy": { "vl": { "testedVersions": [ "4.6.1.6002" ] } } },
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator", "warningVisibleOnAnswer": false,
+                "logIncludes": [ "is not one of the tested versions" ] }
+}

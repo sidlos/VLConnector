@@ -12,6 +12,8 @@
 //     to the front or minimize it (Windows lets only the process with the last input do that).
 //   - OpenInputDesktop / SwitchDesktop, WTSGetActiveConsoleSessionId, ProcessIdToSessionId,
 //     GetSystemMetrics(SM_REMOTESESSION): is somebody at this PC (not locked, console, not remote)?
+//   - GetWindowRect, Get/SetWindowLong(Ptr) with WS_EX_NOACTIVATE: place the stage warning window next to
+//     VL's question and keep it from ever taking the keyboard focus.
 namespace VLConnector.Interop
 {
     using System;
@@ -57,6 +59,13 @@ namespace VLConnector.Interop
         [DllImport("kernel32.dll")] static extern uint WTSGetActiveConsoleSessionId();
         [DllImport("kernel32.dll")] static extern bool ProcessIdToSessionId(uint pid, out uint session);
         [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
+        [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")] static extern IntPtr GetWindowLongPtr64(IntPtr h, int index);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")] static extern IntPtr SetWindowLongPtr64(IntPtr h, int index, IntPtr value);
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong")] static extern int GetWindowLong32(IntPtr h, int index);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLong")] static extern int SetWindowLong32(IntPtr h, int index, int value);
+
+        [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
 
         const uint SMTO_ABORTIFHUNG = 2;
         const uint PROCESS_VM_OPERATION = 0x0008;
@@ -196,6 +205,23 @@ namespace VLConnector.Interop
         }
 
         public static void Minimize(IntPtr hwnd) { ShowWindow(hwnd, 6); }
+
+        // Window position in screen pixels: left, top, right, bottom (empty when the window is gone).
+        public static int[] Rect(IntPtr h)
+        {
+            RECT r;
+            if (!GetWindowRect(h, out r)) return new int[0];
+            return new int[] { r.Left, r.Top, r.Right, r.Bottom };
+        }
+
+        // The stage warning window: never activated (not by showing it, not by a click), no taskbar button.
+        public static void SetNoActivate(IntPtr h)
+        {
+            const int GWL_EXSTYLE = -20;
+            const long WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x00000080;
+            if (IntPtr.Size == 8) SetWindowLongPtr64(h, GWL_EXSTYLE, new IntPtr(GetWindowLongPtr64(h, GWL_EXSTYLE).ToInt64() | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW));
+            else SetWindowLong32(h, GWL_EXSTYLE, (int)(GetWindowLong32(h, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW));
+        }
 
         // Invoke on a menu item that opens a modal dialog returns only after the dialog closes,
         // so it runs on its own thread.

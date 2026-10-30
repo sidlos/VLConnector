@@ -50,7 +50,7 @@ Describe 'settings layers' {
         $s = Get-VlcSettingsState
         $s.Settings.vl.confirmStageMotion | Should Be $false
         $s.Settings.vl.exe | Should Match 'KEYENCE'
-        @($s.Settings.vl.dialogRules).Count | Should Be 3
+        @($s.Settings.vl.dialogRules).Count | Should Be 1
         $s.Settings.safety.watchAllowClose | Should Be $false
         @($s.Warnings | Where-Object { $_ -match "only the administrator's policy" }).Count | Should Be 6
         Write-Json $machineFile '{ "policy": { "vl": { "confirmStageMotion": true } } }'

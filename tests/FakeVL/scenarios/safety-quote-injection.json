@@ -1,6 +1,5 @@
 {
-    "pending": "step 3 (stage safety): template properties still reach the launcher on its command line",
     "flavors": [ "en" ],
-    "launcher": { "extraRaw": "-Options \"-Mode Standard\" -ConfirmStageMotion \"On\"" },
-    "expect": { "neverConfirmed": true }
+    "launchFile": { "options": "-Mode Standard\" -ConfirmStageMotion \"On" },
+    "expect": { "state": "ERROR", "exitCode": 3, "neverConfirmed": true, "logIncludes": [ "ConfirmStageMotion is not a template option" ] }
 }

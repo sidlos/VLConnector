@@ -18,7 +18,7 @@
         "vl.closeWaitSec":         { "type": "int", "min": 10, "max": 3600 },
         "vl.menuExportStl":        { "type": "menu", "machineOnly": true, "about": "VL menu path of the STL export (English VL user interface)." },
         "vl.menuSaveAs":           { "type": "menu", "machineOnly": true, "about": "VL menu path of Save As (English VL user interface)." },
-        "vl.dialogRules":          { "type": "dialogRules", "machineOnly": true, "actions": [ "ConfirmStageMotion", "ScannerNotConnected" ] },
+        "vl.dialogRules":          { "type": "dialogRules", "machineOnly": true, "actions": [ "ScannerNotConnected" ], "about": "VL messages that end the run. No rule can confirm anything: only VL's two stage questions are ever confirmed, and only when vl.confirmStageMotion allows it." },
         "vl.testedVersions":       { "type": "stringList", "machineOnly": true, "about": "VL versions whose stage questions VL Connector knows." },
         "polyworks.keepPieces":    { "type": "enum", "values": [ "All", "Nok", "None" ] },
         "polyworks.openPdf":       { "type": "bool" },

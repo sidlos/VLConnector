@@ -1,0 +1,5 @@
+{
+    "flavors": [ "en" ],
+    "launchFile": { "options": "-Mode Standard -SettleSec 1" },
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "eventsInclude": [ "mode:Standard" ] }
+}

@@ -1,0 +1,5 @@
+{
+    "flavors": [ "en" ],
+    "launcher": { "extraRaw": "-ConfirmStageMotion On" },
+    "expect": { "state": "none", "exitCode": 1, "neverConfirmed": true }
+}

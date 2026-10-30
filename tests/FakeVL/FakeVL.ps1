@@ -42,7 +42,8 @@ namespace FakeVlNative
         public static void Hide() { IntPtr h = GetConsoleWindow(); if (h != IntPtr.Zero) ShowWindow(h, 0); }
     }
 
-    // A real MessageBox (#32770) on its own STA thread, owned by the main window.
+    // A real MessageBox (#32770) on its own STA thread, owned by the main window. When it is answered, it notes
+    // how long it was open and whether VL Connector's stage warning window was on screen at that moment.
     public class AsyncBox
     {
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int MessageBoxW(IntPtr h, string text, string caption, uint type);
@@ -51,9 +52,13 @@ namespace FakeVlNative
         [DllImport("user32.dll")] static extern IntPtr GetDlgItem(IntPtr h, int id);
         [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
         [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string title);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
 
         public volatile int Result = -1;
         public volatile bool Done;
+        public volatile bool WarningVisible;
+        public double OpenSec;
         private volatile uint threadId;
 
         public AsyncBox(IntPtr owner, string text, string caption, uint type)
@@ -61,7 +66,11 @@ namespace FakeVlNative
             Thread t = new Thread(delegate()
             {
                 threadId = GetCurrentThreadId();
+                var watch = System.Diagnostics.Stopwatch.StartNew();
                 Result = MessageBoxW(owner, text, caption, type);
+                OpenSec = watch.Elapsed.TotalSeconds;
+                IntPtr warning = FindWindow(null, "VL Connector - stage rotation");
+                WarningVisible = warning != IntPtr.Zero && IsWindowVisible(warning);
                 Done = true;
             });
             t.IsBackground = true;
@@ -391,7 +400,7 @@ function Open-Program([string]$Path) {
             Invoke-After ([double]$cfg.rotateOperatorOkSec) { if ($script:originBox.Press(1)) { Write-Event 'operator:origin-ok' } }
         }
         Invoke-WhenDone $script:originBox {
-            Write-Event "answer:return-origin:$($script:originBox.Result)"
+            Write-Event ([string]::Format([Globalization.CultureInfo]::InvariantCulture, "answer:return-origin:{0} warning={1} open={2:0.00}", $script:originBox.Result, [int]$script:originBox.WarningVisible, $script:originBox.OpenSec))
             if ($script:originBox.Result -eq 1) { $script:k = 1; Start-Position } else { Set-StartScreen 'origin-cancelled' }
         }
         return
@@ -408,7 +417,7 @@ function Start-Position {
             Invoke-After ([double]$cfg.rotateOperatorOkSec) { if ($script:rotateBox.Press(1)) { Write-Event 'operator:rotate-ok' } }
         }
         Invoke-WhenDone $script:rotateBox {
-            Write-Event "answer:rotate:$($script:rotateBox.Result)"
+            Write-Event ([string]::Format([Globalization.CultureInfo]::InvariantCulture, "answer:rotate:{0} warning={1} open={2:0.00}", $script:rotateBox.Result, [int]$script:rotateBox.WarningVisible, $script:rotateBox.OpenSec))
             if ($script:rotateBox.Result -eq 1) { Show-ReplayForm } else { Set-StartScreen 'rotate-cancelled' }
         }
         return

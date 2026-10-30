@@ -1,21 +1,14 @@
 {
-    "launcher":  {
-                     "confirmStageMotion":  true
-                 },
-    "fakevl":  {
-                   "returnOriginDialog":  true,
-                   "rotateOperatorOkSec":  0
-               },
-    "flavors":  [
-                    "en"
-                ],
-    "expect":  {
-                   "exitCode":  0,
-                   "eventsInclude":  [
-                                         "answer:return-origin:1",
-                                         "answer:rotate:1"
-                                     ],
-                   "stl":  true,
-                   "state":  "OK"
-               }
+    "launcher": { "confirmStageMotion": true },
+    "fakevl": { "returnOriginDialog": true, "rotateOperatorOkSec": 0 },
+    "flavors": [ "en" ],
+    "expect": {
+        "exitCode": 0,
+        "state": "OK",
+        "stl": true,
+        "eventsInclude": [ "answer:return-origin:1", "answer:rotate:1" ],
+        "stageAnsweredBy": "launcher",
+        "warningVisibleOnAnswer": true,
+        "minAnswerSec": 0.5
+    }
 }

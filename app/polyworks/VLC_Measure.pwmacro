@@ -44,6 +44,7 @@ DECLARE vScale "0.5"
 DECLARE vDevice ""
 DECLARE vMsg ""
 DECLARE vMarker ""
+DECLARE vLaunch ""
 DECLARE vStatus ""
 DECLARE vList
 DECLARE vFound 0
@@ -136,7 +137,12 @@ ELSE
     SET vProgName "$vProgram:t"
     SET vMarker "${vScanDir}\vlc_${vRun}.done"
     SET vStatus "${vMarker}.status"
-    SYSTEM COMMAND EXEC ASYNC ( "powershell.exe", { "-NoProfile", "-STA", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\VLReplay.ps1${_QUOTES}", "${_QUOTES}${vProgram}${_QUOTES}", "-MarkerFile", "${_QUOTES}${vMarker}${_QUOTES}", "-OutputDir", "${_QUOTES}${vScanDir}${_QUOTES}", "-Options", "${_QUOTES}${vOptions}${_QUOTES}" }, vCallId )
+    # the template's program and options reach VLReplay.ps1 in a file, never on its command line
+    SET vLaunch "${vScanDir}\vlc_${vRun}.launch"
+    DATA_FILE CREATE ( $vLaunch, "Unicode", "Yes" )
+    DATA_FILE APPEND LINE ( $vLaunch, { "PROGRAM=$vProgram" } )
+    DATA_FILE APPEND LINE ( $vLaunch, { "OPTIONS=$vOptions" } )
+    SYSTEM COMMAND EXEC ASYNC ( "powershell.exe", { "-NoProfile", "-STA", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\VLReplay.ps1${_QUOTES}", "-LaunchFile", "${_QUOTES}${vLaunch}${_QUOTES}", "-MarkerFile", "${_QUOTES}${vMarker}${_QUOTES}", "-OutputDir", "${_QUOTES}${vScanDir}${_QUOTES}" }, vCallId )
     MACRO PROGRESS SHOW ( "VL Connector - $vTemplate", "Program: $vProgName", 0, $vTimeoutS, "Cancel" )
     MACRO PROGRESS STATUS MESSAGE ( "Starting AI Replay in VL..." )
     WHILE $vFound == 0
@@ -185,7 +191,7 @@ ELSE
     DATA_FILE READ LINE_FIELD ( $vMarker, 1, 2, vState, "=", "On" )
     DATA_FILE READ LINE_FIELD ( $vMarker, 2, 2, vStl, "=", "On" )
     DATA_FILE READ LINE_FIELD ( $vMarker, 6, 2, vMsg, "=", "On" )
-    SYSTEM COMMAND EXEC SYNC ( "DEL", { "/Q", "${_QUOTES}${vMarker}${_QUOTES}" } )
+    SYSTEM COMMAND EXEC SYNC ( "DEL", { "/Q", "${_QUOTES}${vMarker}${_QUOTES}", "${_QUOTES}${vLaunch}${_QUOTES}" } )
     IF "$vState" == "CANCELLED"
         IF $vCancelled == 0
             MACRO INPUT ERROR_MESSAGE ( "Information", "The scan was cancelled in VL.", "$vMsg", "" )

@@ -1,25 +1,16 @@
 {
-    "launcher":  {
-                     "confirmStageMotion":  true
-                 },
-    "fakevl":  {
-                   "rotateOperatorOkSec":  0
-               },
-    "flavors":  [
-                    "en"
-                ],
-    "expect":  {
-                   "exitCode":  0,
-                   "eventsExclude":  [
-                                         "operator:rotate-ok"
-                                     ],
-                   "stl":  true,
-                   "state":  "OK",
-                   "eventsInclude":  [
-                                         "answer:rotate:1"
-                                     ],
-                   "logIncludes":  [
-                                       "Confirmed: The stage will rotate"
-                                   ]
-               }
+    "launcher": { "confirmStageMotion": true },
+    "fakevl": { "rotateOperatorOkSec": 0 },
+    "flavors": [ "en" ],
+    "expect": {
+        "exitCode": 0,
+        "state": "OK",
+        "stl": true,
+        "eventsInclude": [ "answer:rotate:1" ],
+        "eventsExclude": [ "operator:rotate-ok" ],
+        "stageAnsweredBy": "launcher",
+        "warningVisibleOnAnswer": true,
+        "minAnswerSec": 0.5,
+        "logIncludes": [ "Confirmed: The stage will rotate" ]
+    }
 }

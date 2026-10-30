@@ -18,8 +18,6 @@
         "menuExportStl": "File>Export>STL",
         "menuSaveAs": "File>Save As",
         "dialogRules": [
-            { "match": "stage will rotate", "action": "ConfirmStageMotion" },
-            { "match": "return the stage to the origin", "action": "ConfirmStageMotion" },
             { "match": "connect the hardware", "action": "ScannerNotConnected" }
         ],
         "testedVersions": [ "4.6.1.6002" ]

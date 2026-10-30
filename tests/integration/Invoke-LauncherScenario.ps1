@@ -12,10 +12,13 @@
 
   Scenario file (JSON): { "fakevl": {...}, "launcher": {...}, "machine": {...}, "user": {...},
     "prestartFakeVl": bool, "holdMutex": bool, "expect": {...}, "expectByFlavor": { "<flavor>": {...} } }
-  launcher: exportImmediately, dryRun, exportOnly, mode (HighSpeed|Standard), timeoutMin, confirmStageMotion,
-            afterExport, returnFocus, watch, extra { <flavor>: [args] },
-            extraRaw (text appended to the command line as it is, like a macro with a quote in a property)
-  machine:  written as <install>\machine.json (the machine settings file of that copy)
+  launcher: exportImmediately, dryRun, exportOnly, mode (HighSpeed|Standard), timeoutMin, afterExport,
+            returnFocus, watch, extra { <flavor>: [args] },
+            confirmStageMotion (the machine policy of the copy allows VL Connector to answer stage questions),
+            extraRaw (text appended to the command line as it is)
+  launchFile: { program, options } passed as -LaunchFile, as the Measure button does (program default: the demo)
+  machine:  written as <install>\machine.json (the machine settings file of that copy); its policy always gets
+            FakeVL as vl.exe / vl.args and the FakeVL version as vl.testedVersions (unless the scenario sets it)
   user:     written as the user's settings.json
   programDataMachine: written as %ProgramData%\VLConnector\machine.json of the launcher (a fake ProgramData)
   pending:  the scenario is skipped by Run-Tests.ps1 (unless -IncludePending) until this step is done
@@ -24,7 +27,9 @@
             logIncludes [...], logExcludes [...], maxSeconds, vldExists (bool),
             stageAnsweredBy (operator|launcher): who answered every stage dialog of the run (at least one),
             neverConfirmed (bool): the launcher confirmed nothing; every stage dialog shown was answered by
-            the simulated operator
+            the simulated operator,
+            warningVisibleOnAnswer (bool): VL Connector's stage warning window was (not) on screen at every
+            answer to a stage dialog, minAnswerSec: no stage dialog was answered sooner
 #>
 param(
     [Parameter(Mandatory = $true)][string]$ScenarioFile,
@@ -112,7 +117,6 @@ if ($fl.Installed) {
     Copy-Item -LiteralPath (Join-Path $repo 'VERSION') -Destination $install
     Copy-Item -LiteralPath $dll -Destination (Join-Path $install 'bin')
     [IO.File]::WriteAllText((Join-Path $install 'install-info.txt'), "VERSION=test`r`nINSTALLED=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`r`n")
-    if ($scenario.machine) { [IO.File]::WriteAllText((Join-Path $install 'machine.json'), ($scenario.machine | ConvertTo-Json -Depth 10)) }
     $launcherPath = Join-Path $install "app\$(Split-Path $Launcher -Leaf)"
 }
 else { $launcherPath = Join-Path $launcherDir 'VLReplay.ps1'; Copy-Item -LiteralPath $Launcher $launcherPath }
@@ -127,6 +131,18 @@ if ($scenario.programDataMachine) {
     [IO.File]::WriteAllText((Join-Path $programData 'VLConnector\machine.json'), ($scenario.programDataMachine | ConvertTo-Json -Depth 10))
 }
 $fakeArgs = "-NoProfile -STA -ExecutionPolicy Bypass -File $(Join-Path $repo 'tests\FakeVL\FakeVL.ps1') -Scenario $scenarioCopy -EventLog $events"
+if ($fl.Installed) {
+    # machine.json of the copy: the scenario's sections, and in the policy (machine-only keys) FakeVL as the VL
+    # Application of this "PC", its version as a tested one, and launcher.confirmStageMotion as the stage policy
+    $machine = if ($scenario.machine) { $scenario.machine | ConvertTo-Json -Depth 10 | ConvertFrom-Json } else { [pscustomobject]@{} }
+    if (-not $machine.PSObject.Properties['policy']) { $machine | Add-Member -NotePropertyName policy -NotePropertyValue ([pscustomobject]@{}) }
+    if (-not $machine.policy.PSObject.Properties['vl']) { $machine.policy | Add-Member -NotePropertyName vl -NotePropertyValue ([pscustomobject]@{}) }
+    $policyVl = [ordered]@{ exe = $fakeExe; args = $fakeArgs }
+    if (-not $machine.policy.vl.PSObject.Properties['testedVersions']) { $policyVl['testedVersions'] = @((Get-Item -LiteralPath $fakeExe).VersionInfo.FileVersion) }
+    if ($scenario.launcher -and $scenario.launcher.confirmStageMotion) { $policyVl['confirmStageMotion'] = $true }
+    foreach ($k in $policyVl.Keys) { $machine.policy.vl | Add-Member -NotePropertyName $k -NotePropertyValue $policyVl[$k] -Force }
+    [IO.File]::WriteAllText((Join-Path $install 'machine.json'), ($machine | ConvertTo-Json -Depth 10))
+}
 
 function New-StartInfo([string]$File, [string]$Arguments) {
     $psi = New-Object Diagnostics.ProcessStartInfo($File, $Arguments)
@@ -156,18 +172,26 @@ if ($scenario.holdMutex) {
 }
 
 $a = $fl.Args
-$launcherArgs = New-Object Collections.Generic.List[string]
-if (-not ($scenario.launcher -and ($scenario.launcher.exportOnly -or $scenario.launcher.watch))) { $launcherArgs.Add($program) }
-if ($scenario.launcher -and $scenario.launcher.watch) { $launcherArgs.Add('-Watch') }
-$launcherArgs.AddRange([string[]]@($a.Out, $out, $a.Marker, $marker, $a.Timeout, '3', '-VlExe', $fakeExe))
 $opt = $scenario.launcher
+$launcherArgs = New-Object Collections.Generic.List[string]
+if ($scenario.launchFile) {
+    # like the Measure button: the template's program and options in a UTF-16 file
+    $launch = Join-Path $out 'run.launch'
+    $launchProgram = if ($scenario.launchFile.program) { [string]$scenario.launchFile.program } else { $program }
+    [IO.File]::WriteAllLines($launch, [string[]]@("PROGRAM=$launchProgram", "OPTIONS=$([string]$scenario.launchFile.options)"), [Text.Encoding]::Unicode)
+    $launcherArgs.AddRange([string[]]@('-LaunchFile', $launch))
+}
+elseif (-not ($opt -and ($opt.exportOnly -or $opt.watch))) { $launcherArgs.Add($program) }
+if ($opt -and $opt.watch) { $launcherArgs.Add('-Watch') }
+$launcherArgs.AddRange([string[]]@($a.Out, $out, $a.Marker, $marker, $a.Timeout, '3'))
+# the prototype takes FakeVL on its command line; the product only from the machine policy
+if (-not $fl.Installed) { $launcherArgs.AddRange([string[]]@('-VlExe', $fakeExe)) }
 if ($Flavor -eq 'en') {
     # deterministic options; the scenario overrides single ones. The stage confirmation is never forced Off
     # here: the safety scenarios check that nothing but the machine policy switches it on.
     $fixed = [ordered]@{ '-ExportImmediately' = 'Off'; '-AfterExport' = 'None'; '-ReturnFocus' = 'Off' }
     if ($opt) {
         if ($opt.exportImmediately) { $fixed['-ExportImmediately'] = 'On' }
-        if ($opt.confirmStageMotion) { $fixed['-ConfirmStageMotion'] = 'On' }
         if ($opt.afterExport) { $fixed['-AfterExport'] = [string]$opt.afterExport }
         if ($opt.returnFocus) { $fixed['-ReturnFocus'] = 'On' }
     }
@@ -181,7 +205,7 @@ if ($opt) {
     if ($opt.extra -and $opt.extra.$Flavor) { $launcherArgs.AddRange([string[]]@($opt.extra.$Flavor)) }
 }
 $argLine = '-NoProfile -STA -ExecutionPolicy Bypass -File "' + $launcherPath + '" ' +
-    (($launcherArgs | ForEach-Object { '"' + $_ + '"' }) -join ' ') + ' -VlArgs "' + $fakeArgs + '"'
+    (($launcherArgs | ForEach-Object { '"' + $_ + '"' }) -join ' ') + $(if (-not $fl.Installed) { ' -VlArgs "' + $fakeArgs + '"' })
 if ($opt -and $opt.extraRaw) { $argLine += ' ' + [string]$opt.extraRaw }
 
 $t0 = Get-Date
@@ -270,6 +294,20 @@ if ($expect.ContainsKey('stageAnsweredBy')) {
 if ($expect.neverConfirmed) {
     if ($launcherLog -match 'Confirmed:') { $failures.Add('the launcher confirmed a VL message') }
     if ($stageByOperator -ne $stageShown) { $failures.Add("the operator answered $stageByOperator of $stageShown stage dialogs, expected all") }
+}
+# every answer to a stage dialog: was VL Connector's warning window on screen, how long was the question open
+$answers = @($eventTexts | ForEach-Object {
+    if ($_ -match '^answer:(?:rotate|return-origin):-?\d+ warning=(\d) open=([\d.]+)') {
+        [pscustomobject]@{ Warning = $Matches[1] -eq '1'; Open = [double]::Parse($Matches[2], [Globalization.CultureInfo]::InvariantCulture) }
+    } })
+if ($expect.ContainsKey('warningVisibleOnAnswer')) {
+    if (-not $answers.Count) { $failures.Add('no stage dialog was answered') }
+    foreach ($x in $answers) {
+        if ($x.Warning -ne [bool]$expect.warningVisibleOnAnswer) { $failures.Add("a stage dialog was answered with the warning window $(if ($x.Warning) { 'visible' } else { 'not visible' })") }
+    }
+}
+if ($expect.ContainsKey('minAnswerSec')) {
+    foreach ($x in $answers) { if ($x.Open -lt [double]$expect.minAnswerSec) { $failures.Add("a stage dialog was answered after $($x.Open) s, expected at least $($expect.minAnswerSec) s") } }
 }
 if ($expect.ContainsKey('maxSeconds') -and $duration -gt [double]$expect.maxSeconds) { $failures.Add("took $([math]::Round($duration, 1)) s, expected at most $($expect.maxSeconds) s") }
 if ($expect.ContainsKey('vldExists')) {
