@@ -1,0 +1,6 @@
+{
+    "pending": "step 3 (stage safety): a user setting still switches the confirmation on",
+    "flavors": [ "en" ],
+    "user": { "vl": { "confirmStageMotion": true } },
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator" }
+}

@@ -1,0 +1,9 @@
+{
+    "pending": "step 3 (stage safety): a user setting still switches the confirmation on in watch mode",
+    "prestartFakeVl": true,
+    "launcher": { "watch": true },
+    "fakevl": { "operatorStartSec": 2, "operatorModeSec": 0.8, "operatorMode": "Standard" },
+    "flavors": [ "en" ],
+    "user": { "vl": { "confirmStageMotion": true } },
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator" }
+}

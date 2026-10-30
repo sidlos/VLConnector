@@ -3,6 +3,8 @@
     Run-Tests.ps1 -Static                     source checks (tools\Test-Static.ps1)
     Run-Tests.ps1 -Unit                       Pester unit tests (tests\unit)
     Run-Tests.ps1 -Launcher [-Flavor en] [-Only name,...]   launcher scenarios against FakeVL
+    Run-Tests.ps1 -Launcher -IncludePending   also the scenarios marked "pending" (known to fail until a
+                                              later step of the work is done)
   Results of launcher scenarios are written to tests\_work\<flavor>\summary.json.
 #>
 param(
@@ -10,7 +12,8 @@ param(
     [switch]$Unit,
     [switch]$Launcher,
     [ValidateSet('proto', 'en')][string]$Flavor = 'en',
-    [string[]]$Only = @()
+    [string[]]$Only = @(),
+    [switch]$IncludePending
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,9 +48,10 @@ if ($Launcher) {
     $results = @()
     foreach ($f in Get-ChildItem (Join-Path $PSScriptRoot 'FakeVL\scenarios') -Filter '*.json' | Sort-Object Name) {
         if ($Only -and $Only -notcontains $f.BaseName) { continue }
-        $flavors = (Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json).flavors
-        if ($flavors -and $flavors -notcontains $Flavor) { continue }
+        $definition = Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json
+        if ($definition.flavors -and $definition.flavors -notcontains $Flavor) { continue }
         Write-Host ("{0,-24}" -f $f.BaseName) -NoNewline
+        if ($definition.pending -and -not $IncludePending -and -not $Only) { Write-Host "PENDING  $($definition.pending)" -ForegroundColor Yellow; continue }
         $r = & (Join-Path $PSScriptRoot 'integration\Invoke-LauncherScenario.ps1') -ScenarioFile $f.FullName -Flavor $Flavor
         if ($r.Passed) { Write-Host ("PASS  {0,6}s  {1}" -f $r.Seconds, $r.State) -ForegroundColor Green }
         else { Write-Host ("FAIL  {0,6}s  {1}" -f $r.Seconds, ($r.Failures -join '; ')) -ForegroundColor Red; $failed++ }
@@ -61,3 +65,4 @@ if ($Launcher) {
 
 if ($failed) { Write-Host "$failed failed" -ForegroundColor Red; exit 1 }
 Write-Host 'All passed' -ForegroundColor Green
+exit 0

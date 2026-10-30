@@ -302,6 +302,19 @@ function Get-VlProcesses {
         Where-Object { $_.SessionId -eq $mySession -and -not (Test-VlBeingClosed $_.Id) } | Sort-Object StartTime -Descending)
 }
 
+# Brings a window to the front. The input of the window in front is joined (Vl.BringToFront) only while that
+# window belongs to VL, PolyWorks or this launcher: an application the operator works in is never taken over,
+# Windows then only flashes the taskbar button (C09).
+function Set-WindowToFront([IntPtr]$Hwnd) {
+    $owner = [Vl]::ProcessOf([Vl]::GetForegroundWindow())
+    $attach = $owner -eq $PID
+    if (-not $attach -and $owner) {
+        $p = Get-Process -Id $owner -ErrorAction SilentlyContinue
+        $attach = [bool]($p -and $p.SessionId -eq $mySession -and $p.ProcessName -in 'VLApplication4', 'iminspect', 'polyworks')
+    }
+    return [Vl]::BringToFront($Hwnd, $attach)
+}
+
 function Wait-Until([int]$TimeoutSec, [scriptblock]$Condition, [int]$StepMs = 250) {
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     do {
@@ -387,7 +400,7 @@ function Get-StartScreenVl {
 
 function Start-AiReplay($Proc, [string]$ProgramPath) {
     $state = Get-VlState $Proc.Id
-    [Vl]::BringToFront($state.Main.Handle)
+    [void](Set-WindowToFront $state.Main.Handle)
 
     $before = @(Get-Tops $Proc.Id | ForEach-Object { $_.Handle })
     [Vl]::Click($state.Button)
@@ -468,7 +481,7 @@ function Invoke-DialogRules($State, [hashtable]$Seen) {
                 if (($now - $info.First).TotalMilliseconds -lt 500 -or ($now - $info.Last).TotalSeconds -lt 2) { break }
                 $ok = Find-OkButton $d.Handle
                 if (-not $ok) { break }
-                [Vl]::BringToFront($d.Handle)
+                [void](Set-WindowToFront $d.Handle)
                 Start-Sleep -Milliseconds 200
                 [Vl]::Click($ok)
                 $info.Tries++; $info.Last = Get-Date
@@ -687,7 +700,7 @@ function Invoke-VlMenu($Proc, [string]$Path) {
     $parts = @($Path -split '>' | ForEach-Object { $_.Trim() })
     $state = Get-VlState $Proc.Id
     if (-not $state.Idle) { throw "The VL window is not idle: $($state.Signature)" }
-    [Vl]::BringToFront($state.Main.Handle)
+    [void](Set-WindowToFront $state.Main.Handle)
     Start-Sleep -Milliseconds 100
 
     $strip = $script:menuStrips[$Proc.Id]
@@ -799,7 +812,10 @@ function Set-CallerToFront {
     try {
         if ($ReturnFocusHwnd -ne 0) {
             $h = [IntPtr]$ReturnFocusHwnd
-            if ([Vl]::IsWindow($h)) { [Vl]::BringToFront($h); Write-Log 'The calling window is in front.' }
+            if ([Vl]::IsWindow($h)) {
+                if (Set-WindowToFront $h) { Write-Log 'The calling window is in front.' }
+                else { Write-Log 'The calling window was not brought to the front: another application is in front.' }
+            }
             return
         }
         $consoles = 'cmd', 'powershell', 'pwsh', 'conhost', 'OpenConsole', 'WindowsTerminal'
@@ -811,8 +827,8 @@ function Set-CallerToFront {
             $parent = Get-Process -Id $id -ErrorAction SilentlyContinue
             if (-not $parent) { return }
             if ($consoles -notcontains $parent.ProcessName -and $parent.MainWindowHandle -ne [IntPtr]::Zero) {
-                [Vl]::BringToFront($parent.MainWindowHandle)
-                Write-Log "$($parent.ProcessName) (PID $id) is in front."
+                if (Set-WindowToFront $parent.MainWindowHandle) { Write-Log "$($parent.ProcessName) (PID $id) is in front." }
+                else { Write-Log "$($parent.ProcessName) (PID $id) was not brought to the front: another application is in front." }
                 return
             }
         }

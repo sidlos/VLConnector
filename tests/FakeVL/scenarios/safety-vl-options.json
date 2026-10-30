@@ -1,0 +1,6 @@
+{
+    "pending": "step 3 (stage safety): -ConfirmStageMotion is still accepted in VL options",
+    "flavors": [ "en" ],
+    "launcher": { "extra": { "en": [ "-Options", "-ConfirmStageMotion On" ] } },
+    "expect": { "state": "ERROR", "exitCode": 3, "neverConfirmed": true, "logIncludes": [ "ConfirmStageMotion" ] }
+}

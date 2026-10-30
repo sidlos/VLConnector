@@ -1,0 +1,4 @@
+{
+    "flavors": [ "en" ],
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator" }
+}

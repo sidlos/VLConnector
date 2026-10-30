@@ -1,0 +1,6 @@
+{
+    "pending": "step 2 (settings policy): schema check of the machine policy",
+    "flavors": [ "en" ],
+    "machine": { "policy": { "vl": { "confirmStageMotion": "true" } } },
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator" }
+}

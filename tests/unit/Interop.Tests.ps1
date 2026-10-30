@@ -130,4 +130,24 @@ Describe 'type names in the shipped scripts' {
         $r.ExitCode | Should Be 0
         $r.Text.Trim() | Should Be ''
     }
+    It 'call the interface classes only with methods and argument counts those classes have' {
+        $files = @(Get-ChildItem -LiteralPath $app -Recurse -Filter '*.ps1')
+        $calls = foreach ($f in $files) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
+            $using = @($ast.UsingStatements | ForEach-Object { $_.Extent.Text }) -join ';'
+            foreach ($c in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and $n.Static -and $n.Expression -is [System.Management.Automation.Language.TypeExpressionAst] }, $true)) {
+                $count = if ($c.Arguments) { $c.Arguments.Count } else { 0 }
+                "$($f.Name):$($c.Extent.StartLineNumber)|$using|$($c.Expression.TypeName.FullName)|$($c.Member.Value)|$count"
+            }
+        }
+        $list = Join-Path $TestDrive 'calls.txt'
+        [IO.File]::WriteAllLines($list, [string[]]$calls)
+        $code = ". '$app\lib\Interop.ps1'; Import-VlcInterop; `$n = 0; " +
+            "foreach (`$line in [IO.File]::ReadAllLines('$list')) { `$p = `$line -split '\|'; `$text = (@(`$p[1] -split ';' | Where-Object { `$_ }) + @('[' + `$p[2] + ']')) -join [Environment]::NewLine; " +
+            "`$t = try { [scriptblock]::Create(`$text).Invoke()[0] } catch { `$null }; if (-not `$t -or `$t.Namespace -ne 'VLConnector.Interop') { continue }; `$n++; " +
+            "if (-not (`$t.GetMethods() | Where-Object { `$_.IsStatic -and `$_.Name -eq `$p[3] -and `$_.GetParameters().Count -eq [int]`$p[4] })) { 'NO MATCH ' + `$line } }; 'checked ' + `$n"
+        $r = Invoke-Child $code
+        $r.ExitCode | Should Be 0
+        $r.Text.Trim() | Should Match '^checked [1-9]\d*$'
+    }
 }

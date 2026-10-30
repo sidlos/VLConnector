@@ -3,15 +3,28 @@
 
   - %APPDATA% and %LOCALAPPDATA% of the launcher (and so of FakeVL, which it starts) point to a
     per-scenario work folder, so VL's operation log and program list are fakes.
+  - The product launcher (flavor en) runs from a copy laid out like an installation: <work>\install with
+    app\, VERSION, install-info.txt and bin\VLConnector.Interop.dll (built once per source version into
+    tests\_work\interop), so it loads the DLL like an installed copy and never compiles.
   - FakeVL runs through a renamed copy of powershell.exe (process name VLApplication4).
   - The test refuses to run while the real VL application is running: the launcher picks up any
     VLApplication4 window of the session.
 
-  Scenario file (JSON): { "fakevl": {...}, "launcher": {...}, "prestartFakeVl": bool,
-    "holdMutex": bool, "expect": {...}, "expectByFlavor": { "<flavor>": {...} } }
-  launcher: exportImmediately, dryRun, exportOnly, mode (HighSpeed|Standard), timeoutMin
+  Scenario file (JSON): { "fakevl": {...}, "launcher": {...}, "machine": {...}, "user": {...},
+    "prestartFakeVl": bool, "holdMutex": bool, "expect": {...}, "expectByFlavor": { "<flavor>": {...} } }
+  launcher: exportImmediately, dryRun, exportOnly, mode (HighSpeed|Standard), timeoutMin, confirmStageMotion,
+            afterExport, returnFocus, watch, extra { <flavor>: [args] },
+            extraRaw (text appended to the command line as it is, like a macro with a quote in a property)
+  machine:  written as <install>\machine.json (the machine settings file of that copy)
+  user:     written as the user's settings.json
+  programDataMachine: written as %ProgramData%\VLConnector\machine.json of the launcher (a fake ProgramData)
+  pending:  the scenario is skipped by Run-Tests.ps1 (unless -IncludePending) until this step is done
   expect:   state (canonical OK|ERROR|CANCELLED|DRYRUN|BUSY|none), exitCode, stl (bool),
-            eventsInclude [...], eventsOrder [...], vlRunning (bool)
+            eventsInclude [...], eventsExclude [...], eventsOrder [...], vlRunning (bool),
+            logIncludes [...], logExcludes [...], maxSeconds, vldExists (bool),
+            stageAnsweredBy (operator|launcher): who answered every stage dialog of the run (at least one),
+            neverConfirmed (bool): the launcher confirmed nothing; every stage dialog shown was answered by
+            the simulated operator
 #>
 param(
     [Parameter(Mandatory = $true)][string]$ScenarioFile,
@@ -25,6 +38,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path (Split-Path $PSScriptRoot)
 if (-not $Launcher) { $Launcher = Join-Path $repo 'app\VLReplay.ps1' }
 if (-not $WorkRoot) { $WorkRoot = Join-Path $repo 'tests\_work' }
+$psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
 # Parameter names and marker keys of each launcher version.
 $flavors = @{
@@ -39,9 +53,7 @@ $flavors = @{
         Args = @{ Out = '-OutputDir'; Marker = '-MarkerFile'; Timeout = '-TimeoutMin'
                   ExportImmediately = @('-ExportImmediately', 'On'); DryRun = @('-DryRun'); ExportOnly = @('-ExportOnly')
                   HighSpeed = @('-Mode', 'HighSpeed'); Standard = @('-Mode', 'Standard'); Ask = @('-Mode', 'Ask') }
-        # explicit values, so the tests do not depend on the shipped defaults
-        Fixed = @('-ConfirmStageMotion', 'Off', '-AfterExport', 'None', '-ReturnFocus', 'Off')
-        StateKey = 'STATE'; MessageKey = 'MESSAGE'; Mutex = 'Local\VLConnector_VLReplay'; InPlace = $true
+        StateKey = 'STATE'; MessageKey = 'MESSAGE'; Mutex = 'Local\VLConnector_VLReplay'; Installed = $true
         States = @{ OK = 'OK'; ERROR = 'ERROR'; CANCELLED = 'CANCELLED'; DRYRUN = 'DRYRUN'; BUSY = 'BUSY' }
     }
 }
@@ -85,9 +97,35 @@ $marker = Join-Path $out 'run.marker.txt'
 $events = Join-Path $work 'fakevl.events.log'
 $scenarioCopy = Join-Path $work 'scenario.json'
 Copy-Item -LiteralPath $ScenarioFile $scenarioCopy
-# the product launcher runs in place (it loads app\lib and app\config); the prototype ran from a copy
-$launcherPath = $Launcher
-if (-not $fl.InPlace) { $launcherPath = Join-Path $launcherDir 'VLReplay.ps1'; Copy-Item -LiteralPath $Launcher $launcherPath }
+if ($fl.Installed) {
+    # the product launcher runs from an installation-like copy; the interface DLL is built once per source version
+    . (Join-Path $repo 'app\lib\Interop.ps1')
+    $dll = Join-Path $WorkRoot 'interop\VLConnector.Interop.dll'
+    if (-not (Test-Path -LiteralPath $dll) -or (Get-VlcInteropDllHash $dll) -ne (Get-VlcInteropSource).Sha256) {
+        New-Item -ItemType Directory -Force -Path (Split-Path $dll) | Out-Null
+        $built = & $psExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'tools\Build-Interop.ps1') -OutputPath $dll
+        if ($LASTEXITCODE -ne 0) { throw "Build-Interop failed: $built" }
+    }
+    $install = Join-Path $work 'install'
+    New-Item -ItemType Directory -Force -Path (Join-Path $install 'bin') | Out-Null
+    Copy-Item -LiteralPath (Split-Path $Launcher) -Destination $install -Recurse
+    Copy-Item -LiteralPath (Join-Path $repo 'VERSION') -Destination $install
+    Copy-Item -LiteralPath $dll -Destination (Join-Path $install 'bin')
+    [IO.File]::WriteAllText((Join-Path $install 'install-info.txt'), "VERSION=test`r`nINSTALLED=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`r`n")
+    if ($scenario.machine) { [IO.File]::WriteAllText((Join-Path $install 'machine.json'), ($scenario.machine | ConvertTo-Json -Depth 10)) }
+    $launcherPath = Join-Path $install "app\$(Split-Path $Launcher -Leaf)"
+}
+else { $launcherPath = Join-Path $launcherDir 'VLReplay.ps1'; Copy-Item -LiteralPath $Launcher $launcherPath }
+if ($scenario.user) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $appData 'VLConnector') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $appData 'VLConnector\settings.json'), ($scenario.user | ConvertTo-Json -Depth 10))
+}
+$programData = $null
+if ($scenario.programDataMachine) {
+    $programData = Join-Path $work 'programdata'
+    New-Item -ItemType Directory -Force -Path (Join-Path $programData 'VLConnector') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $programData 'VLConnector\machine.json'), ($scenario.programDataMachine | ConvertTo-Json -Depth 10))
+}
 $fakeArgs = "-NoProfile -STA -ExecutionPolicy Bypass -File $(Join-Path $repo 'tests\FakeVL\FakeVL.ps1') -Scenario $scenarioCopy -EventLog $events"
 
 function New-StartInfo([string]$File, [string]$Arguments) {
@@ -97,6 +135,7 @@ function New-StartInfo([string]$File, [string]$Arguments) {
     $psi.EnvironmentVariables['APPDATA'] = $appData
     $psi.EnvironmentVariables['LOCALAPPDATA'] = $localData
     $psi.EnvironmentVariables['FAKEVL_PROGRAM'] = $program
+    if ($programData) { $psi.EnvironmentVariables['ProgramData'] = $programData }
     return $psi
 }
 
@@ -112,7 +151,7 @@ if ($scenario.prestartFakeVl) {
 $holder = $null
 if ($scenario.holdMutex) {
     $holderScript = "`$m = New-Object Threading.Mutex(`$false, '$($fl.Mutex)'); [void]`$m.WaitOne(); Start-Sleep -Seconds 60"
-    $holder = Start-Process powershell.exe -ArgumentList '-NoProfile', '-Command', $holderScript -PassThru -WindowStyle Hidden
+    $holder = Start-Process $psExe -ArgumentList '-NoProfile', '-Command', $holderScript -PassThru -WindowStyle Hidden
     Start-Sleep -Seconds 2
 }
 
@@ -123,8 +162,9 @@ if ($scenario.launcher -and $scenario.launcher.watch) { $launcherArgs.Add('-Watc
 $launcherArgs.AddRange([string[]]@($a.Out, $out, $a.Marker, $marker, $a.Timeout, '3', '-VlExe', $fakeExe))
 $opt = $scenario.launcher
 if ($Flavor -eq 'en') {
-    # deterministic options; the scenario overrides single ones
-    $fixed = [ordered]@{ '-ExportImmediately' = 'Off'; '-ConfirmStageMotion' = 'Off'; '-AfterExport' = 'None'; '-ReturnFocus' = 'Off' }
+    # deterministic options; the scenario overrides single ones. The stage confirmation is never forced Off
+    # here: the safety scenarios check that nothing but the machine policy switches it on.
+    $fixed = [ordered]@{ '-ExportImmediately' = 'Off'; '-AfterExport' = 'None'; '-ReturnFocus' = 'Off' }
     if ($opt) {
         if ($opt.exportImmediately) { $fixed['-ExportImmediately'] = 'On' }
         if ($opt.confirmStageMotion) { $fixed['-ConfirmStageMotion'] = 'On' }
@@ -142,9 +182,10 @@ if ($opt) {
 }
 $argLine = '-NoProfile -STA -ExecutionPolicy Bypass -File "' + $launcherPath + '" ' +
     (($launcherArgs | ForEach-Object { '"' + $_ + '"' }) -join ' ') + ' -VlArgs "' + $fakeArgs + '"'
+if ($opt -and $opt.extraRaw) { $argLine += ' ' + [string]$opt.extraRaw }
 
 $t0 = Get-Date
-$proc = [Diagnostics.Process]::Start((New-StartInfo 'powershell.exe' $argLine))
+$proc = [Diagnostics.Process]::Start((New-StartInfo $psExe $argLine))
 # a caller cancels by creating <marker>.cancel
 if ($scenario.cancelAfterSec) {
     $cancelAt = $t0.AddSeconds([double]$scenario.cancelAfterSec)
@@ -182,7 +223,7 @@ if ($stlPath -and (Test-Path -LiteralPath $stlPath)) {
 }
 $eventLines = if (Test-Path -LiteralPath $events) { @(Get-Content -LiteralPath $events) } else { @() }
 $eventTexts = @($eventLines | ForEach-Object { if ($_.Length -gt 13) { $_.Substring(13) } else { $_ } })
-$logFiles = @(Get-ChildItem -LiteralPath $launcherDir, $localData -Recurse -Filter '*.log' -ErrorAction SilentlyContinue)
+$logFiles = @(Get-ChildItem -LiteralPath $launcherDir, $localData -Recurse -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notlike "$work\install\*" })
 $launcherLog = ($logFiles | ForEach-Object { Get-Content -LiteralPath $_.FullName }) -join "`n"
 
 # --- Check -----------------------------------------------------------------------------------
@@ -213,6 +254,22 @@ foreach ($e in @($expect.eventsOrder)) {
 }
 foreach ($t in @($expect.logIncludes)) {
     if ($t -and $launcherLog -notmatch [regex]::Escape($t)) { $failures.Add("log lacks '$t'") }
+}
+foreach ($t in @($expect.logExcludes)) {
+    if ($t -and $launcherLog -match [regex]::Escape($t)) { $failures.Add("log contains '$t'") }
+}
+# stage dialogs FakeVL showed, and how many of them the simulated operator answered
+$count = { param($prefix) @($eventTexts | Where-Object { $_.StartsWith($prefix) }).Count }
+$stageShown = (& $count 'dialog:rotate:') + (& $count 'dialog:return-origin')
+$stageByOperator = (& $count 'operator:rotate-ok') + (& $count 'operator:origin-ok')
+if ($expect.ContainsKey('stageAnsweredBy')) {
+    if (-not $stageShown) { $failures.Add('no stage dialog was shown') }
+    elseif ($expect.stageAnsweredBy -eq 'operator' -and $stageByOperator -ne $stageShown) { $failures.Add("the operator answered $stageByOperator of $stageShown stage dialogs, expected all") }
+    elseif ($expect.stageAnsweredBy -eq 'launcher' -and $stageByOperator) { $failures.Add("the operator answered $stageByOperator of $stageShown stage dialogs, expected none") }
+}
+if ($expect.neverConfirmed) {
+    if ($launcherLog -match 'Confirmed:') { $failures.Add('the launcher confirmed a VL message') }
+    if ($stageByOperator -ne $stageShown) { $failures.Add("the operator answered $stageByOperator of $stageShown stage dialogs, expected all") }
 }
 if ($expect.ContainsKey('maxSeconds') -and $duration -gt [double]$expect.maxSeconds) { $failures.Add("took $([math]::Round($duration, 1)) s, expected at most $($expect.maxSeconds) s") }
 if ($expect.ContainsKey('vldExists')) {

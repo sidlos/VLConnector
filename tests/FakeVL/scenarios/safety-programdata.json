@@ -1,0 +1,6 @@
+{
+    "pending": "step 2 (settings policy): the policy path still comes from %ProgramData%",
+    "flavors": [ "en" ],
+    "programDataMachine": { "vl": { "confirmStageMotion": true } },
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator" }
+}
