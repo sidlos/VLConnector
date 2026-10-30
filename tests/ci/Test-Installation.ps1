@@ -121,7 +121,8 @@ finally { Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($cert.Thumbprint)" -F
 # --- removal -------------------------------------------------------------------------------------------------------
 $code = Invoke-Batch (Join-Path $target 'Uninstall.cmd') @('-Quiet')
 Test-Step 'removal' ($code -eq 0) "exit $code"
-foreach ($gone in $target, "$target.old", $legacy, $menu) { Test-Step "removed: $gone" (-not (Test-Path -LiteralPath $gone)) }
+foreach ($gone in $target, "$target.old", $menu) { Test-Step "removed: $gone" (-not (Test-Path -LiteralPath $gone)) }
+Test-Step 'the rc10 place stays as an empty folder only administrators can change' ((@(Get-ChildItem -LiteralPath $legacy -Force).Count -eq 1) -and -not @(Get-VlcAclProblems $legacy -Recurse).Count)
 Test-Step 'event source removed' (-not [Diagnostics.EventLog]::SourceExists('VL Connector'))
 Test-Step 'the folder outside is untouched' (Test-Path -LiteralPath (Join-Path $outside 'keep.txt'))
 

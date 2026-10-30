@@ -87,7 +87,8 @@ any installed code - then shows the status of the PC.
 **Remove:** Start menu > Uninstall VL Connector, or `Uninstall.cmd [-Quiet] [-RemoveUserData]` (administrator).
 It runs from a temporary copy, stops the agents, removes the program folder (with `.old`), the Start menu
 entries, the agent startup shortcuts of all users, the forwarders and the event source, and checks that the
-folder is gone. User data (`-RemoveUserData`: the settings and logs of the user who runs it), scans, reports,
+folder is gone. At the old place of 1.0.0-rc10 an empty folder that only administrators can change stays behind,
+so nobody can place a macro where old PolyWorks buttons look; delete it once those buttons are gone. User data (`-RemoveUserData`: the settings and logs of the user who runs it), scans, reports,
 PolyWorks projects and the shared folder stay.
 
 ## 3. Settings and their lock
@@ -214,7 +215,7 @@ never terminated):
   standard technique of UI test tools for WinForms; no `WriteProcessMemory`, no remote thread, no code injection.
 - Window messages: `WM_GETTEXT`, `WM_SETTEXT` (the program path in VL's file dialog), `BM_CLICK` (a dialog button
   found by its id, only when enabled), `WM_CLOSE` (only when the user chose to close VL).
-- UI Automation on VL's window (menus *File > Export > STL*, *File > Save As*; AI Replay progress).
+- UI Automation on VL's window, only to open its menus *File > Export > STL* and *File > Save As*.
 - `SetForegroundWindow` / `AttachThreadInput` only towards VL, PolyWorks or VL Connector's own windows, and
   `mouse_event` with a **zero-pixel** move: Windows lets only the process with the last input change the
   foreground; the mouse does not move.
@@ -232,7 +233,7 @@ Replay finished) and `%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml` (t
 | Path | Content | Written by |
 |---|---|---|
 | `C:\Program Files\VLConnector\` (and `.old`) | The program, the interface DLL, the PolyWorks button files, `install-info.txt`, `machine.json` | installer; `machine.json` also by the administrator tool |
-| `C:\ProgramData\VLConnector\` | Only on PCs that had 1.0.0-rc10: the forwarders (administrator-only) | installer |
+| `C:\ProgramData\VLConnector\` | Only on PCs that had 1.0.0-rc10: the forwarders (administrator-only); after the removal of VL Connector an empty folder | installer, uninstaller |
 | `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\VL Connector\` | Start menu entries for all users | installer |
 | `HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\VL Connector` | The event source (the only registry key) | installer |
 | `%APPDATA%\VLConnector\settings.json` | The user's own settings | settings window, wizard |

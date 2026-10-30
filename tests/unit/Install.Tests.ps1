@@ -359,8 +359,12 @@ Describe 'installation, update and removal on temporary folders (no administrato
     It 'removes the installation, the previous version, the forwarders and the Start menu' {
         $lines.Clear()
         Uninstall-VlcMachine -InstallDir $target -LegacyDir $legacy -MenuRoot $menuRoot -ProfileDirs @() -SkipAcl -Say $say | Should Be 0
-        foreach ($gone in $target, "$target.old", $legacy, (Join-Path $menuRoot 'VL Connector')) { Test-Path -LiteralPath $gone | Should Be $false }
+        foreach ($gone in $target, "$target.old", (Join-Path $menuRoot 'VL Connector')) { Test-Path -LiteralPath $gone | Should Be $false }
         Test-Path -LiteralPath (Join-Path $outside 'keep.txt') | Should Be $true
+    }
+    It 'keeps the old place of 1.0.0-rc10 as an empty folder, so nobody can plant a macro for old buttons (C17)' {
+        @(Get-ChildItem -LiteralPath $legacy -Force | ForEach-Object { $_.Name }) -join ',' | Should Be 'VLConnector-moved.txt'
+        [IO.File]::ReadAllText((Join-Path $legacy 'VLConnector-moved.txt')) | Should Match 'was removed'
     }
 }
 

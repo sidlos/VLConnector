@@ -735,7 +735,13 @@ function Uninstall-VlcMachine {
     $menu = Join-Path $MenuRoot 'VL Connector'
     if (Test-Path -LiteralPath $menu) { Remove-VlcTree $menu; & $Say "Removed $menu" }
     $legacy = Get-VlcFolderKind $LegacyDir
-    if ($legacy -and $legacy.Kind -eq 'Forwarders') { Remove-VlcTree $LegacyDir; & $Say "Removed $LegacyDir (forwarders of the older version)" }
+    if ($legacy -and $legacy.Kind -eq 'Forwarders') {
+        # PolyWorks buttons of the older version may still look there: the folder stays, empty and only for
+        # administrators, so nobody can place a macro in their way (C17)
+        foreach ($entry in [IO.Directory]::GetFileSystemEntries($LegacyDir)) { if ((Split-Path $entry -Leaf) -ne $script:VlcForwarderNote) { Remove-VlcTree $entry } }
+        [IO.File]::WriteAllText((Join-Path $LegacyDir $script:VlcForwarderNote), "VL Connector for PolyWorks was removed from this PC.`r`nThis empty folder stays so that nobody can place files where PolyWorks buttons of an older VL Connector look. Delete it once those buttons are removed from PolyWorks.`r`n", (New-Object Text.UTF8Encoding($true)))
+        & $Say "Removed the forwarders of the older version; the empty folder $LegacyDir stays (only administrators can change it)."
+    }
     $failed = New-Object Collections.Generic.List[string]
     foreach ($d in "$dir.new", "$dir.old", $dir) {
         if (-not (Test-Path -LiteralPath $d)) { continue }

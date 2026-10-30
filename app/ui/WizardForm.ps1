@@ -178,7 +178,8 @@ function Show-SetupWizard {
     foreach ($item in $c.KeepPieces.Items) { if ([string]$item.Tag -eq [string]$cfg.polyworks.keepPieces) { $c.KeepPieces.SelectedItem = $item } }
     $c.SharePath.Text = [string]$cfg.network.share
     $c.AutoOpenReports.IsChecked = [bool]$cfg.network.autoOpenReports
-    $c.AgentAutostart.IsChecked = $true
+    # the start with Windows is the user's choice: shown as it is now, never switched on in advance
+    $c.AgentAutostart.IsChecked = Test-AgentAutostart
     [void](Set-VlcLockedControls $c $script:WizardControls $state.Locked)
 
     $c.NextButton.Add_Click({

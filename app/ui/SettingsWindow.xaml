@@ -466,7 +466,7 @@
                                     <TextBlock Text="&#xE7B8;" Style="{StaticResource IconText}"/>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
                                         <TextBlock Text="Collect diagnostics" Style="{StaticResource BodyText}"/>
-                                        <TextBlock Text="Creates a ZIP with logs, settings and the status check on your desktop. No scans or reports are included." Style="{StaticResource CaptionText}"/>
+                                        <TextBlock Text="Creates a ZIP on your desktop: the logs of the last 14 days (they name parts, verdicts, Windows users, computers and folders), the settings (yours and the administrator's), the status check and the versions. No scans, reports or PolyWorks data. Look into it before you send it." Style="{StaticResource CaptionText}"/>
                                     </StackPanel>
                                     <Button x:Name="CollectDiagnostics" Style="{StaticResource AccentButton}" Grid.Column="2" Content="Create ZIP" VerticalAlignment="Center"/>
                                 </Grid>

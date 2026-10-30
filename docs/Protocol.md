@@ -4,9 +4,11 @@ Files exchanged between the launcher, the PolyWorks macros, the agent and the Po
 
 **Format of all KEY=value files:** one `KEY=value` per line, keys in the fixed order given below (the
 PolyWorks macros read them by line number), UTF-8 **with BOM** (files written by PolyWorks are UTF-16; readers
-accept both). Values never contain line breaks or `=` (written as `-`; paths with `=` are refused). Files are
-written under a temporary name (`.part`) and renamed, so a reader never sees half a file; a file without a single
-`KEY=value` line counts as missing.
+accept both). Values never contain line breaks or `=` (written as `-`; paths with `=` are refused). The scripts
+write their files under a temporary name (`.part`) and rename them, so a reader never sees half a file. The
+PolyWorks macros can only write line by line (the station heartbeat, the control data, the results); their
+readers check that a file is complete (fixed keys, `END` and `COUNT` lines) and empty the answer files before
+each call. A file without a single `KEY=value` line counts as missing.
 
 ## 1. Launcher (VLReplay.ps1)
 

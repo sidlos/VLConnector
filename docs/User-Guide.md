@@ -296,4 +296,6 @@ VL Connector, kept for 30 days.
 
 VL Connector is not official software. You can try contacting your local sales engineer, who can forward
 questions to the local technical team. Please attach the support ZIP: settings window > **Diagnostics** >
-**Create ZIP** (logs, settings, status and file list; no scans or reports).
+**Create ZIP**. It holds the logs of the last 14 days (they name parts, verdicts, Windows users, computers and
+folders), the settings (yours and the administrator's), the status check and the versions - no scans, reports or
+PolyWorks data. Look into it before you send it.
