@@ -34,6 +34,7 @@
   Exit code: 0 OK, 1 error, 2 cancelled, 3 bad parameters / program not found, 4 already running.
   Log: %LOCALAPPDATA%\VLConnector\logs\VLReplay_<date>.log
 #>
+using namespace VLConnector.Interop
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)] [string]$Program,
@@ -61,13 +62,19 @@ param(
     [switch]$Watch
 )
 
+# FullLanguage mode is needed (docs\IT-Review); checked before anything is loaded
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    & (Join-Path $PSScriptRoot 'lib\LanguageCheck.ps1') -Caller VLReplay -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $MarkerFile -Keys STATE, STL, PROGRAM, START, END, MESSAGE, USER, COMPUTER, JOBID, VERSION, START_UTC
+    exit 1
+}
+
 $ErrorActionPreference = 'Stop'
 $EXIT_OK = 0; $EXIT_ERROR = 1; $EXIT_CANCELLED = 2; $EXIT_ARGS = 3; $EXIT_BUSY = 4
 
 . (Join-Path $PSScriptRoot 'lib\Settings.ps1')
 . (Join-Path $PSScriptRoot 'lib\Log.ps1')
 . (Join-Path $PSScriptRoot 'lib\KeyValueFile.ps1')
-. (Join-Path $PSScriptRoot 'lib\Native.ps1')
+. (Join-Path $PSScriptRoot 'lib\Interop.ps1')
 
 $logFile      = Initialize-VlcLog 'VLReplay'
 $operationLog = Join-Path $env:APPDATA 'KEYENCE\VL-800 Series\VL Application\VLOperation.log'
@@ -901,9 +908,8 @@ function Get-TargetPath([string]$RunName) {
 # --- Settings and checks -------------------------------------------------------------------------
 
 if ($MarkerFile) { Set-MarkerPath $MarkerFile }
-if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-    Exit-Run $EXIT_ARGS 'ERROR' "PowerShell runs in $($ExecutionContext.SessionState.LanguageMode) mode; VL Connector needs FullLanguage (see the notes for IT)."
-}
+try { Import-VlcInterop }
+catch { Exit-Run $EXIT_ERROR 'ERROR' $_.Exception.Message }
 # -Options: a few options as one text, e.g. "-Mode Standard -AfterExport Minimize" from the PolyWorks
 # project property "VL options". Only these names are accepted; options given directly win.
 if ($Options) {

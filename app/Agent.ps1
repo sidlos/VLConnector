@@ -12,6 +12,12 @@
 #>
 param([switch]$Stop)
 
+# FullLanguage mode is needed (docs\IT-Review); checked before anything is loaded
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    & (Join-Path $PSScriptRoot 'lib\LanguageCheck.ps1') -Caller Agent -Mode $ExecutionContext.SessionState.LanguageMode -Show:(-not $Stop)
+    exit 1
+}
+
 $ErrorActionPreference = 'Stop'
 if ($Stop) {
     $e = $null

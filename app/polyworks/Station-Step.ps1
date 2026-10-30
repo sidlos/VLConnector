@@ -16,6 +16,13 @@ param(
     [string]$Result = ''
 )
 
+# FullLanguage mode is needed (docs\IT-Review); checked before anything is loaded
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    $keys = @{ Context = 'STATE', 'SHARE', 'POLL_MS', 'STATUS_FILE', 'MESSAGE'; Next = 'STATE', 'JOBID', 'PART', 'PARAMS', 'RESULT', 'MESSAGE' }[$Action]
+    & (Join-Path (Split-Path $PSScriptRoot) 'lib\LanguageCheck.ps1') -Caller Station -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $Out -Keys $keys
+    exit 1
+}
+
 $ErrorActionPreference = 'Stop'
 $app = Split-Path $PSScriptRoot
 foreach ($lib in 'Settings', 'Log', 'KeyValueFile', 'Share', 'Jobs') { . (Join-Path $app "lib\$lib.ps1") }

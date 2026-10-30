@@ -1,5 +1,6 @@
-# build output
+# build output (dist: packages; bin: an interface DLL built in the development tree)
 dist/
+/bin/
 # test work folders and logs
 tests/_work/
 *.log

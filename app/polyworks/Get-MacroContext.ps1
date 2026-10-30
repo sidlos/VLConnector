@@ -24,6 +24,12 @@ param(
     [string]$Pwk = ''
 )
 
+# FullLanguage mode is needed (docs\IT-Review); checked before anything is loaded
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    & (Join-Path (Split-Path $PSScriptRoot) 'lib\LanguageCheck.ps1') -Caller MacroContext -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $Out -Keys STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, KEEP_PIECES, OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE
+    exit 1
+}
+
 $ErrorActionPreference = 'Stop'
 $app = Split-Path $PSScriptRoot
 . (Join-Path $app 'lib\Settings.ps1')

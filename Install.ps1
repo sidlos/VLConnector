@@ -11,8 +11,9 @@
     1. checks every file of the package against MANIFEST.sha256 and shows the package fingerprint
        (compare it with the fingerprint you received with the package),
     2. copies app\, docs\, the license and the uninstaller to the install folder (an older app\ is
-       replaced, the layouts\ folder of earlier versions is removed; machine settings are kept) and
-       removes the "downloaded from the internet" mark from these files,
+       replaced, the layouts\ folder of earlier versions is removed; machine settings are kept),
+       removes the "downloaded from the internet" mark from these files and compiles the Windows and
+       PolyWorks interfaces (app\interop\*.cs) once into bin\VLConnector.Interop.dll,
     3. limits write access to the install folder to administrators, SYSTEM and the installing user
        (all users may only read and run it),
     4. creates the PolyWorks button files (Measure, Station),
@@ -25,6 +26,13 @@ param(
     [switch]$Verify,
     [switch]$Quiet
 )
+
+# FullLanguage mode is needed (docs\IT-Review); checked before anything else runs
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    & (Join-Path $PSScriptRoot 'app\lib\LanguageCheck.ps1') -Caller Install -Mode $ExecutionContext.SessionState.LanguageMode
+    if (-not $Quiet) { $null = Read-Host 'Press Enter to close' }
+    exit 1
+}
 
 $ErrorActionPreference = 'Stop'
 $source = $PSScriptRoot
@@ -72,11 +80,6 @@ if ($Verify) {
     exit $(if ($check.Ok) { 0 } else { 1 })
 }
 
-if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-    Say "PowerShell runs in $($ExecutionContext.SessionState.LanguageMode) mode on this PC. VL Connector needs FullLanguage mode; please ask IT (docs\IT-Review)." Red
-    Wait-Key; exit 1
-}
-
 # 1) package check
 Say '1/5  Checking the package...'
 $check = Test-Manifest $source
@@ -104,7 +107,7 @@ if ([System.Threading.EventWaitHandle]::TryOpenExisting('Local\VLConnector_Agent
 try {
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     # layouts\ held the report layouts that versions before 1.0.0-rc10 built from PolyWorks
-    foreach ($old in 'app', 'docs', 'tools', 'layouts') {
+    foreach ($old in 'app', 'docs', 'tools', 'layouts', 'bin') {
         $path = Join-Path $InstallDir $old
         if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
     }
@@ -113,9 +116,13 @@ try {
         if (Test-Path -LiteralPath $from) { Copy-Item -LiteralPath $from -Destination $InstallDir -Recurse -Force }
     }
     Get-ChildItem -LiteralPath $InstallDir -Recurse -File | Unblock-File
+    # the Windows and PolyWorks interfaces are compiled once, here: VL Connector itself never compiles
+    $built = & { $ErrorActionPreference = 'Continue'; & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallDir 'tools\Build-Interop.ps1') -OutputPath (Join-Path $InstallDir 'bin\VLConnector.Interop.dll') 2>&1 }
+    if ($LASTEXITCODE -ne 0) { throw "The Windows and PolyWorks interfaces could not be compiled: $($built | Out-String)" }
+    Say "     Interfaces compiled (source SHA-256 $(@($built)[-1]))." Green
 }
 catch {
-    Say "Copying failed: $($_.Exception.Message)" Red
+    Say "Installing the files failed: $($_.Exception.Message)" Red
     Say 'If VL Connector was installed by another Windows user, ask that user or an administrator to update it.' Red
     Wait-Key; exit 1
 }

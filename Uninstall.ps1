@@ -9,6 +9,13 @@
 #>
 param([switch]$RemoveUserData, [switch]$Quiet)
 
+# FullLanguage mode is needed (docs\IT-Review); checked before anything else runs
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    & (Join-Path $PSScriptRoot 'app\lib\LanguageCheck.ps1') -Caller Uninstall -Mode $ExecutionContext.SessionState.LanguageMode
+    if (-not $Quiet) { $null = Read-Host 'Press Enter to close' }
+    exit 1
+}
+
 $ErrorActionPreference = 'Stop'
 $installDir = $PSScriptRoot
 

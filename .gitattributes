@@ -9,6 +9,9 @@
 *.md text eol=crlf
 *.txt text eol=crlf
 *.svg text eol=crlf
+*.cs text eol=crlf
+*.html text eol=crlf
+*.dll binary
 *.png binary
 *.ico binary
 *.stl binary
