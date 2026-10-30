@@ -94,6 +94,8 @@ DECLARE vERun ""
 DECLARE vEJob ""
 DECLARE vECsv ""
 DECLARE vEMsg ""
+DECLARE vSysRoot ""
+DECLARE vPs ""
 
 DATA_FILE READ LINE_FIELD ( $vParams, 1, 2, vPwk, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 2, 2, vTemplate, "=", "On" )
@@ -213,6 +215,9 @@ ENDIF
 PIECE PROPERTIES CUSTOMIZABLE ( , { "Serial number", "Operator name", "Device" }, { $vPiece, $vUser, $vDevice } )
 
 # --- 5) verdict: the raw control data -> Complete-Evaluation.ps1 (verdict and CSV) --------
+# Windows PowerShell by its full path, never a powershell.exe found first on the search path
+SYSTEM ENVIRONMENT_VARIABLE GET ( "SystemRoot", vSysRoot )
+SET vPs "${vSysRoot}\System32\WindowsPowerShell\v1.0\powershell.exe"
 SET vCtl "${vResult}.controls"
 SET vVer "${vResult}.verdict"
 DATA_FILE CREATE ( $vCtl, "Unicode", "Yes" )
@@ -286,7 +291,7 @@ ENDWHILE
 DATA_FILE APPEND LINE ( $vCtl, { "END=$vCount" } )
 # the verdict file is emptied first: a verdict of an earlier piece can never be read
 DATA_FILE CREATE ( $vVer, "Ascii", "Yes" )
-SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Complete-Evaluation.ps1${_QUOTES}", "-Controls", "${_QUOTES}${vCtl}${_QUOTES}", "-Out", "${_QUOTES}${vVer}${_QUOTES}" }, vCallId )
+SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Complete-Evaluation.ps1${_QUOTES}", "-Controls", "${_QUOTES}${vCtl}${_QUOTES}", "-Out", "${_QUOTES}${vVer}${_QUOTES}" }, vCallId )
 DATA_FILE READ LINE_FIELD ( $vVer, 1, 2, vEState, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vVer, 2, 2, vVerdictAll, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vVer, 3, 2, vDetail, "=", "On" )

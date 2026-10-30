@@ -1,0 +1,6 @@
+{
+    "flavors": [ "en" ],
+    "programFile": "Part.A.vld4",
+    "programByName": true,
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "logIncludes": [ "Part.A.vld4" ] }
+}

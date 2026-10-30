@@ -80,6 +80,7 @@ $EXIT_OK = 0; $EXIT_ERROR = 1; $EXIT_CANCELLED = 2; $EXIT_ARGS = 3; $EXIT_BUSY =
 . (Join-Path $PSScriptRoot 'lib\KeyValueFile.ps1')
 . (Join-Path $PSScriptRoot 'lib\Interop.ps1')
 . (Join-Path $PSScriptRoot 'lib\StageWarning.ps1')
+. (Join-Path $PSScriptRoot 'lib\VlPrograms.ps1')
 
 $logFile      = Initialize-VlcLog 'VLReplay'
 $operationLog = Join-Path $env:APPDATA 'KEYENCE\VL-800 Series\VL Application\VLOperation.log'
@@ -94,6 +95,7 @@ $script:mutex = $null
 $script:lastStatus = ''
 $script:lastMessage = ''
 $script:stageWarning = $null
+$script:status = $null
 
 # --- Helper functions -----------------------------------------------------------------
 
@@ -141,17 +143,22 @@ function Write-Marker([string]$State, [string]$StlPath, [string]$Message) {
     catch { Write-Log "The marker could not be written: $($_.Exception.Message)" Red }
 }
 
-# Current step for the caller's progress display; written only when it changes.
+# Current step for the caller's progress display (<marker>.status, VLConnector.Interop.StatusFile): written at
+# once when it changes and again every 5 s with a growing BEAT, so the caller sees that the launcher lives (C80).
 function Write-Status([string]$Step, [string]$Text, [string]$VlMessage = '') {
     if (-not $script:statusPath) { return }
     $key = "$Step|$Text|$VlMessage"
     if ($key -eq $script:lastStatus) { return }
     $script:lastStatus = $key
-    try { Write-KeyValueFile $script:statusPath ([ordered]@{ STEP = $Step; TEXT = $Text; VLMESSAGE = $VlMessage; UPDATED = '{0:yyyy-MM-dd HH:mm:ss}' -f (Get-Date) }) }
-    catch { }
+    try {
+        if (-not $script:status) { $script:status = New-Object VLConnector.Interop.StatusFile($script:statusPath, 5000) }
+        $script:status.Set($Step, $Text, $VlMessage)
+    }
+    catch { Write-Log "The status file could not be written: $($_.Exception.Message)" Yellow }
 }
 
 function Remove-RunFiles {
+    if ($script:status) { $script:status.Dispose(); $script:status = $null }
     foreach ($p in @($script:statusPath, $script:cancelPath)) {
         if ($p -and (Test-Path -LiteralPath $p)) { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
     }
@@ -180,47 +187,10 @@ function Get-FileStamp([string]$Path) {
     return ''
 }
 
-# Program paths from the VL list of recently used programs, oldest first (VL moves the program it applies to
-# the end).
-function Get-RecentTemplatePaths {
-    try {
-        $fs = [IO.File]::Open($templateList, 'Open', 'Read', 'ReadWrite, Delete')
-        try { $text = (New-Object IO.StreamReader($fs, [Text.Encoding]::UTF8)).ReadToEnd() }
-        finally { $fs.Dispose() }
-    }
-    catch { return @() }
-    return @([regex]::Matches($text, 'i:type="b:string"[^>]*>([^<]+)</a:Value>') |
-        ForEach-Object { [Net.WebUtility]::HtmlDecode($_.Groups[1].Value) } |
-        Where-Object { $_ -match '^([A-Za-z]:\\|\\\\)' })
-}
-
-# Program: full path, or a name searched in the recently used programs and in the program folders.
+# Program: full path, or a name searched in the program folders of the settings, then in VL's recent programs
+# (lib\VlPrograms.ps1).
 function Resolve-Program([string]$Name) {
-    foreach ($candidate in @($Name, "$Name.vld4")) {
-        if ([IO.Path]::IsPathRooted($candidate) -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
-            return (Get-Item -LiteralPath $candidate).FullName
-        }
-    }
-    if ($Name -match '[\\/]') {
-        $full = [IO.Path]::GetFullPath($Name)
-        if (Test-Path -LiteralPath $full -PathType Leaf) { return $full }
-        return $null
-    }
-    $base = [IO.Path]::GetFileNameWithoutExtension($Name)
-    $recent = @(Get-RecentTemplatePaths | Where-Object {
-        [IO.Path]::GetFileNameWithoutExtension($_) -eq $base -and $_ -match '\.vld4$' -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
-        Select-Object -Unique)
-    if ($recent.Count -eq 1) { return $recent[0] }
-    $found = @(@(foreach ($dir in $ProgramDir) {
-        if (Test-Path -LiteralPath $dir -PathType Container) {
-            Get-ChildItem -LiteralPath $dir -Filter "$base.vld4" -File -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
-        }
-    }) + $recent | Select-Object -Unique)
-    if ($found.Count -eq 1) { return $found[0] }
-    if ($found.Count -gt 1) {
-        throw "Program '$Name' exists in several places, give the full path: " + ($found -join '; ')
-    }
-    return $null
+    return Resolve-VlcProgram $Name $ProgramDir (Get-VlcRecentPrograms $templateList)
 }
 
 # New complete lines in VLOperation.log.
@@ -328,9 +298,13 @@ function Set-WindowToFront([IntPtr]$Hwnd) {
     return [Vl]::BringToFront($Hwnd, $attach)
 }
 
-function Wait-Until([int]$TimeoutSec, [scriptblock]$Condition, [int]$StepMs = 250) {
+# Repeats $Condition until it returns something or the time is up. A cancel of the caller (<marker>.cancel) ends
+# the run in every wait, except while VL shows an export or save dialog of this run (-NoCancel): that is finished
+# first, so no dialog stays open in VL.
+function Wait-Until([int]$TimeoutSec, [scriptblock]$Condition, [int]$StepMs = 250, [switch]$NoCancel) {
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     do {
+        if (-not $NoCancel) { Test-CancelRequested }
         $result = & $Condition
         if ($result) { return $result }
         Start-Sleep -Milliseconds $StepMs
@@ -338,11 +312,19 @@ function Wait-Until([int]$TimeoutSec, [scriptblock]$Condition, [int]$StepMs = 25
     return $null
 }
 
-function Wait-NewWindow([int]$ProcId, $Before, [int]$TimeoutSec, [scriptblock]$Filter, [int]$StepMs = 250) {
+function Wait-NewWindow([int]$ProcId, $Before, [int]$TimeoutSec, [scriptblock]$Filter, [int]$StepMs = 250, [switch]$NoCancel) {
     return Wait-Until $TimeoutSec {
         @(Get-Tops $ProcId | Where-Object { $Before -notcontains $_.Handle } | Where-Object $Filter) | Select-Object -First 1
-    } $StepMs
+    } $StepMs -NoCancel:$NoCancel
 }
+
+# VL's program dialog: a file dialog titled "Open File" (the title VL gives it). Any other file dialog, such as
+# the Save As of the STL export, is never taken for it.
+function Test-ProgramDialog($Window) { return $Window.Class -eq '#32770' -and $Window.Title -eq 'Open File' -and [bool](Find-FileNameEdit $Window.Handle) }
+
+# A save dialog of VL (STL export, Save As): a file dialog that is not the program dialog. Its title comes from
+# Windows and depends on the Windows language.
+function Test-SaveDialog($Window) { return $Window.Class -eq '#32770' -and $Window.Title -ne 'Open File' -and [bool](Find-FileNameEdit $Window.Handle) }
 
 # "File name" box in the Open / Save As dialog: a visible Edit inside a ComboBox.
 function Find-FileNameEdit([IntPtr]$Dialog) {
@@ -382,15 +364,22 @@ function Get-DialogRule([string]$Text) {
 
 # --- VL window on its start screen -------------------------------------------------------
 
+# The VL window to start AI Replay in: one of this session, idle on its start screen. VL is started only when
+# none runs at all; a VL that is busy (the operator works in it, a message is open) is never joined by a second
+# VL window: after waiting 15 s for it, the run ends with BUSY (C44).
 function Get-StartScreenVl {
-    if (-not $NewWindow) {
+    if ($NewWindow) { Write-Log '-NewWindow is ignored: VL Connector never opens a second VL window.' Yellow }
+    $idle = {
         foreach ($p in Get-VlProcesses) {
             $state = Get-VlState $p.Id
-            if ($state.StartScreen -and $state.Idle -and [Vl]::IsWindowEnabled($state.Button)) {
-                Write-Log "Using the open VL window (PID $($p.Id))."
-                return $p
-            }
+            if ($state.StartScreen -and $state.Idle -and [Vl]::IsWindowEnabled($state.Button)) { return $p }
         }
+    }
+    $running = @(Get-VlProcesses)
+    if ($running.Count) {
+        $p = Wait-Until 15 $idle 500
+        if ($p) { Write-Log "Using the open VL window (PID $($p.Id))."; return $p }
+        Exit-Run $EXIT_BUSY 'BUSY' "VL is open but not idle on its start screen (PID $(($running | ForEach-Object Id) -join ', ')). Finish or close the work in VL, then start the scan again."
     }
     $exe = $script:vlExe
     if (-not (Test-Path -LiteralPath $exe)) { throw "VL is not installed: $exe" }
@@ -399,11 +388,13 @@ function Get-StartScreenVl {
     $p = if ($script:vlArgs) { Start-Process -FilePath $exe -ArgumentList $script:vlArgs -WorkingDirectory (Split-Path $exe) -PassThru }
          else { Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru }
     $script:lastStartSig = ''
+    $startDialogs = @{}
     $ready = Wait-Until 240 {
-        Test-CancelRequested
         if ($p.HasExited) { throw "VL exited right away (code $($p.ExitCode))." }
         $state = Get-VlState $p.Id
         if ($state.Signature -ne $script:lastStartSig) { $script:lastStartSig = $state.Signature; if ($state.Signature) { Write-Log "  VL windows: $($state.Signature)" DarkGray } }
+        # messages of VL while it starts ("Connect the hardware") end the run at once
+        Invoke-DialogRules $state $startDialogs $p
         $state.StartScreen -and $state.Idle -and [Vl]::IsWindowEnabled($state.Button)
     } 500
     if (-not $ready) { throw 'The new VL window did not reach its start screen within 4 min (see the windows in the log).' }
@@ -426,9 +417,9 @@ function Start-AiReplay($Proc, [string]$ProgramPath) {
     if ($Mode -eq 'Ask') {
         Write-Log 'Waiting for the operator to choose the replay mode in VL.'
         Write-Status 'mode' 'Choose the replay mode in VL.'
-        $closed = Wait-Until 900 { Test-CancelRequested; -not [Vl]::IsWindow($modeDialog.Handle) -or -not [Vl]::IsWindowVisible($modeDialog.Handle) } 300
+        $closed = Wait-Until 900 { -not [Vl]::IsWindow($modeDialog.Handle) -or -not [Vl]::IsWindowVisible($modeDialog.Handle) } 300
         if (-not $closed) { throw 'No replay mode was chosen within 15 min.' }
-        $openDialog = Wait-NewWindow $Proc.Id $before 30 { $_.Class -eq '#32770' }
+        $openDialog = Wait-NewWindow $Proc.Id $before 30 { Test-ProgramDialog $_ }
         if (-not $openDialog) { Exit-Run $EXIT_CANCELLED 'CANCELLED' 'The replay mode selection was closed in VL.' }
     }
     else {
@@ -440,7 +431,7 @@ function Start-AiReplay($Proc, [string]$ProgramPath) {
         }
         if ($modeButton -eq [IntPtr]::Zero) { [Vl]::Close($modeDialog.Handle); throw 'The mode button is missing in the mode selection window.' }
         [Vl]::Click($modeButton)
-        $openDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Class -eq '#32770' }
+        $openDialog = Wait-NewWindow $Proc.Id $before 20 { Test-ProgramDialog $_ }
         if (-not $openDialog) { throw 'The AI Replay program selection dialog did not open.' }
     }
     Write-Log "Dialog '$($openDialog.Title)', entering the program."
@@ -553,7 +544,8 @@ function Confirm-StageQuestion($Dialog, $Info, $Proc) {
 function Wait-ReplayFinished($Proc) {
     $templateStamp = Get-FileStamp $templateList
     $templateApplied = $false
-    $deadline = $startTime.AddMinutes($TimeoutMin)
+    # the time limit counts from the start of AI Replay (not from the start of VL), in wall-clock time
+    $deadline = (Get-Date).AddMinutes($TimeoutMin)
     $idleSince = $null
     $lastChange = Get-Date
     $lastSignature = $null
@@ -642,9 +634,9 @@ function Wait-ReplayFinished($Proc) {
 
 # --- Watch mode: follow an AI Replay that the operator starts in VL ---------------------------------------
 
-# VL's program dialog (a file dialog with a File name box) of a VL process: @{ Dialog; Edit }, $null if none.
+# VL's program dialog ("Open File" with a File name box) of a VL process: @{ Dialog; Edit }, $null if none.
 function Find-ProgramDialog([int]$ProcId) {
-    foreach ($w in @(Get-Tops $ProcId | Where-Object { $_.Class -eq '#32770' })) {
+    foreach ($w in @(Get-Tops $ProcId | Where-Object { Test-ProgramDialog $_ })) {
         $edit = Find-FileNameEdit $w.Handle
         if ($edit) { return @{ Dialog = $w.Handle; Edit = $edit } }
     }
@@ -692,7 +684,8 @@ function Wait-WatchedReplay {
             $dialog = Find-ProgramDialog $p.Id
             if ($dialog) {
                 $name = Read-ProgramDialog $dialog
-                if ($name -and $name -ne $program) { $program = $name; Write-Log "Program chosen in VL: $program" }
+                if ($name -and $name -notmatch '\.vld4$') { Write-Log "Ignored in VL's program dialog (not a .vld4): $name" Yellow }
+                elseif ($name -and $name -ne $program) { $program = $name; Write-Log "Program chosen in VL: $program" }
             }
             if (Test-ReplayRunning $state) {
                 $mutex = New-Object System.Threading.Mutex($false, 'Local\VLConnector_VLReplay')
@@ -722,8 +715,8 @@ function Resolve-WatchedProgram([string]$Seen, $Proc, [string]$StampAtStart) {
     $main = (Get-VlState $Proc.Id).Main
     if ($main -and $main.Title -match '^\W*(.+?)\W*\s-\sVL-800') { Write-Log "Program taken from the VL window title: $($Matches[1])" Yellow; return $Matches[1] }
     Write-Log 'The program was not seen in VL; waiting until VL applies it (list of recent programs).' Yellow
-    $applied = Wait-Until 90 { Test-CancelRequested; (Get-FileStamp $templateList) -ne $StampAtStart } 1000
-    $recent = @(Get-RecentTemplatePaths)
+    $applied = Wait-Until 90 { (Get-FileStamp $templateList) -ne $StampAtStart } 1000
+    $recent = @(Get-VlcRecentPrograms $templateList)
     if ($applied -and $recent.Count) { Write-Log "Program applied by VL in this run: $($recent[-1])" Yellow; return $recent[-1] }
     Write-Log 'The VL program of this scan is not known (VL did not apply a program within 90 s).' Yellow
     return ''
@@ -796,7 +789,7 @@ function Complete-SaveDialog($SaveDialog, [string]$Target) {
 function Wait-FileSaved($Proc, $SaveDialog, [string]$Target, [string]$FinishText) {
     $script:lastLength = -2
     $script:finishSeen = $false
-    $finished = Wait-Until 600 {
+    $finished = Wait-Until 600 -NoCancel -Condition {
         foreach ($l in @(Read-OperationLog)) { if ($FinishText -and $l -match $FinishText) { $script:finishSeen = $true } }
         $tops = @(Get-Tops $Proc.Id)
         $other = @($tops | Where-Object { $_.Class -eq '#32770' -and $_.Handle -ne $SaveDialog.Handle })
@@ -814,13 +807,16 @@ function Wait-FileSaved($Proc, $SaveDialog, [string]$Target, [string]$FinishText
 function Export-StlFile($Proc, [string]$Target) {
     $state = Invoke-VlMenu $Proc $script:menuExportStl
     $before = @($state.Tops | ForEach-Object { $_.Handle })
-    $stlDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Name -eq 'StlExporterDialog' } 50
+    $stlDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Name -eq 'StlExporterDialog' } 50 -NoCancel
     if (-not $stlDialog) { throw 'The STL export window did not open after selecting Export > STL.' }
 
-    # Binary, no thinning; VL switches hole filling off by itself every time the window opens.
+    # Binary, no thinning; VL switches hole filling off by itself every time the window opens. The thinning is
+    # chosen like a user's choice (with the selection notification, so VL takes it) and checked.
     $thinning = [Vl]::FindChild($stlDialog.Handle, '_thinningRatioComboBox')
     if ($thinning -ne [IntPtr]::Zero -and [Vl]::Send($thinning, 0x0147, 0) -ne 0) {
         [void][Vl]::Send($thinning, 0x014E, 0)
+        [Vl]::NotifySelectionChanged($thinning)
+        if ([Vl]::Send($thinning, 0x0147, 0) -ne 0) { [Vl]::Close($stlDialog.Handle); throw 'The thinning could not be set to 1:1 in the STL export window.' }
         Write-Log 'Thinning set to 1:1.'
     }
     $binary = [Vl]::FindChild($stlDialog.Handle, '_binaryRadioButton')
@@ -830,7 +826,7 @@ function Export-StlFile($Proc, [string]$Target) {
 
     $before = @(Get-Tops $Proc.Id | ForEach-Object { $_.Handle })
     [Vl]::Click($ok)
-    $saveDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Class -eq '#32770' } 50
+    $saveDialog = Wait-NewWindow $Proc.Id $before 20 { Test-SaveDialog $_ } 50 -NoCancel
     if (-not $saveDialog) { [Vl]::Close($stlDialog.Handle); throw 'The Save As dialog for the STL did not open.' }
     Complete-SaveDialog $saveDialog $Target
     Write-Log "Exporting STL: $Target"
@@ -847,7 +843,7 @@ function Export-StlFile($Proc, [string]$Target) {
 function Save-VlData($Proc, [string]$Target) {
     $state = Invoke-VlMenu $Proc $script:menuSaveAs
     $before = @($state.Tops | ForEach-Object { $_.Handle })
-    $saveDialog = Wait-NewWindow $Proc.Id $before 20 { $_.Class -eq '#32770' } 50
+    $saveDialog = Wait-NewWindow $Proc.Id $before 20 { Test-SaveDialog $_ } 50 -NoCancel
     if (-not $saveDialog) { throw 'The Save As dialog for the VL data did not open.' }
     Complete-SaveDialog $saveDialog $Target
     Write-Log "Saving VL data: $Target"
@@ -902,21 +898,24 @@ function Wait-VlReadyToClose($Proc, $Finish) {
     return $false
 }
 
-# Closes VL; the save prompt is answered No (the data is either saved already or not wanted). Never kills VL.
+# Closes VL; its question whether to save is answered No (the data is either saved already or not wanted), and
+# only that question: any other message stops the closing and VL stays open. Never kills VL.
 function Close-Vl($Proc) {
     $state = Get-VlState $Proc.Id
     if (-not $state.Main) { return $Proc.HasExited }
     [Vl]::Close($state.Main.Handle)
     $script:closeAnswered = $false
-    $closed = Wait-Until 60 {
+    $closed = Wait-Until 60 -NoCancel -Condition {
         if ($Proc.HasExited) { return $true }
         foreach ($d in @(Get-Tops $Proc.Id | Where-Object { $_.Class -eq '#32770' })) {
+            $text = Get-DialogText $d.Handle
+            if (-not $text) { continue }
             $no = Find-DialogButton $d.Handle 7
-            if ($no -and -not $script:closeAnswered) {
-                Write-Log "  VL asks: $(Get-DialogText $d.Handle) - answering No."
+            if (-not ($no -and $text -match '\bsave\b')) { throw "VL shows a message while closing: $text" }
+            if (-not $script:closeAnswered) {
+                Write-Log "  VL asks: $text - answering No."
                 [Vl]::Click($no); $script:closeAnswered = $true
             }
-            elseif (-not $no) { throw "VL shows a message while closing: $(Get-DialogText $d.Handle)" }
         }
         $false
     } 300
@@ -1018,8 +1017,9 @@ try {
     foreach ($w in $settingsState.Warnings) { Write-Log "Settings: $w" Yellow }
     if (-not $Mode) { $Mode = [string]$cfg.vl.mode }
     if (-not $OutputDir) { $OutputDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'VL Connector\Scans' }
+    $OutputDir = [IO.Path]::GetFullPath($OutputDir)
+    # only the program folders of the settings are searched (and VL's recent programs), never all of Documents
     if (-not $ProgramDir) { $ProgramDir = @($cfg.vl.programFolders | Where-Object { $_ }) }
-    if (-not $ProgramDir) { $ProgramDir = @([Environment]::GetFolderPath('MyDocuments')) }
     if ($TimeoutMin -le 0) { $TimeoutMin = [int]$cfg.vl.timeoutMin }
     if ($SettleSec -le 0) { $SettleSec = [double]$cfg.vl.settleSec }
     if (-not $ExportImmediately) { $ExportImmediately = if ($cfg.vl.exportImmediately) { 'On' } else { 'Off' } }
@@ -1034,8 +1034,15 @@ try {
     $script:closeWaitSec = [int]$cfg.vl.closeWaitSec
     $script:dialogRules = @($cfg.vl.dialogRules)
     $script:testedVersions = @($cfg.vl.testedVersions)
-    # in watch mode nobody waits for the STL in front of a window: the operator stays in VL
-    if ($Watch) { $ReturnFocus = 'Off' }
+    # in watch mode nobody waits for the STL in front of a window: the operator stays in VL, and VL is closed
+    # under the operator's hands only when the administrator allows it
+    if ($Watch) {
+        $ReturnFocus = 'Off'
+        if ($AfterExport -in 'Close', 'SaveAndClose' -and -not $cfg.safety.watchAllowClose) {
+            Write-Log "After export '$AfterExport' is not used while the agent follows the scans (the administrator has not allowed it): VL stays open." Yellow
+            $AfterExport = 'None'
+        }
+    }
 }
 catch { Exit-Run $EXIT_ARGS 'ERROR' "Settings: $($_.Exception.Message)" }
 $checks = @(
@@ -1046,6 +1053,10 @@ $checks = @(
 foreach ($c in $checks) {
     if ($c[2] -notcontains $c[1]) { Exit-Run $EXIT_ARGS 'ERROR' "-$($c[0]) '$($c[1])' is not valid (use $($c[2] -join ', '))." }
 }
+if ($TimeoutMin -lt 1 -or $TimeoutMin -gt 600) { Exit-Run $EXIT_ARGS 'ERROR' "-TimeoutMin $TimeoutMin is not valid (1 to 600 minutes)." }
+if ($SettleSec -lt 0 -or $SettleSec -gt 60) { Exit-Run $EXIT_ARGS 'ERROR' "-SettleSec $SettleSec is not valid (0 to 60 seconds)." }
+# first sign of life for the caller; from now on the status file gets a beat every 5 s
+Write-Status 'started' 'VL Connector is starting.'
 
 # --- Start -----------------------------------------------------------------------------
 
@@ -1074,12 +1085,13 @@ if ($cfg.vl.confirmStageMotion) {
     $script:stageWarning = Start-VlcStageWarning
     if (-not $script:stageWarning.Ready) { Write-Log "The stage warning window cannot be prepared ($($script:stageWarning.Error)); the operator answers the stage questions in VL." Yellow }
 }
-if ($script:cancelPath -and (Test-Path -LiteralPath $script:cancelPath)) { Remove-Item -LiteralPath $script:cancelPath -Force }
+# a .cancel next to the marker is never deleted here: a Cancel pressed while VL Connector starts must count
+# (the Measure button removes an old one before it starts the run)
 
 $runName = ''
 if (-not $ExportOnly -and -not $Watch) {
     if (-not $Program) { Exit-Run $EXIT_ARGS 'ERROR' 'Give the program: VLReplay.cmd <program or path to the .vld4>' }
-    $runName = '{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName ([IO.Path]::GetFileNameWithoutExtension($Program))), $startTime
+    $runName = '{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName (Get-VlcProgramName $Program)), $startTime
     # A dry run writes a marker (STATE=DRYRUN) only with -MarkerFile, so that calls from PolyWorks can be tested.
     if (-not $DryRun -and -not $MarkerFile) { Set-MarkerPath (Join-Path $OutputDir "$runName.done") }
     try {
@@ -1088,7 +1100,10 @@ if (-not $ExportOnly -and -not $Watch) {
         $script:programPath = Resolve-Program $Program
     }
     catch { Exit-Run $EXIT_ARGS 'ERROR' $_.Exception.Message }
-    if (-not $script:programPath) { Exit-Run $EXIT_ARGS 'ERROR' "Program '$Program' not found (searched in the recently used programs and in $($ProgramDir -join ', '))." }
+    if (-not $script:programPath) {
+        $where = if ($ProgramDir) { "the program folders ($($ProgramDir -join ', ')) and VL's recently used programs" } else { "VL's recently used programs (no program folder is set)" }
+        Exit-Run $EXIT_ARGS 'ERROR' "Program '$Program' not found in $where."
+    }
     Write-Log "Program: $script:programPath"
 }
 
@@ -1104,7 +1119,7 @@ try {
         }
         if (-not $proc) { throw 'No idle VL window with open data.' }
         $dataName = if ($state.Main.Title -match '^\W*(.+?)\W*\s-\sVL-800') { $Matches[1] } else { 'VL' }
-        $name = if ($Program) { [IO.Path]::GetFileNameWithoutExtension($Program) } else { $dataName }
+        $name = if ($Program) { Get-VlcProgramName $Program } else { $dataName }
         $runName = '{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName $name), $startTime
         if (-not $script:markerPath) { Set-MarkerPath (Join-Path $OutputDir "$runName.done") }
         New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
@@ -1116,7 +1131,8 @@ try {
         Write-Marker 'OK' $target (Format-StlInfo $target $triangles)
         Remove-RunFiles
         $script:mutex.ReleaseMutex(); $script:mutex = $null
-        Invoke-AfterExport $proc $target $triangles $finish
+        # the STL is delivered: a problem from here on is logged, never written over the OK marker (C45)
+        try { Invoke-AfterExport $proc $target $triangles $finish } catch { Write-Log "After the export: $($_.Exception.Message)" Yellow }
         Write-Log 'Done.' Green
         Stop-VlcStageWarning $script:stageWarning
         exit $EXIT_OK
@@ -1159,14 +1175,15 @@ try {
     if ($Watch) {
         # the STL is named after the .vld4 program (+ date and time); the PolyWorks station finds the template by it
         $script:programPath = Resolve-WatchedProgram $script:watchedProgram $proc $script:watchedStamp
-        $programName = if ($script:programPath) { [IO.Path]::GetFileNameWithoutExtension($script:programPath) } else { 'VL' }
+        $programName = if ($script:programPath) { Get-VlcProgramName $script:programPath } else { 'VL' }
         $runName = '{0}_{1:yyyy-MM-dd_HH-mm-ss}' -f (Get-SafeName $programName), $startTime
         Write-Log "Program: $script:programPath"
     }
 
-    $target = Get-TargetPath $runName
     $triangles = $null
     for ($attempt = 1; $attempt -le 2 -and -not $triangles; $attempt++) {
+        # every attempt gets a name of its own: a file left by a failed attempt would make VL ask to overwrite it
+        $target = Get-TargetPath $runName
         try { $triangles = Export-StlFile $proc $target }
         catch {
             Write-Log "STL export (attempt $attempt): $($_.Exception.Message)" Yellow
@@ -1179,7 +1196,8 @@ try {
     Write-Marker 'OK' $target $message
     Remove-RunFiles
     $script:mutex.ReleaseMutex(); $script:mutex = $null
-    Invoke-AfterExport $proc $target $triangles $finish
+    # the STL is delivered: a problem from here on is logged, never written over the OK marker (C45)
+    try { Invoke-AfterExport $proc $target $triangles $finish } catch { Write-Log "After the export: $($_.Exception.Message)" Yellow }
     Write-Log 'Done.' Green
     Stop-VlcStageWarning $script:stageWarning
     exit $EXIT_OK

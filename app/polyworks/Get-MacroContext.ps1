@@ -16,6 +16,7 @@
     10 DEVICE       device text for the report
     11 VERSION      VL Connector version
     12 MESSAGE      error text when STATE=ERROR
+    13 TIMEOUT_MIN  time limit of a scan in minutes (the macro waits a bit longer than VLReplay.ps1)
   Usage (from the macro): powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File Get-MacroContext.ps1
                           -Out <file> -Pwk <workspace file>
 #>
@@ -26,7 +27,7 @@ param(
 
 # FullLanguage mode is needed (docs\IT-Review); checked before anything is loaded
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-    & (Join-Path (Split-Path $PSScriptRoot) 'lib\LanguageCheck.ps1') -Caller MacroContext -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $Out -Keys STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, KEEP_PIECES, OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE
+    & (Join-Path (Split-Path $PSScriptRoot) 'lib\LanguageCheck.ps1') -Caller MacroContext -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $Out -Keys STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, KEEP_PIECES, OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE, TIMEOUT_MIN
     exit 1
 }
 
@@ -40,10 +41,11 @@ $ctx = [ordered]@{
     STATE = 'OK'; RUN = $now.ToString('yyyyMMdd_HHmmss'); USER = $env:USERNAME
     UTC = $now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
     REPORTS_DIR = ''; SCANS_DIR = ''; KEEP_PIECES = 'All'; OPEN_PDF = '1'; COLOR_SCALE = '0.5'
-    DEVICE = ''; VERSION = (Get-VlcVersion); MESSAGE = ''
+    DEVICE = ''; VERSION = (Get-VlcVersion); MESSAGE = ''; TIMEOUT_MIN = '45'
 }
 try {
     $cfg = Read-VlcSettings
+    $ctx.TIMEOUT_MIN = [string]$cfg.vl.timeoutMin
     $pw = $cfg.polyworks
     $base = if ($Pwk) { Split-Path $Pwk } else { Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'VL Connector' }
     $ctx.REPORTS_DIR = if ($pw.reportsFolder) { [string]$pw.reportsFolder } else { Join-Path $base 'Reports' }

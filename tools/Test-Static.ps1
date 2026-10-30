@@ -8,6 +8,8 @@
   - C# is compiled or loaded only by lib\Interop.ps1 (the installer builds the DLL; nothing compiles at run time)
   - every entry script (app\*.ps1, app\polyworks\*.ps1, Install.ps1, Uninstall.ps1) checks the PowerShell
     language mode as its first statement, before it loads anything
+  - shipped text files hold no control characters but tab and line breaks
+  - Windows PowerShell is started by its full System32 path, never as a bare powershell.exe (C24)
 #>
 param([string]$Root = (Split-Path $PSScriptRoot))
 
@@ -38,6 +40,8 @@ foreach ($f in $shipped | Where-Object { $textExt -contains $_.Extension -or $_.
         Add-Problem $f.FullName "non-ASCII text without UTF-8 BOM ($nonAscii bytes)"
     }
     if ($f.Extension -eq '.cmd' -and $nonAscii) { Add-Problem $f.FullName 'non-ASCII text in a .cmd file' }
+    $control = @($bytes | Where-Object { $_ -lt 32 -and $_ -notin 9, 10, 13 }).Count
+    if ($control) { Add-Problem $f.FullName "$control control character(s) other than tab and line breaks" }
 }
 
 # 3. Czech prototype words and developer paths
@@ -73,6 +77,23 @@ foreach ($f in $shipped | Where-Object { $_.Extension -eq '.ps1' -and $_.FullNam
         if (@($call.CommandElements | Where-Object { $_ -is [System.Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -match $compileParams }).Count) {
             Add-Problem $f.FullName "line $($call.Extent.StartLineNumber): Add-Type compiles or loads code outside lib\Interop.ps1"
         }
+    }
+}
+
+# 8. Windows PowerShell only by its full path (C24): a bare powershell.exe could be another program found first
+#    on the search path. Checked in code, not in comments.
+foreach ($f in $shipped | Where-Object { $_.Extension -in '.ps1', '.pwmacro', '.cmd' }) {
+    $n = 0
+    foreach ($line in [IO.File]::ReadAllLines($f.FullName)) {
+        $n++
+        $code = $line.Trim()
+        if ($code -match '^(#|rem\b|::)' -or $code -match '^\s*$') { continue }
+        $bare = switch ($f.Extension) {
+            '.pwmacro' { $code -match 'SYSTEM COMMAND EXEC \w+ \(\s*"powershell(\.exe)?"' }
+            '.cmd' { $code -match '(^|[\s"])powershell(\.exe)?\s' -and $code -notmatch 'System32\\WindowsPowerShell\\v1\.0\\powershell\.exe' }
+            default { $code -match "(Start-Process|&)\s+(-FilePath\s+)?['""]?powershell(\.exe)?['""]?(\s|$)" }
+        }
+        if ($bare) { Add-Problem $f.FullName "line ${n}: powershell.exe without its full System32 path" }
     }
 }
 

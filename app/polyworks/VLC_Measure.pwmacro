@@ -50,7 +50,14 @@ DECLARE vStatus ""
 DECLARE vList
 DECLARE vFound 0
 DECLARE vElapsed 0
-DECLARE vTimeoutS 2700
+DECLARE vTimeoutS 3000
+DECLARE vTimeoutMin ""
+DECLARE vSysRoot ""
+DECLARE vPs ""
+DECLARE vBeat ""
+DECLARE vLastBeat ""
+DECLARE vBeatAt 0
+DECLARE vSince 0
 DECLARE vCancel "Off"
 DECLARE vCancelled 0
 DECLARE vCancelWait 0
@@ -93,10 +100,13 @@ IF "$vTemplate" == ""
 ENDIF
 
 # --- context: run time stamp, operator, settings and folders (Get-MacroContext.ps1) -------------------
+# Windows PowerShell by its full path, never a powershell.exe found first on the search path
+SYSTEM ENVIRONMENT_VARIABLE GET ( "SystemRoot", vSysRoot )
+SET vPs "${vSysRoot}\System32\WindowsPowerShell\v1.0\powershell.exe"
 SYSTEM ENVIRONMENT_VARIABLE GET ( "TEMP", vTemp )
 SET vCtx "${vTemp}\VLConnector_context.txt"
 SYSTEM COMMAND EXEC SYNC ( "IF", { "EXIST", "${_QUOTES}${vCtx}${_QUOTES}", "DEL", "/Q", "${_QUOTES}${vCtx}${_QUOTES}" } )
-SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Get-MacroContext.ps1${_QUOTES}", "-Out", "${_QUOTES}${vCtx}${_QUOTES}", "-Pwk", "${_QUOTES}${vPwk}${_QUOTES}" }, vCallId )
+SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Get-MacroContext.ps1${_QUOTES}", "-Out", "${_QUOTES}${vCtx}${_QUOTES}", "-Pwk", "${_QUOTES}${vPwk}${_QUOTES}" }, vCallId )
 DATA_FILE READ LINE_FIELD ( $vCtx, 1, 2, vCtxState, "=", "On" )
 IF "$vCtxState" != "OK"
     DATA_FILE READ LINE_FIELD ( $vCtx, 12, 2, vMsg, "=", "On" )
@@ -115,6 +125,11 @@ DATA_FILE READ LINE_FIELD ( $vCtx, 7, 2, vKeep, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 8, 2, vOpenPdf, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 9, 2, vScale, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 10, 2, vDevice, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 13, 2, vTimeoutMin, "=", "On" )
+# the macro waits 5 min longer than VLReplay.ps1, which ends a scan itself after its time limit
+IF "$vTimeoutMin" != ""
+    SET vTimeoutS EXPR ( $vTimeoutMin * 60 + 300 )
+ENDIF
 IF "$vPdfDir" != ""
     SET vReportDir $vPdfDir
 ENDIF
@@ -143,7 +158,9 @@ ELSE
     DATA_FILE CREATE ( $vLaunch, "Unicode", "Yes" )
     DATA_FILE APPEND LINE ( $vLaunch, { "PROGRAM=$vProgram" } )
     DATA_FILE APPEND LINE ( $vLaunch, { "OPTIONS=$vOptions" } )
-    SYSTEM COMMAND EXEC ASYNC ( "powershell.exe", { "-NoProfile", "-STA", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\VLReplay.ps1${_QUOTES}", "-LaunchFile", "${_QUOTES}${vLaunch}${_QUOTES}", "-MarkerFile", "${_QUOTES}${vMarker}${_QUOTES}", "-OutputDir", "${_QUOTES}${vScanDir}${_QUOTES}" }, vCallId )
+    # a Cancel file left from an earlier run of this name would end the new scan at once
+    SYSTEM COMMAND EXEC SYNC ( "IF", { "EXIST", "${_QUOTES}${vMarker}.cancel${_QUOTES}", "DEL", "/Q", "${_QUOTES}${vMarker}.cancel${_QUOTES}" } )
+    SYSTEM COMMAND EXEC ASYNC ( $vPs, { "-NoProfile", "-STA", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\VLReplay.ps1${_QUOTES}", "-LaunchFile", "${_QUOTES}${vLaunch}${_QUOTES}", "-MarkerFile", "${_QUOTES}${vMarker}${_QUOTES}", "-OutputDir", "${_QUOTES}${vScanDir}${_QUOTES}" }, vCallId )
     MACRO PROGRESS SHOW ( "VL Connector - $vTemplate", "Program: $vProgName", 0, $vTimeoutS, "Cancel" )
     MACRO PROGRESS STATUS MESSAGE ( "Starting AI Replay in VL..." )
     WHILE $vFound == 0
@@ -183,6 +200,27 @@ ELSE
         IF SIZE(vList) >= 1
             IF "$vList[1]" != ""
                 SET vFound 1
+            ENDIF
+        ENDIF
+        # signs of life of VLReplay.ps1: the BEAT in its status file (line 5) grows every 5 s
+        IF $vFound == 0 AND $vCancelled == 0
+            SET vBeat ""
+            DATA_FILE READ LINE_FIELD ( $vStatus, 5, 2, vBeat, "=", "On" )
+            IF "$vBeat" != "" AND "$vBeat" != "$vLastBeat"
+                SET vLastBeat $vBeat
+                SET vBeatAt $vElapsed
+            ENDIF
+            SET vSince EXPR ( $vElapsed - $vBeatAt )
+            IF "$vLastBeat" == "" AND $vElapsed >= 30
+                MACRO PROGRESS HIDE
+                MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector could not start the scan.", "VLReplay.ps1 gave no sign of life within 30 s.", "Details: VL Connector log in %LOCALAPPDATA%\VLConnector\logs" )
+                MACRO END ( "Error", "VL Connector did not start" )
+            ENDIF
+            IF "$vLastBeat" != "" AND $vSince >= 60
+                DATA_FILE CREATE ( "${vMarker}.cancel", "Ascii", "Yes" )
+                MACRO PROGRESS HIDE
+                MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector stopped unexpectedly.", "VLReplay.ps1 gave no sign of life for 60 s. AI Replay may still be open in VL: finish or close it there.", "Details: VL Connector log in %LOCALAPPDATA%\VLConnector\logs" )
+                MACRO END ( "Error", "VL Connector stopped" )
             ENDIF
         ENDIF
     ENDWHILE

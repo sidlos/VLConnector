@@ -43,17 +43,22 @@ DECLARE vKept "1"
 DECLARE vLast "No job yet."
 DECLARE vComputer ""
 DECLARE vUtc ""
+DECLARE vSysRoot ""
+DECLARE vPs ""
 
 IF "$vApp" == ""
     MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector: the station button is not set up correctly.", "Import VLC_Station_Button.pwmacro from the VL Connector folder again.", "" )
     MACRO END ( "Error", "VL Connector folder missing" )
 ENDIF
+# Windows PowerShell by its full path, never a powershell.exe found first on the search path
+SYSTEM ENVIRONMENT_VARIABLE GET ( "SystemRoot", vSysRoot )
+SET vPs "${vSysRoot}\System32\WindowsPowerShell\v1.0\powershell.exe"
 SYSTEM ENVIRONMENT_VARIABLE GET ( "TEMP", vTemp )
 SYSTEM ENVIRONMENT_VARIABLE GET ( "COMPUTERNAME", vComputer )
 SET vCtx "${vTemp}\VLConnector_station_context.txt"
 SET vNext "${vTemp}\VLConnector_station_next.txt"
 SYSTEM COMMAND EXEC SYNC ( "IF", { "EXIST", "${_QUOTES}${vCtx}${_QUOTES}", "DEL", "/Q", "${_QUOTES}${vCtx}${_QUOTES}" } )
-SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Context", "-Out", "${_QUOTES}${vCtx}${_QUOTES}" }, vCallId )
+SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Context", "-Out", "${_QUOTES}${vCtx}${_QUOTES}" }, vCallId )
 DATA_FILE READ LINE_FIELD ( $vCtx, 1, 2, vState, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 2, 2, vShare, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 3, 2, vPoll, "=", "On" )
@@ -87,7 +92,7 @@ WHILE $vStop == 0
         IF $vFound == 1
             SET vState ""
             SET vMsg ""
-            SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Next", "-Out", "${_QUOTES}${vNext}${_QUOTES}" }, vCallId )
+            SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Next", "-Out", "${_QUOTES}${vNext}${_QUOTES}" }, vCallId )
             DATA_FILE READ LINE_FIELD ( $vNext, 1, 2, vState, "=", "On" )
             DATA_FILE READ LINE_FIELD ( $vNext, 2, 2, vJobId, "=", "On" )
             DATA_FILE READ LINE_FIELD ( $vNext, 3, 2, vPart, "=", "On" )
@@ -125,7 +130,7 @@ WHILE $vStop == 0
                         ENDIF
                     ENDIF
                 ENDIF
-                SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Publish", "-JobId", $vJobId, "-Result", "${_QUOTES}${vResult}${_QUOTES}" }, vCallId )
+                SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Publish", "-JobId", $vJobId, "-Result", "${_QUOTES}${vResult}${_QUOTES}" }, vCallId )
                 ++ vCount
                 IF "$vVerdict" == ""
                     SET vLast "Last job: $vPart - error. Jobs done: $vCount."

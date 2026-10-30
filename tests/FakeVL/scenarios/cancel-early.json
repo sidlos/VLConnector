@@ -1,0 +1,6 @@
+{
+    "flavors": [ "en" ],
+    "cancelAfterSec": 0.3,
+    "cancelOnce": true,
+    "expect": { "state": "CANCELLED", "exitCode": 2, "stl": false, "maxSeconds": 30, "logIncludes": [ "Cancelled by the user" ] }
+}

@@ -34,11 +34,11 @@ Describe 'macro file protocol' {
             $out = Join-Path $tmp 'context.txt'
             & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $poly 'Get-MacroContext.ps1') -Out $out -Pwk (Join-Path $tmp 'parts.pwk')
             $keys = @([IO.File]::ReadAllLines($out) | ForEach-Object { ($_ -split '=', 2)[0] })
-            $keys -join ',' | Should Be 'STATE,RUN,USER,UTC,REPORTS_DIR,SCANS_DIR,KEEP_PIECES,OPEN_PDF,COLOR_SCALE,DEVICE,VERSION,MESSAGE'
+            $keys -join ',' | Should Be 'STATE,RUN,USER,UTC,REPORTS_DIR,SCANS_DIR,KEEP_PIECES,OPEN_PDF,COLOR_SCALE,DEVICE,VERSION,MESSAGE,TIMEOUT_MIN'
             $keyOf = @{ vCtxState = 'STATE'; vRun = 'RUN'; vUser = 'USER'; vUtc = 'UTC'; vReportDir = 'REPORTS_DIR'; vScanDir = 'SCANS_DIR'
-                vKeep = 'KEEP_PIECES'; vOpenPdf = 'OPEN_PDF'; vScale = 'COLOR_SCALE'; vDevice = 'DEVICE'; vMsg = 'MESSAGE' }
+                vKeep = 'KEEP_PIECES'; vOpenPdf = 'OPEN_PDF'; vScale = 'COLOR_SCALE'; vDevice = 'DEVICE'; vMsg = 'MESSAGE'; vTimeoutMin = 'TIMEOUT_MIN' }
             $reads = Get-MacroReads $measure 'vCtx'
-            $reads.Count | Should Be 11
+            $reads.Count | Should Be 12
             Assert-Reads $reads $keys $keyOf
         }
         finally { Remove-Item -LiteralPath $tmp -Recurse -Force }
@@ -79,6 +79,13 @@ Describe 'macro file protocol' {
         $keys = @([regex]::Matches($block, '(?m)^\s*([A-Z][A-Z0-9_]*)\s*=') | ForEach-Object { $_.Groups[1].Value })
         $keys -join ',' | Should Be 'STATE,STL,PROGRAM,START,END,MESSAGE,USER,COMPUTER,JOBID,VERSION,START_UTC,STL_SHA256'
         Assert-Reads (Get-MacroReads $measure 'vMarker') $keys @{ vState = 'STATE'; vStl = 'STL'; vMsg = 'MESSAGE'; vStlHash = 'STL_SHA256' }
+    }
+    It 'VLC_Measure reads the status lines (text and heartbeat) the launcher writes' {
+        $cs = [IO.File]::ReadAllText((Join-Path $repo 'app\interop\StatusFile.cs'))
+        $keys = @([regex]::Matches($cs, '"(?:\\r\\n)?([A-Z]+)="') | ForEach-Object { $_.Groups[1].Value })
+        $keys -join ',' | Should Be 'STEP,TEXT,VLMESSAGE,UPDATED,BEAT'
+        Assert-Reads (Get-MacroReads $measure 'vStatus') $keys @{ vText = 'TEXT'; vBeat = 'BEAT' }
+        (Get-MacroReads $measure 'vStatus').Count | Should Be 2
     }
     It 'hides the progress window before VLC_Evaluate runs its synchronous command (it would stay disabled)' {
         foreach ($macro in $measure, [IO.File]::ReadAllText((Join-Path $poly 'VLC_Station.pwmacro'))) {

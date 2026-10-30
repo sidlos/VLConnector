@@ -87,7 +87,7 @@ function Start-Watcher {
     $marker = Join-Path $script:runs ('watch_{0:yyyyMMdd_HHmmss_fff}.done' -f (Get-Date))
     $launcher = Join-Path $PSScriptRoot 'VLReplay.ps1'
     $argList = @('-NoProfile', '-STA', '-ExecutionPolicy', 'RemoteSigned', '-WindowStyle', 'Hidden', '-File', "`"$launcher`"", '-Watch', '-MarkerFile', "`"$marker`"")
-    $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -WindowStyle Hidden -PassThru
+    $p = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $argList -WindowStyle Hidden -PassThru
     $script:watcher = [pscustomobject]@{ Process = $p; Marker = $marker; Started = Get-Date }
     Write-VlcLog "Watcher started (PID $($p.Id))."
 }

@@ -22,6 +22,9 @@
   user:     written as the user's settings.json
   programDataMachine: written as %ProgramData%\VLConnector\machine.json of the launcher (a fake ProgramData)
   pending:  the scenario is skipped by Run-Tests.ps1 (unless -IncludePending) until this step is done
+  programFile: file name of the program in the program folder (default demo-part.vld4); programByName: pass only
+            its name (without .vld4) and the folder as -ProgramDir
+  cancelAfterSec, cancelOnce: the caller creates <marker>.cancel after this time (cancelOnce: only once)
   expect:   state (canonical OK|ERROR|CANCELLED|DRYRUN|BUSY|none), exitCode, stl (bool),
             eventsInclude [...], eventsExclude [...], eventsOrder [...], vlRunning (bool),
             logIncludes [...], logExcludes [...], maxSeconds, vldExists (bool),
@@ -29,7 +32,8 @@
             neverConfirmed (bool): the launcher confirmed nothing; every stage dialog shown was answered by
             the simulated operator,
             warningVisibleOnAnswer (bool): VL Connector's stage warning window was (not) on screen at every
-            answer to a stage dialog, minAnswerSec: no stage dialog was answered sooner
+            answer to a stage dialog, minAnswerSec: no stage dialog was answered sooner,
+            vlStarts: how many FakeVL processes were started in the scenario
 #>
 param(
     [Parameter(Mandatory = $true)][string]$ScenarioFile,
@@ -96,7 +100,7 @@ $fakeConfig = @'
 </configuration>
 '@
 [IO.File]::WriteAllText("$fakeExe.config", $fakeConfig)
-$program = Join-Path $programs 'demo-part.vld4'
+$program = Join-Path $programs $(if ($scenario.programFile) { [string]$scenario.programFile } else { 'demo-part.vld4' })
 [IO.File]::WriteAllText($program, 'FakeVL program')
 $marker = Join-Path $out 'run.marker.txt'
 $events = Join-Path $work 'fakevl.events.log'
@@ -181,6 +185,10 @@ if ($scenario.launchFile) {
     [IO.File]::WriteAllLines($launch, [string[]]@("PROGRAM=$launchProgram", "OPTIONS=$([string]$scenario.launchFile.options)"), [Text.Encoding]::Unicode)
     $launcherArgs.AddRange([string[]]@('-LaunchFile', $launch))
 }
+elseif ($scenario.programByName) {
+    # the name only (as typed by an operator), found in the program folder
+    $launcherArgs.AddRange([string[]]@([IO.Path]::GetFileName($program) -replace '\.vld4$', '', '-ProgramDir', $programs))
+}
 elseif (-not ($opt -and ($opt.exportOnly -or $opt.watch))) { $launcherArgs.Add($program) }
 if ($opt -and $opt.watch) { $launcherArgs.Add('-Watch') }
 $launcherArgs.AddRange([string[]]@($a.Out, $out, $a.Marker, $marker, $a.Timeout, '3'))
@@ -210,12 +218,15 @@ if ($opt -and $opt.extraRaw) { $argLine += ' ' + [string]$opt.extraRaw }
 
 $t0 = Get-Date
 $proc = [Diagnostics.Process]::Start((New-StartInfo $psExe $argLine))
-# a caller cancels by creating <marker>.cancel
+# a caller cancels by creating <marker>.cancel (cancelOnce: once, like a Cancel pressed while the launcher starts)
 if ($scenario.cancelAfterSec) {
     $cancelAt = $t0.AddSeconds([double]$scenario.cancelAfterSec)
+    $cancelled = $false
     while (-not $proc.HasExited -and (Get-Date) -lt $t0.AddSeconds($TimeoutSec)) {
-        if ((Get-Date) -ge $cancelAt -and -not (Test-Path -LiteralPath "$marker.cancel")) { [IO.File]::WriteAllText("$marker.cancel", 'cancel') }
-        Start-Sleep -Milliseconds 200
+        if ((Get-Date) -ge $cancelAt -and -not (Test-Path -LiteralPath "$marker.cancel") -and -not ($scenario.cancelOnce -and $cancelled)) {
+            [IO.File]::WriteAllText("$marker.cancel", 'cancel'); $cancelled = $true
+        }
+        Start-Sleep -Milliseconds 100
     }
 }
 $finished = $proc.WaitForExit($TimeoutSec * 1000)
@@ -310,6 +321,10 @@ if ($expect.ContainsKey('minAnswerSec')) {
     foreach ($x in $answers) { if ($x.Open -lt [double]$expect.minAnswerSec) { $failures.Add("a stage dialog was answered after $($x.Open) s, expected at least $($expect.minAnswerSec) s") } }
 }
 if ($expect.ContainsKey('maxSeconds') -and $duration -gt [double]$expect.maxSeconds) { $failures.Add("took $([math]::Round($duration, 1)) s, expected at most $($expect.maxSeconds) s") }
+if ($expect.ContainsKey('vlStarts')) {
+    $starts = @($eventTexts | Where-Object { $_.StartsWith('start:pid=') }).Count
+    if ($starts -ne [int]$expect.vlStarts) { $failures.Add("FakeVL was started $starts time(s), expected $($expect.vlStarts)") }
+}
 if ($expect.ContainsKey('vldExists')) {
     $vld = @(Get-ChildItem -LiteralPath $out -Filter '*.vld4' -ErrorAction SilentlyContinue).Count -gt 0
     if ($vld -ne [bool]$expect.vldExists) { $failures.Add("VL data file exists $vld, expected $($expect.vldExists)") }

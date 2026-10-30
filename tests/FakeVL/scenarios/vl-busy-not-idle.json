@@ -1,0 +1,6 @@
+{
+    "flavors": [ "en" ],
+    "prestartFakeVl": true,
+    "fakevl": { "startWithData": true },
+    "expect": { "state": "BUSY", "exitCode": 4, "stl": false, "vlStarts": 1, "logIncludes": [ "VL is open but not idle on its start screen" ] }
+}

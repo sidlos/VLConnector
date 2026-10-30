@@ -11,6 +11,10 @@ Describe 'static checks' {
     Set-Content -LiteralPath (Join-Path $root 'app\NoCheck.ps1') -Value "'work'"
     Set-Content -LiteralPath (Join-Path $root 'app\lib\Compile.ps1') -Value "Add-Type -TypeDefinition 'public class X {}'`r`nAdd-Type -AssemblyName System.Drawing"
     Set-Content -LiteralPath (Join-Path $root 'app\lib\LoadDll.ps1') -Value "Add-Type -Path 'C:\x.dll'"
+    Set-Content -LiteralPath (Join-Path $root 'app\lib\Bare.ps1') -Value "# powershell.exe in a comment is fine`r`nStart-Process -FilePath 'powershell.exe' -ArgumentList '-File', 'x.ps1'`r`n`$ok = Join-Path `$env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'"
+    Set-Content -LiteralPath (Join-Path $root 'app\polyworks\Bare.pwmacro') -Value "# SYSTEM COMMAND EXEC SYNC ( `"powershell.exe`" ) in a comment`r`nSYSTEM COMMAND EXEC SYNC ( `"powershell.exe`", { `"-File`" }, vId )`r`nSYSTEM COMMAND EXEC SYNC ( `$vPs, { `"-File`" }, vId )"
+    [IO.File]::WriteAllText((Join-Path $root 'app\Bare.cmd'), "@echo off`r`nrem powershell.exe -File x.ps1`r`npowershell.exe -File x.ps1`r`n`"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`" -File y.ps1`r`n")
+    [IO.File]::WriteAllText((Join-Path $root 'app\lib\Control.ps1'), "'a`vb'`r`n")
 
     $out = & $ps -NoProfile -File (Join-Path $repo 'tools\Test-Static.ps1') -Root $root | Out-String
     It 'fails' { $LASTEXITCODE | Should Be 1 }
@@ -23,5 +27,16 @@ Describe 'static checks' {
         $out | Should Match 'app\\lib\\Compile\.ps1: line 1: Add-Type compiles or loads code'
         $out | Should Not Match 'Compile\.ps1: line 2'
         $out | Should Match 'app\\lib\\LoadDll\.ps1: line 1: Add-Type compiles or loads code'
+    }
+    It 'finds powershell.exe started without its full path, in scripts, macros and batch files, but not in comments' {
+        $out | Should Match 'app\\lib\\Bare\.ps1: line 2: powershell\.exe without its full System32 path'
+        $out | Should Not Match 'Bare\.ps1: line [13]:'
+        $out | Should Match 'app\\polyworks\\Bare\.pwmacro: line 2: powershell\.exe without'
+        $out | Should Not Match 'Bare\.pwmacro: line [13]:'
+        $out | Should Match 'app\\Bare\.cmd: line 3: powershell\.exe without'
+        $out | Should Not Match 'Bare\.cmd: line [124]:'
+    }
+    It 'finds control characters in text files' {
+        $out | Should Match 'app\\lib\\Control\.ps1: 1 control character'
     }
 }
