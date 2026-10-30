@@ -24,23 +24,29 @@ is never changed.
 - Windows 10 or 11, Windows PowerShell 5.1 in FullLanguage mode (standard on Windows).
 - KEYENCE VL-800 with VL Application 4.6 (tested: 4.6.1.6002), English user interface.
 - PolyWorks Metrology Suite 2026 (Inspector) on the evaluating PC.
-- Scenario B: a shared network folder that the scanner PCs and the station can read and write.
-- No administrator rights are needed. Nothing is copied into the program folders of VL or PolyWorks
-  (VL Connector is not a PolyWorks plug-in).
+- Scenario B: a shared network folder (rights per role: see the Notes for IT).
+- Administrator rights for the installation (Windows asks); not for using it. Nothing is copied into the
+  program folders of VL or PolyWorks (VL Connector is not a PolyWorks plug-in).
 
 ## Install
 
-1. Check the download: the SHA-256 of the ZIP must match `SHA256SUMS.txt` (PowerShell: `Get-FileHash <zip>`).
+1. Check the download: the SHA-256 of the ZIP must match `SHA256SUMS.txt` of the release (PowerShell:
+   `Get-FileHash <zip>`).
 2. Extract the ZIP and run **Install.cmd**. It checks every file, shows the package fingerprint (compare it
-   with the one you received), installs to `C:\ProgramData\VLConnector` and creates the Start menu entries.
+   with the published one), asks Windows for administrator rights, installs to `C:\Program Files\VLConnector`
+   (only administrators can change it) and creates the Start menu entries for all users.
+   IT: `Install.cmd -Quiet [-ConfirmStageMotion On|Off] [-MachineSettings <file>]` as administrator or SYSTEM.
 3. The **setup wizard** opens at the end (later: Start menu > VL Connector > Setup wizard). It asks for the
    scenario and the main options and **adds the VL Connector tab with the Measure or
    Station button to PolyWorks** (PolyWorks|Inspector must be open; the PolyWorks layout is saved before and
    can be restored). The settings window only holds settings (modes, options, start with Windows); scanning
    stays in VL and evaluating in PolyWorks.
 
-Update: run Install.cmd of the new version (settings and the PolyWorks buttons stay).
-Uninstall: Start menu > Uninstall VL Connector.
+Update: run Install.cmd of the new version (settings and the PolyWorks buttons stay; 1.0.0-rc10 in
+`C:\ProgramData\VLConnector` is moved). Uninstall: Start menu > Uninstall VL Connector.
+
+**Safety:** whether VL Connector may confirm VL's stage rotation questions itself is decided by an
+administrator for the whole PC (off by default); when it does, a warning window and a sound come first.
 
 ## Documents
 
@@ -58,5 +64,7 @@ and settings for them (no scans or reports).
 
 ## License
 
-[MIT](LICENSE). Everything is plain, readable PowerShell, PolyWorks macro (MSCL), XAML and JSON - no
-compiled programs. Developers: `tests\Run-Tests.ps1 -Static -Unit` runs the checks without VL or PolyWorks.
+[MIT](LICENSE). Everything is plain, readable PowerShell, PolyWorks macro (MSCL), XAML, JSON and C# source;
+the only compiled file is the interface DLL the installer builds from that source on the PC. Developers:
+`tests\Run-Tests.ps1 -Static -Unit` runs the checks without VL or PolyWorks; GitHub Actions runs them, the
+launcher scenarios and a real installation for every change, and builds the releases from tags.

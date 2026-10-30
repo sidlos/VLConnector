@@ -26,68 +26,145 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <body>
 <main>
 <h1 id="vl-connector-for-polyworks---notes-for-it">VL Connector for PolyWorks - Notes for IT</h1>
-<p>This page explains what VL Connector runs, what it changes on a PC and why, so that IT can review it before use. Everything is <strong>readable source</strong>: Windows PowerShell 5.1 scripts, PolyWorks macros (MSCL), WPF window definitions (XAML) and JSON settings. There are <strong>no compiled programs, DLLs or installers</strong> in the package. The few Windows functions that PowerShell cannot call directly are declared as C# source inside the scripts (<code>Add-Type</code>) and compiled in memory by .NET at run time - the source is what runs.</p>
+<p>This page explains what VL Connector installs and runs, what it changes on a PC and why, so that IT can review it before use. Everything is <strong>readable source</strong>: Windows PowerShell 5.1 scripts, PolyWorks macros (MSCL), WPF window definitions (XAML), C# source for the few Windows functions PowerShell cannot call directly, and JSON settings. The only compiled file is the interface DLL that the <strong>installer</strong> builds once from the shipped C# source on the PC; nothing is compiled at run time.</p>
 <p>Unofficial tool - not an official KEYENCE or InnovMetric product. License: MIT.</p>
+<p><strong>In short:</strong> installed by an administrator into <code>C:\Program Files\VLConnector</code>, which only administrators can change. Settings that matter for safety and for IT (the VL program, the automatic stage confirmation, dialog rules) can only be set by an administrator, for all users of the PC. No service, driver, scheduled task or PolyWorks plug-in; no internet access, no telemetry.</p>
 <h2 id="1-components">1. Components</h2>
 <table>
 <tr><th>File</th><th>Runs</th><th>Purpose</th></tr>
-<tr><td><code>app\VLConnector.ps1</code></td><td>when the user opens it (Start menu; the installer offers the wizard)</td><td>Settings window and setup wizard (WPF).</td></tr>
-<tr><td><code>app\Agent.ps1</code></td><td>scenario B, scanner PC: at logon (only if switched on) or from the Start menu</td><td>Notification-area agent: starts the launcher in watch mode, sends STL files to the shared folder, opens the user&#39;s reports.</td></tr>
+<tr><td><code>app\VLConnector.ps1</code></td><td>when a user opens it (Start menu; the installer offers the wizard)</td><td>Settings window and setup wizard (WPF).</td></tr>
+<tr><td><code>app\Set-MachinePolicy.ps1</code></td><td>only with administrator rights, from the <em>Change (administrator)</em> button (UAC prompt)</td><td>Small dialog that writes the machine policy (<code>machine.json</code>) and an Event Log entry.</td></tr>
+<tr><td><code>app\Agent.ps1</code></td><td>scenario B, scanner PC: at logon (only if the user switched it on) or from the Start menu</td><td>Notification-area agent: starts the launcher in watch mode, sends STL files to the shared folder, opens the user&#39;s reports. Its network work runs in <code>app\lib\AgentCycle.ps1</code>.</td></tr>
 <tr><td><code>app\VLReplay.ps1</code></td><td>started by the PolyWorks Measure macro or by the agent (<code>-Watch</code>)</td><td>Drives AI Replay in the VL Application (or follows a replay the operator started) and exports the STL.</td></tr>
 <tr><td><code>app\polyworks\*.pwmacro</code></td><td>inside PolyWorks, when the user presses the button</td><td>Evaluation, report, network station loop.</td></tr>
-<tr><td><code>app\polyworks\Get-MacroContext.ps1</code>, <code>Station-Step.ps1</code></td><td>started by the macros</td><td>Read settings, move job files (PolyWorks macros cannot read JSON).</td></tr>
-<tr><td><code>app\lib\*.ps1</code></td><td>loaded by the scripts above</td><td>Shared code. <code>Native.ps1</code> holds all Windows API declarations; <code>PolyWorksLayout.ps1</code> the PolyWorks COM declarations (used only by <em>Add to PolyWorks</em>).</td></tr>
-<tr><td><code>Install.ps1</code>, <code>Uninstall.ps1</code></td><td>once, by the user</td><td>Installation, removal.</td></tr>
-<tr><td><code>tools\Sign-Scripts.ps1</code></td><td>by IT, optional</td><td>Signs the scripts with your certificate (AllSigned environments).</td></tr>
+<tr><td><code>app\polyworks\*.ps1</code></td><td>started by the macros</td><td>Settings for the macros (<code>Get-MacroContext</code>), the verdict and CSV (<code>Complete-Evaluation</code>), the station&#39;s file work (<code>Station-Step</code>).</td></tr>
+<tr><td><code>app\interop\*.cs</code></td><td>compiled once by the installer</td><td>Windows and PolyWorks interface declarations, see section 7.</td></tr>
+<tr><td><code>bin\VLConnector.Interop.dll</code></td><td>loaded by the scripts</td><td>Built by the installer from <code>app\interop\*.cs</code>; carries the SHA-256 of its source in its file properties.</td></tr>
+<tr><td><code>app\lib\*.ps1</code></td><td>loaded by the scripts above</td><td>Shared code, e.g. <code>Install.ps1</code> (installation), <code>Settings.ps1</code> (settings layers), <code>StageWarning*.ps1</code> (warning window).</td></tr>
+<tr><td><code>Install.ps1</code>, <code>Uninstall.ps1</code></td><td>by an administrator</td><td>Installation, update, removal.</td></tr>
+<tr><td><code>tools\Sign-Package.ps1</code></td><td>by IT, optional</td><td>Signs the package with your certificate before deployment (section 6).</td></tr>
+<tr><td><code>tools\Build-Interop.ps1</code></td><td>by the installer (or IT)</td><td>Builds the interface DLL from the source.</td></tr>
 </table>
-<p>No service, scheduled task, driver or browser extension is installed. The only autostart is the optional Startup-folder shortcut of the agent (per user, switched on in the settings window). While it waits for AI Replay, the agent&#39;s launcher looks at the VL windows of the user&#39;s session about every 0.25 s (window list and texts only).</p>
-<h2 id="2-powershell-requirements">2. PowerShell requirements</h2>
+<p>No service, scheduled task, driver or browser extension is installed. The only autostart is the optional Startup-folder shortcut of the agent (per user, switched on by the user). While it waits for AI Replay, the agent&#39;s launcher looks at the VL windows of the user&#39;s session about every 0.25 s (window list and texts only).</p>
+<h2 id="2-installation-and-trust-model">2. Installation and trust model</h2>
+<p><strong>Install</strong> (an administrator; or software deployment as SYSTEM):</p>
+<pre><code>Install.cmd                                  interactive: a user starts it, Windows asks for administrator rights
+Install.cmd -Quiet [-ConfirmStageMotion On|Off] [-MachineSettings &lt;file&gt;] [-InteropDll &lt;file&gt;] [-InstallDir &lt;folder&gt;] [-Force]</code></pre>
+<p>Exit codes: <code>0</code> done, <code>1</code> failed, <code>2</code> cancelled, <code>740</code> administrator rights needed (<code>-Quiet</code> as a user), <code>1618</code> VL Connector is in use (a window, a scan or a station step runs in some session: retry later). Detection rule for deployment tools: <code>C:\Program Files\VLConnector\install-info.txt</code> (line <code>VERSION=</code>).</p>
+<p>What the installer does, as administrator:</p>
+<ol>
+<li>Reads the package manifest (<code>MANIFEST.sha256</code>, SHA-256 of every file) <strong>once</strong> into memory and checks every file; shows the package fingerprint (SHA-256 of the manifest) for comparison with the published one.</li>
+<li>Refuses an install folder that is relative, a drive, Windows or a shared folder itself, a link, a folder with other content, the package folder itself, a folder whose parent folders users could delete, rename or re-permission, and an older version over a newer one (without <code>-Force</code>).</li>
+<li>Creates <code>&lt;folder&gt;.new</code> with an <strong>administrator-only ACL</strong> (no inheritance; SYSTEM and Administrators full control, Users read and execute; owner Administrators), copies only the files of the manifest and checks each copy against the manifest in memory. Only these files lose the &quot;downloaded from the internet&quot; mark.</li>
+<li>Builds the interface DLL there (or takes <code>-InteropDll</code>, a DLL IT built and signed from the same source, checked by its source hash), writes the PolyWorks button files and <code>install-info.txt</code>, keeps <code>machine.json</code>.</li>
+<li>Checks the staged copy strictly (extra files and links are errors) and its ACL, stops the VL Connector agents of all sessions, and swaps the folders by renaming. The previous version stays in <code>&lt;folder&gt;.old</code> and is put back when the swap fails.</li>
+<li>Registers the event source &quot;VL Connector&quot; (Application log), applies <code>-MachineSettings</code> and <code>-ConfirmStageMotion</code> (checked before step 3), creates the Start menu entries for all users.</li>
+</ol>
+<p>When a user starts <code>Install.cmd</code>, the package is first copied to the user&#39;s <code>%TEMP%</code> (an elevated process does not see mapped drives), the machine part runs elevated, and then the user&#39;s own shortcuts and settings are brought up to date. Started elevated or as SYSTEM, only the machine part runs; each user&#39;s part runs when that user next starts VL Connector.</p>
+<p><strong>Nothing writes into the program folder at run time</strong> - except <code>machine.json</code>, and only through the administrator tool (UAC).</p>
+<p><strong>1.0.0-rc10 installations</strong> (in <code>C:\ProgramData\VLConnector</code>, a folder users could change): the installer renames the folder away (nothing inside is followed), creates a new administrator-only folder in its place that holds only <strong>forwarders</strong> - small files that pass old PolyWorks buttons and old shortcuts on to the new folder - and deletes the old content without following junctions or links. From its <code>machine.json</code> only shared defaults are taken over, nothing only an administrator may set. The installer lists the users whose own settings had switched the automatic stage confirmation on; that is ignored now.</p>
+<p><strong>Check an installation:</strong> <code>Install.cmd -Verify</code> (no administrator rights needed) checks the files against the manifest, the ACL of the folder and its parents, and the interface DLL against its source - <strong>before</strong> it loads any installed code - then shows the status of the PC.</p>
+<p><strong>Remove:</strong> Start menu &gt; Uninstall VL Connector, or <code>Uninstall.cmd [-Quiet] [-RemoveUserData]</code> (administrator). It runs from a temporary copy, stops the agents, removes the program folder (with <code>.old</code>), the Start menu entries, the agent startup shortcuts of all users, the forwarders and the event source, and checks that the folder is gone. User data (<code>-RemoveUserData</code>: the settings and logs of the user who runs it), scans, reports, PolyWorks projects and the shared folder stay.</p>
+<h2 id="3-settings-and-their-lock">3. Settings and their lock</h2>
+<p>Four layers; a later one overrides single values of an earlier one:</p>
+<ol>
+<li><code>app\config\defaults.json</code> (product defaults),</li>
+<li><code>machine.json</code>, section <code>defaults</code> (starting values of IT; users may change them),</li>
+<li><code>%APPDATA%\VLConnector\settings.json</code> (the user&#39;s own changes),</li>
+<li><code>machine.json</code>, section <code>policy</code> (values IT locks for all users).</li>
+</ol>
+<p><code>machine.json</code> lies in the program folder, next to <code>app\</code>; its place never comes from an environment variable. Every value of every layer is checked against <code>app\config\settings-schema.json</code> (JSON types are taken literally: the text <code>&quot;true&quot;</code> is not true). A value that does not pass is ignored with a warning on the Setup page.</p>
+<p><strong>Only an administrator</strong> can set these keys, in <code>defaults.json</code> or the <code>policy</code> (anywhere else they are ignored): <code>vl.exe</code>, <code>vl.args</code>, <code>vl.confirmStageMotion</code>, <code>vl.dialogRules</code>, <code>vl.testedVersions</code>, <code>vl.menuExportStl</code>, <code>vl.menuSaveAs</code>, <code>network.allowUncWorkspaces</code>, <code>safety.stageWarningSec</code>, <code>safety.stageSound</code>, <code>safety.watchAllowClose</code>. Users see locked settings greyed out with &quot;Set by the administrator for all users of this PC&quot;.</p>
+<p>Example <code>machine.json</code>:</p>
+<pre><code>{
+  &quot;policy&quot;:   { &quot;vl&quot;: { &quot;confirmStageMotion&quot;: false }, &quot;network&quot;: { &quot;share&quot;: &quot;\\\\fileserver\\metrology\\VLConnector&quot; } },
+  &quot;defaults&quot;: { &quot;polyworks&quot;: { &quot;keepPieces&quot;: &quot;Nok&quot; } }
+}</code></pre>
+<p>Every settings change is logged (<code>%LOCALAPPDATA%\VLConnector\logs\Settings_&lt;date&gt;.log</code>); a change of the machine settings also goes to the Event Log (event 1000), with the administrator and the user who asked for it.</p>
+<h2 id="4-stage-rotation-safety">4. Stage rotation safety</h2>
+<p>The VL Application asks the operator before the turntable moves (&quot;The stage will rotate. Continue?&quot;, &quot;Return the stage to the origin?&quot;). By default <strong>the operator answers</strong>. An administrator can let VL Connector answer them (<code>vl.confirmStageMotion</code> in the policy: installer <code>-ConfirmStageMotion On</code>, or the <em>Change (administrator)</em> button). It is a setting of the PC, never of a user, a template or a command line: the launcher has no such parameter, template options cannot set it, and user settings are ignored.</p>
+<p>VL Connector answers a stage question only when <strong>all</strong> of these hold, checked anew for each question:</p>
 <ul>
-<li><strong>Windows PowerShell 5.1</strong> (part of Windows 10/11) in <strong>FullLanguage</strong> mode. Constrained Language Mode (AppLocker/WDAC script enforcement) blocks <code>Add-Type</code> and WPF; VL Connector then stops with a clear message. Allow <code>C:\ProgramData\VLConnector\*</code> in your script rules, or sign the scripts (below).</li>
-<li><strong>Execution policy:</strong> the Start menu entries and the PolyWorks macros start the scripts with <code>-ExecutionPolicy RemoteSigned</code>. The installer removes the &quot;downloaded from the internet&quot; mark from the installed files only (after checking them against the manifest). <code>Install.cmd</code> itself starts <code>Install.ps1</code> with <code>-ExecutionPolicy Bypass</code>, because the extracted package still carries that mark.</li>
-<li><strong>AllSigned:</strong> run <code>tools\Sign-Scripts.ps1 -Thumbprint &lt;your code signing certificate&gt;</code> after the installation. Signing changes the files; keep the hash list it prints.</li>
-<li>A Group Policy execution policy always wins over the command line options above.</li>
+<li>the policy is on (re-read at that moment: switching it off takes effect at once),</li>
+<li>the question is exactly one of the two texts above, and the VL version is listed in <code>vl.testedVersions</code>,</li>
+<li>somebody can be at the PC: the session is the active console session, not a remote (RDP) session, and the screen is not locked,</li>
+<li>the <strong>warning window</strong> is on screen (red, on top of all windows, never takes the keyboard focus, placed so it does not cover VL&#39;s question) and the sound has played; if Windows has not shown it within 1 s, VL Connector does not answer.</li>
 </ul>
-<h2 id="3-windows-interfaces-used">3. Windows interfaces used</h2>
-<p>VL has no programming interface for AI Replay, so <code>VLReplay.ps1</code> operates the VL window like a careful user, but with documented Windows messages and UI Automation instead of mouse and keyboard input:</p>
-<table>
-<tr><th>Interface</th><th>Why</th></tr>
-<tr><td><code>EnumWindows</code>, <code>EnumChildWindows</code>, <code>GetWindowText</code>, <code>GetClassName</code>, <code>GetWindowThreadProcessId</code></td><td>Find VL&#39;s windows and dialogs.</td></tr>
-<tr><td><code>SendMessageTimeout</code> (<code>WM_GETTEXT</code>, <code>WM_SETTEXT</code>)</td><td>Read dialog texts; enter the program path in VL&#39;s file dialog.</td></tr>
-<tr><td><code>PostMessage</code> (<code>BM_CLICK</code>, <code>WM_CLOSE</code>)</td><td>Press a dialog button (e.g. OK of the stage dialog when enabled); close a VL window when the user chose so.</td></tr>
-<tr><td><code>OpenProcess</code> (only <code>PROCESS_VM_OPERATION</code>, <code>PROCESS_VM_READ</code>), <code>VirtualAllocEx</code>, <code>ReadProcessMemory</code>, <code>VirtualFreeEx</code> with <code>WM_GETCONTROLNAME</code></td><td>Read the internal control names of VL&#39;s WinForms windows (e.g. <code>_replayScanButton</code>), the standard technique of UI test tools, so buttons are found independent of their captions. Nothing is written into VL&#39;s memory by VL Connector; no code is injected.</td></tr>
-<tr><td>UI Automation (<code>System.Windows.Automation</code>)</td><td>Open VL&#39;s menus (File &gt; Export &gt; STL, File &gt; Save As) and read the AI Replay progress.</td></tr>
-<tr><td><code>SetForegroundWindow</code>, <code>AttachThreadInput</code>, <code>ShowWindow</code>, <code>mouse_event</code> with a 0-pixel move</td><td>Bring the PolyWorks or VL Connector window to the front after the scan, or minimize VL. Windows lets only the process with the last input change the foreground; the zero move gives that right without moving the mouse.</td></tr>
-<tr><td>PolyWorks COM interface (<code>InnovMetric.PolyWorks.WorkspaceManager</code>: running modules, command center, run a macro script text)</td><td>Only when the user presses <em>Add to PolyWorks</em> (wizard or settings): sends PolyWorks&#39; own macro commands to the PolyWorks</td><td>Inspector the user has open. PolyWorks is never started by VL Connector.</td></tr>
-</table>
-<p>VL Connector <strong>reads</strong> two VL files: <code>%APPDATA%\KEYENCE\VL-800 Series\VL Application\VLOperation.log</code> (to see when AI Replay finished) and <code>%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml</code> (to find programs). It <strong>never writes</strong> KEYENCE files and never terminates VL.</p>
-<h2 id="4-what-is-written-where">4. What is written where</h2>
-<table>
-<tr><th>Path</th><th>Content</th></tr>
-<tr><td><code>C:\ProgramData\VLConnector\</code></td><td>The program (read and execute for all users; write only for administrators, SYSTEM and the installing user), the PolyWorks button files, <code>install-info.txt</code>.</td></tr>
-<tr><td><code>C:\ProgramData\VLConnector\machine.json</code></td><td>Optional, created by IT: settings for all users of the PC.</td></tr>
-<tr><td><code>%APPDATA%\VLConnector\settings.json</code></td><td>Settings of the user (settings window).</td></tr>
-<tr><td><code>%LOCALAPPDATA%\VLConnector\</code></td><td><code>logs\</code> (30 days), agent outbox and pending list, station work files, <code>polyworks-layout\</code> (backups of the PolyWorks visual layout made before <em>Add to PolyWorks</em>).</td></tr>
-<tr><td><code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector agent.lnk</code></td><td>Only if the user switches on <em>Start the agent with Windows</em>.</td></tr>
-<tr><td>PolyWorks visual layout of the user</td><td>Only on <em>Add to PolyWorks</em>: a ribbon tab &quot;VL Connector&quot; with the button macro (a copy of <code>VLC_Measure_Button.pwmacro</code> or <code>VLC_Station_Button.pwmacro</code>). The previous layout is saved first and can be loaded back (<em>Undo</em>).</td></tr>
-<tr><td><code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\VL Connector\</code></td><td>Start menu entries.</td></tr>
-<tr><td><code>Documents\VL Connector\</code></td><td>Scans (STL) and, in scenario B, the received reports.</td></tr>
-<tr><td>PolyWorks workspace of the part</td><td>Measured pieces (copies of the template) and, by default, <code>Reports</code>/<code>Scans</code> folders next to the workspace. Templates are never modified. Pieces are removed only when the user chose to keep fewer pieces, and only pieces created by VL Connector in the same run.</td></tr>
-<tr><td>Shared folder (scenario B)</td><td><code>jobs</code>, <code>work</code>, <code>reports</code>, <code>processed</code>, <code>failed</code>, <code>status</code>, <code>programs.csv</code> - see <a href="Protocol.html">Protocol</a>.</td></tr>
-</table>
-<p>Nothing is written into the program folders of VL (<code>C:\Program Files\KEYENCE\...</code>) or PolyWorks (<code>C:\Program Files\InnovMetric\...</code>): VL Connector installs no PolyWorks plug-in (DLL) and changes no PolyWorks options. No registry keys are written. There is no internet access and no telemetry; the only network access is the shared folder that the user configures for scenario B.</p>
-<h2 id="5-polyworks">5. PolyWorks</h2>
-<p>The setup wizard can add the buttons to the PolyWorks ribbon by itself, only when the user presses <em>Add to PolyWorks</em>: it sends documented PolyWorks macro commands (<code>WINDOW VISUAL_LAYOUT EXPORT</code>, <code>IMPORT_MACRO_SCRIPTS</code>, <code>LOAD</code>) through the PolyWorks programming interface (COM) to the PolyWorks|Inspector the user has open, after saving the current visual layout; it never starts PolyWorks itself. The Measure and Station buttons are small macro files (also importable by hand) that the user adds to the PolyWorks ribbon once; they call <code>app\polyworks\*.pwmacro</code>. The macros use only the documented PolyWorks macro language. The station runs in a PolyWorks|Inspector of the station PC that a user starts; it keeps PolyWorks&#39; own licensing (one licence per PC).</p>
-<h2 id="6-integrity-of-the-package">6. Integrity of the package</h2>
+<p><img src="images/stage-warning.png" alt="Warning window"></p>
+<p>Every automatic answer is written to the Event Log, <strong>event 1100</strong> (user, PC, program, the question). A question VL Connector could have answered but did not, and why, is <strong>event 1101</strong> (warning); the operator answers it.</p>
+<h2 id="5-powershell-requirements">5. PowerShell requirements</h2>
 <ul>
-<li><code>SHA256SUMS.txt</code> next to the ZIP: SHA-256 of the ZIP and the package fingerprint.</li>
-<li><code>MANIFEST.sha256</code> in the ZIP: SHA-256 of every file. The installer refuses to install when a file is missing or different, and shows the fingerprint (SHA-256 of the manifest) for comparison.</li>
-<li><code>Install.cmd -Verify</code> in the program folder compares an installed copy with its manifest at any time.</li>
+<li><strong>Windows PowerShell 5.1</strong> (part of Windows 10/11) in <strong>FullLanguage</strong> mode. Every entry script checks the language mode first and stops with a clear message (and a result file for the PolyWorks macros) in ConstrainedLanguage mode.</li>
+<li><strong>Execution policy:</strong> the Start menu entries and the PolyWorks macros start the scripts with <code>-ExecutionPolicy RemoteSigned</code> and the full path of <code>powershell.exe</code> in System32 (never one found on the search path); <code>Install.cmd</code> uses <code>-ExecutionPolicy Bypass</code> for the extracted package. A Group Policy execution policy always wins.</li>
+<li>Background work (agent cycle, warning window, window jobs) runs <strong>script files</strong> in runspaces, never script text, so a script rule for the program folder covers it.</li>
 </ul>
-<h2 id="7-tests">7. Tests</h2>
-<p><code>tests\Run-Tests.ps1 -Static -Unit</code> (in the source repository) checks syntax, encodings and forbidden content and runs the unit tests of settings, file formats and the network protocol; <code>-Launcher</code> runs the launcher against a simulated VL application (<code>tests\FakeVL</code>) in 20+ scenarios. None of them needs VL or PolyWorks.</p>
-<h2 id="8-removal">8. Removal</h2>
-<p>Start menu &gt; Uninstall VL Connector (or <code>Uninstall.cmd</code> in the program folder) removes the program folder and the Start menu entries; <code>-RemoveUserData</code> also removes settings and logs. Remove the imported buttons in PolyWorks by hand (File &gt; Visual Layout &gt; Customize).</p>
+<h2 id="6-code-signature-and-application-control">6. Code signature and application control</h2>
+<p>The package carries no personal code signature. Its integrity is shown instead by:</p>
+<ul>
+<li>the <strong>GitHub release</strong> built by GitHub Actions from a tag of the source repository (<code>.github\workflows\release.yml</code>, actions pinned to commits), with <code>SHA256SUMS.txt</code>: the SHA-256 of the ZIP and the package fingerprint;</li>
+<li>optionally a <strong>build attestation</strong> signed by GitHub, naming repository, workflow and commit (<code>gh attestation verify &lt;zip&gt; --repo &lt;owner&gt;/&lt;repo&gt;</code>);</li>
+<li><code>MANIFEST.sha256</code> inside, checked by the installer and by <code>Install.cmd -Verify</code>.</li>
+</ul>
+<p><strong>AppLocker:</strong> the default script rules allow <code>%PROGRAMFILES%\*</code>, so VL Connector runs in FullLanguage there without a signature. For hash rules, generate them with Windows&#39; own cmdlets after the installation:</p>
+<pre><code>Get-AppLockerFileInformation -Directory &#39;C:\Program Files\VLConnector&#39; -Recurse -FileType Script, Dll |
+    New-AppLockerPolicy -RuleType Hash -User Everyone -Xml &gt; VLConnector-applocker.xml</code></pre>
+<p>The interface DLL is built on each PC and its file hash differs per PC (the compiler is not deterministic); allow it by path, or deploy one DLL that IT built and signed (below).</p>
+<p><strong>Your own signature</strong> (AllSigned, WDAC with a signer rule):</p>
+<pre><code>tools\Sign-Package.ps1 -Package &lt;unpacked package&gt; -Thumbprint &lt;your code signing certificate&gt;
+                       -Zip &lt;downloaded ZIP&gt; -Sums SHA256SUMS.txt -InteropDll &lt;folder&gt;\VLConnector.Interop.dll
+Install.cmd -Quiet -InteropDll &lt;folder&gt;\VLConnector.Interop.dll</code></pre>
+<p>It checks the ZIP and the manifest first and signs nothing when a file differs, signs the package&#39;s scripts with a timestamp (stops at the first error), checks that the installer still accepts the package, and can build and sign the interface DLL. The installer and <code>-Verify</code> accept signed scripts: they cut off the signature block and compare the rest with the manifest.</p>
+<h2 id="7-what-your-security-software-will-see">7. What your security software will see</h2>
+<p><strong>Processes</strong> (all <code>powershell.exe</code> from System32, <code>-NoProfile</code>, <code>-File</code> with a full path; never <code>-EncodedCommand</code>, never downloaded code):</p>
+<table>
+<tr><th>Started by</th><th>Process</th><th>When</th></tr>
+<tr><td>PolyWorks <code>iminspect.exe</code></td><td><code>powershell.exe ... app\polyworks\Get-MacroContext.ps1</code>, <code>Complete-Evaluation.ps1</code>, <code>Station-Step.ps1</code></td><td>every Measure / evaluation / station poll</td></tr>
+<tr><td>PolyWorks <code>iminspect.exe</code></td><td><code>powershell.exe -STA ... app\VLReplay.ps1 -LaunchFile ... -MarkerFile ...</code></td><td>Measure button</td></tr>
+<tr><td>PolyWorks <code>iminspect.exe</code></td><td><code>cmd.exe /c DEL</code>, <code>MKDIR</code>, <code>start &quot;&quot; &lt;pdf&gt;</code></td><td>macro file work, opening the PDF</td></tr>
+<tr><td><code>explorer.exe</code> (Startup shortcut)</td><td><code>powershell.exe -STA ... app\Agent.ps1</code></td><td>logon, if the user switched it on</td></tr>
+<tr><td>the agent</td><td><code>powershell.exe -STA ... app\VLReplay.ps1 -Watch -MarkerFile ...</code></td><td>while the agent runs</td></tr>
+<tr><td>the settings window, UAC</td><td><code>powershell.exe ... app\Set-MachinePolicy.ps1</code> (elevated)</td><td><em>Change (administrator)</em></td></tr>
+<tr><td>the installer</td><td><code>powershell.exe ... Install.ps1 -MachinePart</code> (elevated), <code>tools\Build-Interop.ps1</code> (C# compiler <code>csc.exe</code>, once), <code>icacls.exe</code>, <code>takeown.exe</code> (only for an rc10 folder)</td><td>installation</td></tr>
+</table>
+<p><strong>Access to the VL process</strong> (<code>VLApplication4.exe</code> of the same user; KEYENCE files are never written, VL is never terminated):</p>
+<ul>
+<li><code>OpenProcess</code> with only <code>PROCESS_VM_OPERATION | PROCESS_VM_READ</code>, <code>VirtualAllocEx</code> of <strong>1 KB</strong>, <code>SendMessageTimeout(WM_GETCONTROLNAME)</code> - VL itself writes the name of a WinForms control (e.g. <code>_replayScanButton</code>) into that buffer - <code>ReadProcessMemory</code> of that 1 KB and <code>VirtualFreeEx</code>. This is the standard technique of UI test tools for WinForms; no <code>WriteProcessMemory</code>, no remote thread, no code injection.</li>
+<li>Window messages: <code>WM_GETTEXT</code>, <code>WM_SETTEXT</code> (the program path in VL&#39;s file dialog), <code>BM_CLICK</code> (a dialog button found by its id, only when enabled), <code>WM_CLOSE</code> (only when the user chose to close VL).</li>
+<li>UI Automation on VL&#39;s window (menus <em>File &gt; Export &gt; STL</em>, <em>File &gt; Save As</em>; AI Replay progress).</li>
+<li><code>SetForegroundWindow</code> / <code>AttachThreadInput</code> only towards VL, PolyWorks or VL Connector&#39;s own windows, and <code>mouse_event</code> with a <strong>zero-pixel</strong> move: Windows lets only the process with the last input change the foreground; the mouse does not move.</li>
+</ul>
+<p><strong>Other:</strong> the interface DLL is loaded from <code>C:\Program Files\VLConnector\bin\</code> into the PowerShell processes. The PolyWorks COM interface is used only by <em>Add to PolyWorks</em> (wizard or settings), towards the PolyWorks the user has open; PolyWorks is never started. Network access only to the shared folder of scenario B (SMB). Event Log entries: source &quot;VL Connector&quot;, events 1000, 1100, 1101.</p>
+<p>VL Connector <strong>reads</strong> two VL files: <code>%APPDATA%\KEYENCE\VL-800 Series\VL Application\VLOperation.log</code> (when AI Replay finished) and <code>%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml</code> (to find programs).</p>
+<h2 id="8-what-is-written-where">8. What is written where</h2>
+<table>
+<tr><th>Path</th><th>Content</th><th>Written by</th></tr>
+<tr><td><code>C:\Program Files\VLConnector\</code> (and <code>.old</code>)</td><td>The program, the interface DLL, the PolyWorks button files, <code>install-info.txt</code>, <code>machine.json</code></td><td>installer; <code>machine.json</code> also by the administrator tool</td></tr>
+<tr><td><code>C:\ProgramData\VLConnector\</code></td><td>Only on PCs that had 1.0.0-rc10: the forwarders (administrator-only)</td><td>installer</td></tr>
+<tr><td><code>C:\ProgramData\Microsoft\Windows\Start Menu\Programs\VL Connector\</code></td><td>Start menu entries for all users</td><td>installer</td></tr>
+<tr><td><code>HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\VL Connector</code></td><td>The event source (the only registry key)</td><td>installer</td></tr>
+<tr><td><code>%APPDATA%\VLConnector\settings.json</code></td><td>The user&#39;s own settings</td><td>settings window, wizard</td></tr>
+<tr><td><code>%LOCALAPPDATA%\VLConnector\</code></td><td><code>logs\</code> (30 days), agent <code>inbox\</code>, <code>outbox\</code> (with <code>failed\</code>), <code>pending.txt</code>, <code>runs\</code>, station work files, <code>polyworks-layout\</code> (backups of the PolyWorks visual layout made before <em>Add to PolyWorks</em>)</td><td>all parts</td></tr>
+<tr><td><code>%TEMP%</code></td><td>Short-lived exchange files between the macros and the scripts (launch, marker, status, cancel, results)</td><td>macros, launcher</td></tr>
+<tr><td><code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector agent.lnk</code></td><td>Only if the user switches on <em>Start the agent with Windows</em></td><td>settings window</td></tr>
+<tr><td>PolyWorks visual layout of the user</td><td>Only on <em>Add to PolyWorks</em>: a ribbon tab with the button macro; the previous layout is saved first (<em>Undo</em>)</td><td>settings window, wizard</td></tr>
+<tr><td><code>Documents\VL Connector\</code></td><td>Scans (STL) and, in scenario B, the received reports (marked as downloaded)</td><td>launcher, agent</td></tr>
+<tr><td>PolyWorks workspace of the part</td><td>Measured pieces (copies of the template), <code>Reports</code>/<code>Scans</code> folders. Templates are never modified.</td><td>macros</td></tr>
+<tr><td>Shared folder (scenario B)</td><td>See section 9 and <a href="Protocol.html">Protocol</a></td><td>agent, station</td></tr>
+</table>
+<p>Nothing is written into the program folders of VL or PolyWorks; VL Connector installs no PolyWorks plug-in and changes no PolyWorks options. There is no internet access and no telemetry.</p>
+<h2 id="9-shared-folder-of-scenario-b-rights">9. Shared folder of scenario B: rights</h2>
+<p>Give each group only what it needs (the check on page Network tests exactly this, by role):</p>
+<table>
+<tr><th>Folder</th><th>Scanner PCs</th><th>Station(s)</th></tr>
+<tr><td>the shared folder itself</td><td>list, read</td><td>list, read</td></tr>
+<tr><td><code>jobs\</code></td><td>create files; modify <strong>own</strong> files (CREATOR OWNER: modify)</td><td>modify</td></tr>
+<tr><td><code>reports\</code>, <code>status\</code></td><td>read</td><td>modify</td></tr>
+<tr><td><code>programs.csv</code></td><td>read</td><td>read (modify for the people who maintain the list)</td></tr>
+<tr><td><code>work\</code>, <code>processed\</code>, <code>failed\</code></td><td>-</td><td>modify</td></tr>
+</table>
+<p>Create the subfolders once (or let a station create them on its first test). Workspaces on network paths in <code>programs.csv</code> are refused unless the policy allows them (<code>network.allowUncWorkspaces</code>). Both sides treat each other&#39;s files as untrusted input (section 3 of the <a href="Protocol.html">Protocol</a>).</p>
+<h2 id="10-tests">10. Tests</h2>
+<p>In the source repository: <code>tests\Run-Tests.ps1 -Static -Unit</code> checks syntax, encodings, forbidden content and the rules above (language check first, no compiler outside the interop loader, full PowerShell path) and runs the unit tests: settings layers and lock, stage safety, verdict, file protocols, network, installation. <code>-Launcher</code> runs the launcher against a simulated VL Application (<code>tests\FakeVL</code>), including a safety matrix (the policy off must never confirm, whatever users, templates or files say). GitHub Actions runs all of them and a real installation as administrator (Program Files, ACL, a standard user trying to write, event log, a signed package, update, removal) for every change (<code>.github\workflows\ci.yml</code>). The <a href="Acceptance-Checklist.html">acceptance checklist</a> covers the live tests at the scanner.</p>
 </main>
 <footer>VL Connector for PolyWorks - unofficial tool, not an official KEYENCE or InnovMetric product.</footer>
 </body>

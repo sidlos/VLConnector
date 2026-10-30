@@ -393,6 +393,8 @@ Describe 'signing tool for IT (tools\Sign-Package.ps1)' {
     New-TestTree $pkg @{ 'app\a.ps1' = "'a'"; 'VERSION' = '1.0.0' }
     New-TestManifest $pkg
     function Invoke-Tool([string[]]$More) {
+        # the tool's error output must not stop this test (Run-Tests.ps1 runs with ErrorActionPreference Stop)
+        $ErrorActionPreference = 'Continue'
         $out = & $ps -NoProfile -ExecutionPolicy Bypass -File $tool -Package $pkg -Thumbprint '0000' @More 2>&1 | Out-String
         return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
     }

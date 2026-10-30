@@ -30,8 +30,9 @@ $c.ProgramsSummary.Text = '3 program(s): ABC, BCD, Housing-12'
 $c.AgentAutostart.IsChecked = $true
 $c.AgentStatus.Text = 'The agent is running.'
 $c.LogFolder.Text = 'C:\Users\Operator\AppData\Local\VLConnector\logs'
-$c.Versions.Text = "VL Connector        1.0.0`nVL Application      4.6.1.6002`nPolyWorks|Inspector 26.5.0.3238 (2026 IR5)`nWindows             11 Pro 10.0.26300`nPowerShell          5.1.26100"
-$c.AboutVersion.Text = 'Version 1.0.0  -  MIT License'
+$version = ([IO.File]::ReadAllText((Join-Path (Split-Path $PSScriptRoot) 'VERSION'))).Trim()
+$c.Versions.Text = "VL Connector        $version`nVL Application      4.6.1.6002`nPolyWorks|Inspector 26.5.0.3238 (2026 IR5)`nWindows             11 Pro 10.0.26300`nPowerShell          5.1.26100"
+$c.AboutVersion.Text = "Version $version  -  MIT License"
 
 $ok = Get-Brush 'SuccessBrush'; $okBack = Get-Brush 'SuccessBackBrush'
 $warn = Get-Brush 'WarningBrush'; $warnBack = Get-Brush 'WarningBackBrush'
@@ -51,3 +52,14 @@ foreach ($p in $pages) {
     Save-WindowImage $ui.Window $file
     $file
 }
+
+# the stage warning window (lib\StageWarningWindow.ps1) as it appears when VL Connector answers a stage question
+$source = [IO.File]::ReadAllText((Join-Path (Split-Path $PSScriptRoot) 'app\lib\StageWarningWindow.ps1'))
+$warning = [System.Windows.Markup.XamlReader]::Parse([regex]::Match($source, "(?s)Parse\(@'\r?\n(.*?)\r?\n'@\)").Groups[1].Value)
+$warning.FindName('Detail').Text = "VL asks 'The stage will rotate. Continue?' - VL Connector answers OK (set by the administrator for this PC). Program: Housing-12.vld4"
+# only the content is rendered: it takes the window's background
+$warning.Content.Background = $warning.Background
+$warning.Content.Measure((New-Object System.Windows.Size([double]::PositiveInfinity, [double]::PositiveInfinity)))
+$file = Join-Path $OutDir 'stage-warning.png'
+Save-WindowImage $warning $file ([int][Math]::Ceiling($warning.Content.DesiredSize.Width)) ([int][Math]::Ceiling($warning.Content.DesiredSize.Height))
+$file
