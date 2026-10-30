@@ -297,12 +297,13 @@ function ConvertTo-VlcAccountName([string]$Sid) {
 
 # What lets someone other than SYSTEM, the administrators or TrustedInstaller change a folder: an owner who is not
 # one of them, or an allow rule with write, delete, permission or ownership rights. -Recurse: every folder and file
-# in it too (links are not followed). -Parents: the folders above it, where renaming or deleting a subfolder, or
-# changing the permissions, is what counts. Returns the problems as texts.
+# in it too (links are not followed). -Parents: the folders above it, where renaming one of them (delete right) or
+# a subfolder, or changing the permissions, is what counts: the program folder could be swapped for another one.
+# Returns the problems as texts.
 function Get-VlcAclProblems([string]$Path, [switch]$Recurse, [switch]$Parents) {
     $trusted = $script:VlcSid.System, $script:VlcSid.Admins, $script:VlcSid.TrustedInstaller
     $generic = 0x40000000 -bor 0x10000000   # GENERIC_WRITE, GENERIC_ALL
-    $rights = if ($Parents) { 'DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership' }
+    $rights = if ($Parents) { 'Delete, DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership' }
         else { 'WriteData, AppendData, WriteExtendedAttributes, WriteAttributes, Delete, DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership' }
     $mask = [int64]([Security.AccessControl.FileSystemRights]$rights) -bor $generic
     $root = $Path.TrimEnd('\')

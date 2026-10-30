@@ -22,7 +22,7 @@ $files = @(Get-ChildItem -LiteralPath $Root -Recurse -File | Where-Object {
     $_.FullName -notmatch '\\(\.git|dist|tests\\_work)\\' })
 $shipped = @($files | Where-Object {
     $rel = $_.FullName.Substring($Root.Length + 1)
-    $rel -match '^(app|docs)\\' -or $rel -match '^(Install|Uninstall)\.(cmd|ps1)$' -or $rel -match '^(README\.md|LICENSE|CHANGELOG\.md|VERSION)$' -or $rel -in 'tools\Sign-Scripts.ps1', 'tools\Build-Interop.ps1' })
+    $rel -match '^(app|docs)\\' -or $rel -match '^(Install|Uninstall)\.(cmd|ps1)$' -or $rel -match '^(README\.md|LICENSE|CHANGELOG\.md|VERSION)$' -or $rel -in 'tools\Sign-Package.ps1', 'tools\Build-Interop.ps1' })
 
 # 1. PowerShell syntax
 foreach ($f in $files | Where-Object { $_.Extension -in '.ps1', '.psm1', '.psd1' }) {

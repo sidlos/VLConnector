@@ -5,9 +5,10 @@
     tools\Build-Release.ps1 -AllowDirty     test build with uncommitted changes: dist\VLConnector-<VERSION>-dirty.zip
                                             and dist\SHA256SUMS-dirty.txt
   The ZIP holds one folder VLConnector-<version>\ with app\, docs\, Install.cmd, Uninstall.cmd, the license,
-  tools\Sign-Scripts.ps1, tools\Build-Interop.ps1 and MANIFEST.sha256 (SHA-256 of every file; Install.ps1
+  tools\Sign-Package.ps1, tools\Build-Interop.ps1 and MANIFEST.sha256 (SHA-256 of every file; Install.ps1
   checks it). The package fingerprint (SHA-256 of MANIFEST.sha256) is shown by the installer; publish it
-  together with the ZIP hash. A release package that exists already is never built again (its hash may be
+  together with the ZIP hash (SHA256SUMS.txt). Releases are built by GitHub Actions from a tag
+  (.github\workflows\release.yml). A release package that exists already is never built again (its hash may be
   published): -Force only for one that was never handed out.
 #>
 param([switch]$AllowDirty, [switch]$Force)
@@ -21,7 +22,7 @@ $dist = Join-Path $repo 'dist'
 if (-not $AllowDirty -and -not $Force -and (Test-Path -LiteralPath (Join-Path $dist "$name.zip"))) {
     throw "dist\$name.zip exists already. Raise VERSION for a new release, or use -AllowDirty for a test build."
 }
-$include = @('app', 'docs', 'Install.cmd', 'Install.ps1', 'Uninstall.cmd', 'Uninstall.ps1', 'README.md', 'LICENSE', 'CHANGELOG.md', 'VERSION', 'tools/Sign-Scripts.ps1', 'tools/Build-Interop.ps1')
+$include = @('app', 'docs', 'Install.cmd', 'Install.ps1', 'Uninstall.cmd', 'Uninstall.ps1', 'README.md', 'LICENSE', 'CHANGELOG.md', 'VERSION', 'tools/Sign-Package.ps1', 'tools/Build-Interop.ps1')
 $exclude = '^docs/images/source/'
 $textExt = '.ps1', '.psm1', '.psd1', '.cmd', '.pwmacro', '.xaml', '.json', '.md', '.txt', '.svg', '.cs', '.html'
 

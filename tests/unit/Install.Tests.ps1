@@ -385,3 +385,36 @@ Describe 'shortcuts of a user after an update' {
         @(Repair-VlcUserShortcuts $startup $programs $common).Count | Should Be 0
     }
 }
+
+Describe 'signing tool for IT (tools\Sign-Package.ps1)' {
+    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $tool = Join-Path $repo 'tools\Sign-Package.ps1'
+    $pkg = Join-Path $TestDrive 'signpkg'
+    New-TestTree $pkg @{ 'app\a.ps1' = "'a'"; 'VERSION' = '1.0.0' }
+    New-TestManifest $pkg
+    function Invoke-Tool([string[]]$More) {
+        $out = & $ps -NoProfile -ExecutionPolicy Bypass -File $tool -Package $pkg -Thumbprint '0000' @More 2>&1 | Out-String
+        return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
+    }
+    It 'checks the package and then needs a certificate with a private key' {
+        $r = Invoke-Tool
+        $r.Code | Should Not Be 0
+        $r.Text | Should Match 'Package matches its manifest'
+        $r.Text | Should Match 'No code signing certificate'
+    }
+    It 'signs nothing when the ZIP differs from the published SHA-256' {
+        $zip = Join-Path $TestDrive 'VLConnector-1.0.0.zip'
+        [IO.File]::WriteAllText($zip, 'not the published zip')
+        $sums = Join-Path $TestDrive 'SHA256SUMS.txt'
+        [IO.File]::WriteAllText($sums, ('0' * 64) + "  VLConnector-1.0.0.zip`r`n")
+        $r = Invoke-Tool @('-Zip', $zip, '-Sums', $sums)
+        $r.Code | Should Not Be 0
+        $r.Text | Should Match 'differs from the published SHA-256'
+    }
+    It 'signs nothing when a file of the package was changed' {
+        [IO.File]::WriteAllText((Join-Path $pkg 'app\a.ps1'), "'changed'")
+        $r = Invoke-Tool
+        $r.Code | Should Not Be 0
+        $r.Text | Should Match 'differs from its manifest'
+    }
+}

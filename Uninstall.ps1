@@ -90,8 +90,8 @@ $code = 1
 try {
     $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$temp\Uninstall.ps1`"", '-MachinePart', '-InstallDir', "`"$InstallDir`"", '-ResultFile', "`"$result`"")
     if ($admin) {
-        & $ps @argList
-        $code = $LASTEXITCODE
+        $p = Start-Process -FilePath $ps -ArgumentList $argList -NoNewWindow -Wait -PassThru
+        $code = $p.ExitCode
     }
     else {
         Say 'Windows asks for administrator rights now...'
