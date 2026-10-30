@@ -26,7 +26,7 @@ if ($Stop) {
     if ([System.Threading.EventWaitHandle]::TryOpenExisting('Local\VLConnector_AgentStop', [ref]$e)) { [void]$e.Set(); $e.Dispose() }
     exit 0
 }
-foreach ($lib in 'Settings', 'Log', 'KeyValueFile', 'Share', 'Jobs') { . (Join-Path $PSScriptRoot "lib\$lib.ps1") }
+foreach ($lib in 'Settings', 'Log', 'KeyValueFile', 'Share', 'Jobs', 'AgentControl') { . (Join-Path $PSScriptRoot "lib\$lib.ps1") }
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 $script:agentMutex = New-Object System.Threading.Mutex($false, 'Local\VLConnector_Agent')
@@ -37,6 +37,8 @@ if (-not $owned) { exit 0 }
 $script:stopEvent = New-Object System.Threading.EventWaitHandle($false, 'AutoReset', 'Local\VLConnector_AgentStop')
 [void](Initialize-VlcLog 'Agent')
 Write-VlcLog "=== Agent $(Get-VlcVersion) started (account $env:USERNAME)."
+# started by a shortcut of an older installation: the user's shortcuts are pointed here
+try { foreach ($c in @(Repair-VlcUserShortcuts)) { Write-VlcLog "Shortcut brought up to date: $c" } } catch { Write-VlcLog "Shortcuts: $($_.Exception.Message)" }
 $script:paths = Get-VlcPaths
 $script:runs = Join-Path $script:paths.DataDir 'runs'
 New-Item -ItemType Directory -Force -Path $script:runs | Out-Null

@@ -225,9 +225,7 @@ function Show-SettingsWindow {
         try {
             $cfgNow = Read-VlcSettings
             $kind = if ($cfgNow.scenario -eq 'Network' -and $cfgNow.role -eq 'Station') { 'Station' } else { 'Measure' }
-            $stub = Get-VlcButtonStubPath $kind
-            if (-not (Test-Path -LiteralPath $stub)) { [void](New-VlcButtonStub -Kind $kind) }
-            [System.Windows.Clipboard]::SetText($stub)
+            [System.Windows.Clipboard]::SetText((Get-VlcButtonStub $kind))
             Show-SettingsToast 'Macro path copied'
         }
         catch { [void][System.Windows.MessageBox]::Show($script:sw, "The button file cannot be created: $($_.Exception.Message)", 'VL Connector', 'OK', 'Warning') }

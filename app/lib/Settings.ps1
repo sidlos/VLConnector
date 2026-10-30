@@ -25,6 +25,8 @@ function Get-VlcPaths {
         UserFile    = Join-Path $env:APPDATA 'VLConnector\settings.json'
         DataDir     = $data
         LogDir      = Join-Path $data 'logs'
+        # an installed copy (the installer writes install-info.txt); otherwise a development tree
+        Installed   = Test-Path -LiteralPath (Join-Path $install 'install-info.txt')
     }
 }
 

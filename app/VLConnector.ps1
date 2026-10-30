@@ -35,6 +35,7 @@ try {
     # user files of 1.0.0-rc10 and earlier hold every value, also keys only the administrator may set
     $removed = @(Repair-VlcUserSettings)
     if ($removed.Count) { Write-VlcLog "Settings cleaned up: $($removed -join ', ')" }
+    try { foreach ($c in @(Repair-VlcUserShortcuts)) { Write-VlcLog "Shortcut brought up to date: $c" } } catch { Write-VlcLog "Shortcuts: $($_.Exception.Message)" }
     switch ($Show) {
         'Settings' { . (Join-Path $PSScriptRoot 'ui\SettingsForm.ps1'); Show-SettingsWindow }
         'Wizard' { . (Join-Path $PSScriptRoot 'ui\WizardForm.ps1'); Show-SetupWizard }

@@ -20,12 +20,22 @@ function Get-PolyWorksInfo {
 
 # The button stubs that the operator imports into PolyWorks once (File > Visual Layout > Customize, Macro
 # Scripts): VLC_Measure_Button (scenario A) and VLC_Station_Button (PolyWorks station of the network
-# scenario). They only call the installed macro, so updates of VL Connector need no new import.
+# scenario). They only call the installed macro, so updates of VL Connector need no new import. The installer
+# writes them into the program folder; $AppDir: the app folder they call.
 function Get-VlcButtonStubPath([string]$Kind = 'Measure') { return Join-Path (Get-VlcPaths).InstallDir "VLC_${Kind}_Button.pwmacro" }
 
-function New-VlcButtonStub([string]$Path = '', [ValidateSet('Measure', 'Station')] [string]$Kind = 'Measure') {
+# The button file of this copy. An installed copy is not writable for users, so a missing file there means a
+# repair; only a development tree creates it here.
+function Get-VlcButtonStub([ValidateSet('Measure', 'Station')] [string]$Kind = 'Measure') {
+    $path = Get-VlcButtonStubPath $Kind
+    if (Test-Path -LiteralPath $path) { return $path }
+    if ((Get-VlcPaths).Installed) { throw "The button file $path is missing. Repair VL Connector: an administrator runs Install.cmd of the package again." }
+    return New-VlcButtonStub -Kind $Kind
+}
+
+function New-VlcButtonStub([string]$Path = '', [ValidateSet('Measure', 'Station')] [string]$Kind = 'Measure', [string]$AppDir = '') {
     if (-not $Path) { $Path = Get-VlcButtonStubPath $Kind }
-    $app = (Get-VlcPaths).AppDir
+    $app = if ($AppDir) { $AppDir } else { (Get-VlcPaths).AppDir }
     if ($app.Contains('"')) { throw "The VL Connector folder '$app' cannot be used in a macro." }
     $what = @{ Measure = 'Measure button'; Station = 'Station button (PolyWorks station of the network scenario)' }[$Kind]
     $text = @"

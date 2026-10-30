@@ -113,9 +113,7 @@ function Test-VlcIconData([string]$Control, [byte[]]$Svg) {
 function New-VlcButtonLayout([string]$Path, [string]$Kind, [string]$InfoXml, [string]$Suffix = '') {
     Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
     $name = "VLC_${Kind}_Button$Suffix.pwmacro"
-    $stubPath = Get-VlcButtonStubPath $Kind
-    if (-not (Test-Path -LiteralPath $stubPath)) { [void](New-VlcButtonStub -Kind $Kind) }
-    $macro = [IO.File]::ReadAllBytes($stubPath)
+    $macro = [IO.File]::ReadAllBytes((Get-VlcButtonStub $Kind))
     $icon = Get-VlcIconEntry ([IO.File]::ReadAllBytes((Join-Path (Get-VlcPaths).AppDir 'assets\VLC_icon.svg')))
     $descText = @{ Measure = 'VL Connector - Measure'; Station = 'VL Connector - Station' }[$Kind]
     $chars = [Text.Encoding]::Unicode.GetBytes($descText)
