@@ -80,18 +80,11 @@ function Select-VlcFolder([string]$Start) {
     return $null
 }
 
-$script:StatusWork = {
-    param($AppDir)
-    foreach ($lib in 'Settings', 'PolyWorksSetup', 'Share', 'Prerequisites') { . (Join-Path $AppDir "lib\$lib.ps1") }
-    $state = Get-VlcSettingsState
-    Get-VlcStatusItems $state.Settings $state.Warnings
-}
-
 function Update-SettingsStatus {
     $c = $script:sc
     $c.StatusList.ItemsSource = @([pscustomobject]@{ Id = ''; Title = 'Checking this PC...'; Detail = ''; Glyph = [string][char]0xE895
         Fore = Get-Brush 'SecondaryTextBrush'; Back = Get-Brush 'PaneBrush'; Action = ''; ActionVisibility = 'Collapsed' })
-    Start-UiJob $script:StatusWork @((Get-VlcPaths).AppDir) {
+    Start-UiJob 'Status' @{} {
         param($Items, $ErrorText)
         $glyphs = @{ Ok = [string][char]0xE73E; Warning = [string][char]0xE7BA; Error = [string][char]0xE711 }
         if ($ErrorText) { $Items = @([pscustomobject]@{ Id = ''; Level = 'Error'; Title = 'The check failed'; Detail = $ErrorText; Action = '' }) }
@@ -120,8 +113,11 @@ function Update-ProgramsSummary([string]$Share) {
     $c = $script:sc
     if (-not $Share) { $c.ProgramsSummary.Text = 'Which PolyWorks template evaluates the scans of each VL program (.vld4).'; return }
     try {
-        $programs = @(Get-VlcPrograms $Share)
-        $c.ProgramsSummary.Text = if ($programs.Count) { "$($programs.Count) program(s): " + (($programs | Select-Object -First 5 | ForEach-Object Program) -join ', ') } else { 'No programs yet.' }
+        $list = Read-VlcProgramsList $Share ([bool](Read-VlcSettings).network.allowUncWorkspaces)
+        $programs = @($list.Rows)
+        $text = if ($list.Fatal) { $list.Fatal } elseif ($programs.Count) { "$($programs.Count) program(s): " + (($programs | Select-Object -First 5 | ForEach-Object Program) -join ', ') } else { 'No programs yet.' }
+        if (-not $list.Fatal -and $list.Problems.Count) { $text += " - $($list.Problems.Count) line(s) not used: $($list.Problems[0])" }
+        $c.ProgramsSummary.Text = $text
     }
     catch { $c.ProgramsSummary.Text = "The Measurement Programs List cannot be read: $($_.Exception.Message)" }
 }
@@ -273,7 +269,8 @@ function Show-SettingsWindow {
         $path = $script:sc.SharePath.Text.Trim()
         $script:sc.ShareStatus.Text = 'Testing...'
         $script:sc.ShareTest.IsEnabled = $false
-        Start-UiJob { param($AppDir, $Path) . (Join-Path $AppDir 'lib\Share.ps1'); Test-VlcShare $Path } @((Get-VlcPaths).AppDir, $path) {
+        $role = if ($script:sc.RoleStation.IsChecked) { 'Station' } else { 'Scanner' }
+        Start-UiJob 'ShareTest' @{ Path = $path; Role = $role } {
             param($Out, $ErrorText)
             $r = @($Out)[0]
             $script:sc.ShareStatus.Text = if ($ErrorText) { $ErrorText } else { $r.Text }

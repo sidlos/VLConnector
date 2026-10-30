@@ -10,6 +10,7 @@
     language mode as its first statement, before it loads anything
   - shipped text files hold no control characters but tab and line breaks
   - Windows PowerShell is started by its full System32 path, never as a bare powershell.exe (C24)
+  - no List[object] made by New-Object (Windows PowerShell 5.1 cannot put such a list into @())
 #>
 param([string]$Root = (Split-Path $PSScriptRoot))
 
@@ -105,6 +106,16 @@ foreach ($f in $shipped | Where-Object { $_.Extension -eq '.ps1' -and $_.FullNam
         $first.Clauses[0].Item1.Extent.Text -eq "`$ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage'" -and
         $first.Clauses[0].Item2.Extent.Text -match 'LanguageCheck\.ps1' -and $first.Clauses[0].Item2.Extent.Text -match '\bexit 1\b'
     if (-not $ok) { Add-Problem $f.FullName 'the first statement must be the language mode check (lib\LanguageCheck.ps1, then exit 1)' }
+}
+
+# 9. No List[object] made by New-Object: Windows PowerShell 5.1 wraps it, and @() over the wrapped list throws
+#    "Argument types do not match" (seen on Windows 11 build 26300). [Collections.Generic.List[object]]::new() is safe.
+foreach ($f in $shipped | Where-Object { $_.Extension -eq '.ps1' }) {
+    $n = 0
+    foreach ($line in [IO.File]::ReadAllLines($f.FullName)) {
+        $n++
+        if ($line -match "New-Object\s+['""]?(System\.)?Collections\.Generic\.List\[(System\.)?object\]") { Add-Problem $f.FullName "line ${n}: New-Object List[object] (use [Collections.Generic.List[object]]::new())" }
+    }
 }
 
 if ($problems.Count) {

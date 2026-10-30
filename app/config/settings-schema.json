@@ -31,7 +31,8 @@
         "network.autoOpenReports": { "type": "bool" },
         "network.stationName":     { "type": "string", "maxLength": 60 },
         "network.pollSec":         { "type": "int", "min": 1, "max": 300 },
-        "network.jobTimeoutMin":   { "type": "int", "min": 1, "max": 1440 },
+        "network.jobTimeoutMin":   { "type": "int", "min": 1, "max": 1440, "about": "A job that a station claimed and did not finish within this time is reported as failed; a busy station counts as online for this long." },
+        "network.allowUncWorkspaces": { "type": "bool", "machineOnly": true, "about": "The Measurement Programs List of the shared folder may name PolyWorks workspaces on network (UNC) paths." },
         "safety.stageWarningSec":  { "type": "int", "min": 2, "max": 30, "machineOnly": true, "about": "How long the warning window stays after an automatic stage confirmation." },
         "safety.stageSound":       { "type": "bool", "machineOnly": true, "about": "Sound with the warning window." },
         "safety.watchAllowClose":  { "type": "bool", "machineOnly": true, "about": "The agent (watch mode) may close VL after the export." }

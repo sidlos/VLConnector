@@ -37,6 +37,16 @@ Describe 'key=value files' {
         [IO.File]::WriteAllText($f, "garbage`r`n=x`r`nbad key=1`r`nGOOD_1=yes`r`n")
         @((Read-KeyValueFile $f).Keys) -join ',' | Should Be 'GOOD_1'
     }
+    It 'gives nothing for a file without a single KEY=value line' {
+        $f = Join-Path $dir 'd.txt'
+        [IO.File]::WriteAllText($f, "garbage`r`nmore garbage`r`n")
+        Read-KeyValueFile $f | Should Be $null
+    }
+    It 'reads a file with an empty COUNT or KEYS value (keys that are also property names)' {
+        $f = Join-Path $dir 'e.txt'
+        Write-KeyValueFile $f ([ordered]@{ STATE = 'ERROR'; COUNT = ''; KEYS = '' })
+        (Read-KeyValueFile $f).STATE | Should Be 'ERROR'
+    }
     Remove-Item $dir -Recurse -Force
 }
 
@@ -71,7 +81,7 @@ Describe 'network job protocol' {
     It 'sends a job through the outbox' {
         [void](New-VlcOutboxJob $id 'ABC' $stl 'C:\Programs\abc.vld4')
         Add-VlcPendingJob $id 'ABC'
-        @(Send-VlcOutbox $share) | Should Be $id
+        @((Send-VlcOutbox $share).Sent) | Should Be $id
         Test-Path (Join-Path $share "jobs\$id.job") | Should Be $true
         Test-Path (Join-Path $share "jobs\$id.stl") | Should Be $true
         @(Get-ChildItem (Get-VlcOutbox)).Count | Should Be 0
@@ -79,7 +89,9 @@ Describe 'network job protocol' {
     It 'keeps a job in the outbox while the shared folder is missing' {
         $id2 = New-VlcJobId 'ABC'
         [void](New-VlcOutboxJob $id2 'ABC' $stl 'abc.vld4')
-        @(Send-VlcOutbox (Join-Path $root 'missing')).Count | Should Be 0
+        $r = Send-VlcOutbox (Join-Path $root 'missing')
+        @($r.Sent).Count | Should Be 0
+        $r.ShareOk | Should Be $false
         @(Get-ChildItem (Get-VlcOutbox) -Filter '*.job').Count | Should Be 1
         Remove-Item (Join-Path (Get-VlcOutbox) "$id2.*")
     }

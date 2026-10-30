@@ -66,21 +66,19 @@ Describe 'entry scripts in ConstrainedLanguage mode' {
         [void](Invoke-Entry (Join-Path $app 'polyworks\Complete-Evaluation.ps1') "-Controls '$TestDrive\none.controls' -Out '$normal'")
         Get-Keys $out | Should Be (Get-Keys $normal)
     }
-    It 'Station-Step.ps1 writes the Context and Next files in the order the Station macro reads' {
-        foreach ($case in @(@{ Action = 'Context'; Line = 4 }, @{ Action = 'Next'; Line = 5 })) {
+    It 'Station-Step.ps1 writes the Context, Next and Publish files in the order the Station macro reads' {
+        foreach ($case in @(@{ Action = 'Context'; Args = ''; Line = 4 }, @{ Action = 'Next'; Args = ''; Line = 5 }, @{ Action = 'Publish'; Args = ' -JobId x'; Line = 1 })) {
             $out = Join-Path $TestDrive "station_$($case.Action).txt"
-            $r = Invoke-Entry (Join-Path $app 'polyworks\Station-Step.ps1') "-Action $($case.Action) -Out '$out'" -Constrained
+            $r = Invoke-Entry (Join-Path $app 'polyworks\Station-Step.ps1') "-Action $($case.Action)$($case.Args) -Out '$out'" -Constrained
             $r.ExitCode | Should Be 1
+            $r.Output | Should Match $message
             $lines = Get-Lines $out
             $lines[0] | Should Be 'STATE=ERROR'
             $lines[$case.Line] | Should Match "^MESSAGE=$message"
             $normal = Join-Path $TestDrive "station_$($case.Action)_normal.txt"
-            [void](Invoke-Entry (Join-Path $app 'polyworks\Station-Step.ps1') "-Action $($case.Action) -Out '$normal'")
+            [void](Invoke-Entry (Join-Path $app 'polyworks\Station-Step.ps1') "-Action $($case.Action)$($case.Args) -Out '$normal'")
             Get-Keys $out | Should Be (Get-Keys $normal)
         }
-        $p = Invoke-Entry (Join-Path $app 'polyworks\Station-Step.ps1') '-Action Publish -JobId x' -Constrained
-        $p.ExitCode | Should Be 1
-        $p.Output | Should Match $message
     }
     It 'Agent.ps1 and the windows stop with the message and log it' {
         foreach ($case in @(@{ Script = 'Agent.ps1'; Args = ''; Log = 'Agent' }, @{ Script = 'Agent.ps1'; Args = '-Stop'; Log = 'Agent' },

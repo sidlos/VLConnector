@@ -5,6 +5,7 @@ $poly = Join-Path $repo 'app\polyworks'
 $measure = [IO.File]::ReadAllText((Join-Path $poly 'VLC_Measure.pwmacro'))
 $evaluate = [IO.File]::ReadAllText((Join-Path $poly 'VLC_Evaluate.pwmacro'))
 $station = [IO.File]::ReadAllText((Join-Path $poly 'Station-Step.ps1'))
+$stationMacro = [IO.File]::ReadAllText((Join-Path $poly 'VLC_Station.pwmacro'))
 
 # line number -> variable for every "DATA_FILE READ LINE_FIELD ( $<file>, <line>, 2, <variable>, ..."
 function Get-MacroReads([string]$Macro, [string]$FileVar) {
@@ -55,6 +56,37 @@ Describe 'macro file protocol' {
         $block = [regex]::Match($station, '(?s)\$params = \[ordered\]@\{(.*?)\n\s*\}').Groups[1].Value
         $stationKeys = @([regex]::Matches($block, '(?m)(?:^|;)\s*([A-Z][A-Z0-9_]*) =') | ForEach-Object { $_.Groups[1].Value })
         $stationKeys -join ',' | Should Be ($keys -join ',')
+        # the station macro itself reads the workspace and the template back (to remove a piece it does not keep)
+        Assert-Reads (Get-MacroReads $stationMacro 'vParams') $keys @{ vPwk = 'PWK'; vTemplate = 'TEMPLATE' }
+    }
+    It 'VLC_Station reads the Station-Step lines it expects (context, next job, publish)' {
+        $keysOf = @{}
+        foreach ($m in [regex]::Matches($station, "'(Context|Next|Publish)' \{ \[ordered\]@\{([^}]*)\} \}")) {
+            $keysOf[$m.Groups[1].Value] = @([regex]::Matches($m.Groups[2].Value, '([A-Z_]+) =') | ForEach-Object { $_.Groups[1].Value })
+        }
+        $keysOf.Context -join ',' | Should Be 'STATE,SHARE,POLL_MS,STATUS_FILE,MESSAGE,STATION'
+        $keysOf.Next -join ',' | Should Be 'STATE,JOBID,PART,PARAMS,RESULT,MESSAGE'
+        $keysOf.Publish -join ',' | Should Be 'STATE,MESSAGE'
+        $reads = Get-MacroReads $stationMacro 'vCtx'
+        $reads.Count | Should Be 6
+        Assert-Reads $reads $keysOf.Context @{ vState = 'STATE'; vShare = 'SHARE'; vPoll = 'POLL_MS'; vStatusFile = 'STATUS_FILE'; vMsg = 'MESSAGE'; vStation = 'STATION' }
+        $reads = Get-MacroReads $stationMacro 'vNext'
+        $reads.Count | Should Be 6
+        Assert-Reads $reads $keysOf.Next @{ vState = 'STATE'; vJobId = 'JOBID'; vPart = 'PART'; vParams = 'PARAMS'; vResult = 'RESULT'; vMsg = 'MESSAGE' }
+        $reads = Get-MacroReads $stationMacro 'vPub'
+        $reads.Count | Should Be 2
+        Assert-Reads $reads $keysOf.Publish @{ vPubState = 'STATE'; vPubMsg = 'MESSAGE' }
+        # the answer files are emptied before each call: an answer of an earlier call is never read
+        foreach ($v in 'vNext', 'vPub') { $stationMacro | Should Match ('DATA_FILE CREATE \( \$' + $v + ', "Ascii", "Yes" \)') }
+    }
+    It 'VLC_Station writes its heartbeat in the order of Write-VlcStationStatus and counts BEAT on' {
+        $jobs = [IO.File]::ReadAllText((Join-Path $repo 'app\lib\Jobs.ps1'))
+        $block = [regex]::Match($jobs, '(?s)function Write-VlcStationStatus.*?Write-KeyValueFile \$file \(\[ordered\]@\{(.*?)\}\)').Groups[1].Value
+        $keys = @([regex]::Matches($block, '([A-Z_]+) =') | ForEach-Object { $_.Groups[1].Value })
+        $keys -join ',' | Should Be 'STATION,STATE,JOB,VERSION,UPDATED_UTC,BEAT'
+        # the heartbeat while waiting and the last one when the station stops
+        (Get-MacroWrites $stationMacro 'vStatusFile') -join ',' | Should Be ((@($keys) * 2) -join ',')
+        Assert-Reads (Get-MacroReads $stationMacro 'vStatusFile') $keys @{ vBeatN = 'BEAT' }
     }
     It 'VLC_Evaluate writes the control data in the order Complete-Evaluation.ps1 reads it' {
         . (Join-Path $repo 'app\lib\Verdict.ps1')
@@ -101,5 +133,6 @@ Describe 'macro file protocol' {
         ($keys | Select-Object -Last 8) -join ',' | Should Be 'STATE,VERDICT,SUMMARY,PDF,CSV,PIECE,PIECE_KEPT,MESSAGE'
         $keyOf = @{ vRState = 'STATE'; vVerdict = 'VERDICT'; vSummary = 'SUMMARY'; vPdf = 'PDF'; vCsv = 'CSV'; vPiece = 'PIECE'; vKept = 'PIECE_KEPT'; vRMsg = 'MESSAGE' }
         Assert-Reads (Get-MacroReads $measure 'vResult') @($keys | Select-Object -Last 8) $keyOf
+        Assert-Reads (Get-MacroReads $stationMacro 'vResult') @($keys | Select-Object -Last 8) $keyOf
     }
 }

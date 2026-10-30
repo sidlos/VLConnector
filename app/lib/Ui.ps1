@@ -5,6 +5,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
 $script:UiDir = Join-Path (Split-Path $PSScriptRoot) 'ui'
 $script:AssetDir = Join-Path (Split-Path $PSScriptRoot) 'assets'
+$script:UiWorkScript = Join-Path $PSScriptRoot 'UiWork.ps1'
 
 # One WPF Application per process; its resources hold the theme, so StaticResource works in every window.
 function Initialize-Ui {
@@ -50,12 +51,13 @@ function Get-AppImage([string]$File) {
     return $bmp
 }
 
-# Runs a script block in a background runspace and calls $Done with (output, error text) on the UI thread,
-# so slow work (network folders) does not freeze the window.
-function Start-UiJob([scriptblock]$Work, [object[]]$Arguments, [scriptblock]$Done) {
+# Runs lib\UiWork.ps1 -Work <name> in a background runspace and calls $Done with (output, error text) on the UI
+# thread, so slow work (network folders) does not freeze the window. The work runs as a file, not as script
+# text: an application control policy that trusts the program folder trusts it too.
+function Start-UiJob([ValidateSet('Status', 'ShareTest')] [string]$Work, [hashtable]$Parameters, [scriptblock]$Done) {
     $ps = [PowerShell]::Create()
-    [void]$ps.AddScript($Work.ToString())
-    foreach ($a in $Arguments) { [void]$ps.AddArgument($a) }
+    [void]$ps.AddCommand($script:UiWorkScript).AddParameter('Work', $Work)
+    foreach ($k in $Parameters.Keys) { [void]$ps.AddParameter($k, $Parameters[$k]) }
     $timer = New-Object System.Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromMilliseconds(150)
     $timer.Tag = [pscustomobject]@{ PS = $ps; Handle = $ps.BeginInvoke(); Done = $Done }

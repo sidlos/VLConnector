@@ -15,6 +15,7 @@ Describe 'static checks' {
     Set-Content -LiteralPath (Join-Path $root 'app\polyworks\Bare.pwmacro') -Value "# SYSTEM COMMAND EXEC SYNC ( `"powershell.exe`" ) in a comment`r`nSYSTEM COMMAND EXEC SYNC ( `"powershell.exe`", { `"-File`" }, vId )`r`nSYSTEM COMMAND EXEC SYNC ( `$vPs, { `"-File`" }, vId )"
     [IO.File]::WriteAllText((Join-Path $root 'app\Bare.cmd'), "@echo off`r`nrem powershell.exe -File x.ps1`r`npowershell.exe -File x.ps1`r`n`"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`" -File y.ps1`r`n")
     [IO.File]::WriteAllText((Join-Path $root 'app\lib\Control.ps1'), "'a`vb'`r`n")
+    Set-Content -LiteralPath (Join-Path $root 'app\lib\Lists.ps1') -Value "`$a = New-Object Collections.Generic.List[object]`r`n`$b = [Collections.Generic.List[object]]::new()`r`n`$c = New-Object Collections.Generic.List[string]"
 
     $out = & $ps -NoProfile -File (Join-Path $repo 'tools\Test-Static.ps1') -Root $root | Out-String
     It 'fails' { $LASTEXITCODE | Should Be 1 }
@@ -38,5 +39,9 @@ Describe 'static checks' {
     }
     It 'finds control characters in text files' {
         $out | Should Match 'app\\lib\\Control\.ps1: 1 control character'
+    }
+    It 'finds a List[object] made by New-Object (PowerShell 5.1 cannot put it into @())' {
+        $out | Should Match 'app\\lib\\Lists\.ps1: line 1: New-Object List\[object\]'
+        $out | Should Not Match 'Lists\.ps1: line [23]:'
     }
 }

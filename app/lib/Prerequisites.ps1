@@ -8,7 +8,7 @@ function New-VlcStatusItem([string]$Id, [string]$Level, [string]$Title, [string]
 
 # $Warnings: what the settings check ignored (Get-VlcSettingsState).
 function Get-VlcStatusItems($Settings, [string[]]$Warnings = @()) {
-    $items = New-Object Collections.Generic.List[object]
+    $items = [Collections.Generic.List[object]]::new()
     $network = $Settings.scenario -eq 'Network'
     $station = $network -and $Settings.role -eq 'Station'
     $needsVl = -not $station
@@ -55,13 +55,19 @@ function Get-VlcStatusItems($Settings, [string[]]$Warnings = @()) {
         $share = [string]$Settings.network.share
         if (-not $share) { $items.Add((New-VlcStatusItem 'share' 'Warning' 'Shared folder not set' 'Enter the network folder on the Network page.' 'Set up')) }
         else {
-            $test = Test-VlcShare $share
+            $test = Test-VlcShare $share $(if ($station) { 'Station' } else { 'Scanner' })
             $level = if ($test.Ok) { 'Ok' } else { 'Error' }
             $items.Add((New-VlcStatusItem 'share' $level "Shared folder $share" $test.Text $(if ($test.Ok) { '' } else { 'Set up' })))
             if ($test.Ok) {
-                $programs = @(Get-VlcPrograms $share)
-                if ($programs.Count) { $items.Add((New-VlcStatusItem 'programs' 'Ok' "$($programs.Count) VL program(s) in the Measurement Programs List" (($programs | Select-Object -First 4 | ForEach-Object Program) -join ', '))) }
+                $list = Read-VlcProgramsList $share ([bool]$Settings.network.allowUncWorkspaces)
+                $programs = @($list.Rows)
+                if ($list.Fatal) { $items.Add((New-VlcStatusItem 'programs' 'Error' 'Measurement Programs List not usable' "$($list.Fatal) The station pauses until it is corrected." 'Edit list')) }
+                elseif ($programs.Count) { $items.Add((New-VlcStatusItem 'programs' 'Ok' "$($programs.Count) VL program(s) in the Measurement Programs List" (($programs | Select-Object -First 4 | ForEach-Object Program) -join ', '))) }
                 else { $items.Add((New-VlcStatusItem 'programs' 'Warning' 'Measurement Programs List is empty' 'Add which PolyWorks template evaluates each VL program (page Network).' 'Edit list')) }
+                if (-not $list.Fatal -and $list.Problems.Count) {
+                    $more = if ($list.Problems.Count -gt 1) { " (and $($list.Problems.Count - 1) more)" } else { '' }
+                    $items.Add((New-VlcStatusItem 'programs' 'Warning' "$($list.Problems.Count) line(s) of the Measurement Programs List not used" "$($list.Problems[0])$more" 'Edit list'))
+                }
             }
             if (-not $station) {
                 $auto = Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('Startup')) 'VL Connector agent.lnk')

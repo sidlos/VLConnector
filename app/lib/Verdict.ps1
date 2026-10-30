@@ -48,7 +48,7 @@ function Read-VlcControlsFile([string]$Path, [int]$MaxBytes = 16MB) {
         $n++
     }
     if ($header.FORMAT -ne 'VLC-CONTROLS-1') { throw "The control data has the unknown format '$($header.FORMAT)'." }
-    $controls = New-Object Collections.Generic.List[object]
+    $controls = [Collections.Generic.List[object]]::new()
     while ($n -lt $pairs.Count -and $pairs[$n].Key -ne 'END') {
         $record = [ordered]@{}
         foreach ($key in $script:VlcControlKeys) {

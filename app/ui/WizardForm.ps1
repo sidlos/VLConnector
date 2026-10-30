@@ -229,7 +229,8 @@ function Show-SetupWizard {
         $c2 = $script:wc
         $c2.ShareStatus.Text = 'Testing...'
         $c2.ShareTest.IsEnabled = $false
-        Start-UiJob { param($AppDir, $Path) . (Join-Path $AppDir 'lib\Share.ps1'); Test-VlcShare $Path } @((Get-VlcPaths).AppDir, $c2.SharePath.Text.Trim()) {
+        $role = if ((Get-WizardKind) -eq 'Station') { 'Station' } else { 'Scanner' }
+        Start-UiJob 'ShareTest' @{ Path = $c2.SharePath.Text.Trim(); Role = $role } {
             param($Out, $ErrorText)
             $r = @($Out)[0]
             $script:wc.ShareStatus.Text = if ($ErrorText) { $ErrorText } else { $r.Text }

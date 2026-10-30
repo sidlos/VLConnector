@@ -14,7 +14,7 @@ function ConvertTo-SafeValue([string]$Value) {
 # $Pairs: ordered dictionary in the order the keys must appear.
 function Write-KeyValueFile([string]$Path, $Pairs) {
     $lines = New-Object Collections.Generic.List[string]
-    foreach ($key in $Pairs.Keys) {
+    foreach ($key in $Pairs.PSBase.Keys) {
         $value = ConvertTo-SafeValue ([string]$Pairs[$key])
         $lines.Add(('{0}={1}' -f $key, $value))
     }
@@ -24,7 +24,8 @@ function Write-KeyValueFile([string]$Path, $Pairs) {
     [IO.File]::Move($temp, $Path)
 }
 
-# Returns an ordered dictionary; only keys made of letters, digits and '_' are accepted.
+# Returns an ordered dictionary; only keys made of letters, digits and '_' are accepted. A missing file, or a
+# file without a single KEY=value line, gives $null: an empty dictionary would count as "present".
 # The encoding comes from the byte order mark (UTF-8 or UTF-16); without one, UTF-8 is assumed.
 function Read-KeyValueFile([string]$Path, [int]$MaxBytes = 65536) {
     $result = [ordered]@{}
@@ -41,5 +42,7 @@ function Read-KeyValueFile([string]$Path, [int]$MaxBytes = 65536) {
         if ($key -notmatch '^[A-Za-z0-9_]{1,40}$') { continue }
         $result[$key] = $line.Substring($i + 1)
     }
+    # PSBase: $result.Count would give the value of a COUNT key (the verdict file has one)
+    if (-not $result.PSBase.Count) { return $null }
     return $result
 }

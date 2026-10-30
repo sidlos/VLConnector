@@ -45,6 +45,11 @@ DECLARE vComputer ""
 DECLARE vUtc ""
 DECLARE vSysRoot ""
 DECLARE vPs ""
+DECLARE vStation ""
+DECLARE vPub ""
+DECLARE vPubState ""
+DECLARE vPubMsg ""
+DECLARE vBeatN ""
 
 IF "$vApp" == ""
     MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector: the station button is not set up correctly.", "Import VLC_Station_Button.pwmacro from the VL Connector folder again.", "" )
@@ -57,6 +62,7 @@ SYSTEM ENVIRONMENT_VARIABLE GET ( "TEMP", vTemp )
 SYSTEM ENVIRONMENT_VARIABLE GET ( "COMPUTERNAME", vComputer )
 SET vCtx "${vTemp}\VLConnector_station_context.txt"
 SET vNext "${vTemp}\VLConnector_station_next.txt"
+SET vPub "${vTemp}\VLConnector_station_publish.txt"
 SYSTEM COMMAND EXEC SYNC ( "IF", { "EXIST", "${_QUOTES}${vCtx}${_QUOTES}", "DEL", "/Q", "${_QUOTES}${vCtx}${_QUOTES}" } )
 SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Context", "-Out", "${_QUOTES}${vCtx}${_QUOTES}" }, vCallId )
 DATA_FILE READ LINE_FIELD ( $vCtx, 1, 2, vState, "=", "On" )
@@ -64,6 +70,10 @@ DATA_FILE READ LINE_FIELD ( $vCtx, 2, 2, vShare, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 3, 2, vPoll, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 4, 2, vStatusFile, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 5, 2, vMsg, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 6, 2, vStation, "=", "On" )
+IF "$vStation" == ""
+    SET vStation $vComputer
+ENDIF
 IF "$vState" != "OK"
     IF "$vMsg" == ""
         SET vMsg "PowerShell could not run ${vApp}\polyworks\Station-Step.ps1."
@@ -92,6 +102,8 @@ WHILE $vStop == 0
         IF $vFound == 1
             SET vState ""
             SET vMsg ""
+            # emptied first: an answer of an earlier call can never be read
+            DATA_FILE CREATE ( $vNext, "Ascii", "Yes" )
             SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Next", "-Out", "${_QUOTES}${vNext}${_QUOTES}" }, vCallId )
             DATA_FILE READ LINE_FIELD ( $vNext, 1, 2, vState, "=", "On" )
             DATA_FILE READ LINE_FIELD ( $vNext, 2, 2, vJobId, "=", "On" )
@@ -99,11 +111,20 @@ WHILE $vStop == 0
             DATA_FILE READ LINE_FIELD ( $vNext, 4, 2, vParams, "=", "On" )
             DATA_FILE READ LINE_FIELD ( $vNext, 5, 2, vResult, "=", "On" )
             DATA_FILE READ LINE_FIELD ( $vNext, 6, 2, vMsg, "=", "On" )
-            # the synchronous command leaves the progress window disabled (Stop greyed out): show it again
+            # the synchronous command leaves the progress window disabled (Stop greyed out): show it again.
+            # No job (none claimable, or a problem such as an unusable Measurement Programs List): wait a poll.
             IF "$vState" != "JOB"
                 MACRO PROGRESS HIDE
                 MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShare", 0, 100, "Stop" )
-                MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLast" )
+                IF "$vState" == "IDLE"
+                    MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLast" )
+                ELSE
+                    IF "$vMsg" == ""
+                        SET vMsg "PowerShell could not run ${vApp}\polyworks\Station-Step.ps1."
+                    ENDIF
+                    MACRO PROGRESS STATUS MESSAGE ( "Paused: $vMsg" )
+                ENDIF
+                MACRO SLEEP ( $vPoll )
             ENDIF
             IF "$vState" == "JOB"
                 MACRO PROGRESS STATUS MESSAGE ( "Evaluating $vPart ($vJobId)..." )
@@ -130,44 +151,65 @@ WHILE $vStop == 0
                         ENDIF
                     ENDIF
                 ENDIF
-                SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Publish", "-JobId", $vJobId, "-Result", "${_QUOTES}${vResult}${_QUOTES}" }, vCallId )
+                SET vPubState ""
+                SET vPubMsg ""
+                DATA_FILE CREATE ( $vPub, "Ascii", "Yes" )
+                SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Station-Step.ps1${_QUOTES}", "-Action", "Publish", "-JobId", $vJobId, "-Result", "${_QUOTES}${vResult}${_QUOTES}", "-Out", "${_QUOTES}${vPub}${_QUOTES}" }, vCallId )
+                DATA_FILE READ LINE_FIELD ( $vPub, 1, 2, vPubState, "=", "On" )
+                DATA_FILE READ LINE_FIELD ( $vPub, 2, 2, vPubMsg, "=", "On" )
                 ++ vCount
                 IF "$vVerdict" == ""
                     SET vLast "Last job: $vPart - error. Jobs done: $vCount."
                 ELSE
                     SET vLast "Last job: $vPart - $vVerdict ($vSummary). Jobs done: $vCount."
                 ENDIF
+                IF "$vPubState" != "OK"
+                    SET vLast "Last job: $vPart - the result could not be published: $vPubMsg Jobs done: $vCount."
+                ENDIF
                 MACRO ECHO ( "VL Connector station: $vJobId $vPart $vVerdict $vSummary" )
                 MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShare", 0, 100, "Stop" )
                 MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLast" )
             ENDIF
-            IF "$vState" == "ERROR"
-                MACRO PROGRESS STATUS MESSAGE ( "Problem with the shared folder: $vMsg" )
-                MACRO SLEEP ( $vPoll )
-            ENDIF
         ELSE
-            # heartbeat about every 30 s, so the scanner PCs see that the station is online
+            # heartbeat about every 30 s, so the scanner PCs see that the station is online: they watch BEAT
+            # (line 6) grow, with their own clock
             ++ vIdle
             SET vIdleMs EXPR ( $vIdle * $vPoll )
             IF $vIdleMs >= 30000
                 SET vIdle 0
+                SET vBeatN ""
+                DATA_FILE READ LINE_FIELD ( $vStatusFile, 6, 2, vBeatN, "=", "On" )
+                IF "$vBeatN" == ""
+                    SET vBeatN 0
+                ENDIF
+                SET vBeatN EXPR ( $vBeatN + 1 )
                 SYSTEM DATE_TIME_UTC GET ( vUtc )
                 DATA_FILE CREATE ( $vStatusFile, "Unicode", "Yes" )
-                DATA_FILE APPEND LINE ( $vStatusFile, { "STATION=$vComputer" } )
+                DATA_FILE APPEND LINE ( $vStatusFile, { "STATION=$vStation" } )
                 DATA_FILE APPEND LINE ( $vStatusFile, { "STATE=Idle" } )
                 DATA_FILE APPEND LINE ( $vStatusFile, { "JOB=" } )
+                DATA_FILE APPEND LINE ( $vStatusFile, { "VERSION=" } )
                 DATA_FILE APPEND LINE ( $vStatusFile, { "UPDATED_UTC=$vUtc" } )
+                DATA_FILE APPEND LINE ( $vStatusFile, { "BEAT=$vBeatN" } )
             ENDIF
             MACRO SLEEP ( $vPoll )
         ENDIF
     ENDIF
 ENDWHILE
 MACRO PROGRESS HIDE
+SET vBeatN ""
+DATA_FILE READ LINE_FIELD ( $vStatusFile, 6, 2, vBeatN, "=", "On" )
+IF "$vBeatN" == ""
+    SET vBeatN 0
+ENDIF
+SET vBeatN EXPR ( $vBeatN + 1 )
 SYSTEM DATE_TIME_UTC GET ( vUtc )
 DATA_FILE CREATE ( $vStatusFile, "Unicode", "Yes" )
-DATA_FILE APPEND LINE ( $vStatusFile, { "STATION=$vComputer" } )
+DATA_FILE APPEND LINE ( $vStatusFile, { "STATION=$vStation" } )
 DATA_FILE APPEND LINE ( $vStatusFile, { "STATE=Stopped" } )
 DATA_FILE APPEND LINE ( $vStatusFile, { "JOB=" } )
+DATA_FILE APPEND LINE ( $vStatusFile, { "VERSION=" } )
 DATA_FILE APPEND LINE ( $vStatusFile, { "UPDATED_UTC=$vUtc" } )
+DATA_FILE APPEND LINE ( $vStatusFile, { "BEAT=$vBeatN" } )
 MACRO INTERACTIVITY ( "On" )
 MACRO ECHO ( "VL Connector station stopped after $vCount job(s)." )

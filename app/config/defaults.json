@@ -36,7 +36,8 @@
         "autoOpenReports": true,
         "stationName": "",
         "pollSec": 3,
-        "jobTimeoutMin": 15
+        "jobTimeoutMin": 15,
+        "allowUncWorkspaces": false
     },
     "safety": {
         "stageWarningSec": 4,
