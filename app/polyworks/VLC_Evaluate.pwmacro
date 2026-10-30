@@ -17,11 +17,16 @@ version "7.0"
 #        11 DEVICE       device text for the report
 #        12 RESULT       result file to write
 #        13 JOBID        job id (network scenario) or empty
+#        14 APP          VL Connector app folder (for Complete-Evaluation.ps1)
+#        15 STL_SHA256   SHA-256 of the STL when it was made (empty: not known, e.g. a test STL)
 #   Result file (written last): STATE, VERDICT, SUMMARY, PDF, CSV, PIECE, PIECE_KEPT, MESSAGE.
 #
 # The measured piece is a copy of the template (<template>_<run>), made before anything is changed:
 # PolyWorks writes piece and project properties to the workspace immediately, so they must never be
 # set in the template. The template itself is never saved.
+# This macro only measures and collects: the verdict and the CSV come from Complete-Evaluation.ps1, which
+# is fail-closed (only PolyWorks' documented results inside the tolerance count as OK). Without a verdict
+# (alignment or measurement failed, data inconsistent) the result is STATE=ERROR and the piece is kept.
 #==============================================================================
 MACRO END_ON_ERROR ( "Off" )
 MACRO INTERACTIVITY ( "Off" )
@@ -63,19 +68,32 @@ DECLARE vUw
 DECLARE vLw
 DECLARE vLt
 DECLARE vRes
-DECLARE vVerdict
 DECLARE vCount 0
-DECLARE vFail 0
-DECLARE vMissing 0
-DECLARE vWarn 0
 DECLARE vSummary ""
-DECLARE vVerdictAll "OK"
+DECLARE vVerdictAll ""
 DECLARE vDetail ""
 DECLARE vNfr 0
 DECLARE vRepErr ""
 DECLARE vDest ""
 DECLARE vKept 1
 DECLARE vNegScale -0.5
+DECLARE vApp ""
+DECLARE vStlHash ""
+DECLARE vAlignSt ""
+DECLARE vAlignErr ""
+DECLARE vExtractSt ""
+DECLARE vExtractErr ""
+DECLARE vNf 0
+DECLARE vNcp 0
+DECLARE vCtl ""
+DECLARE vVer ""
+DECLARE vCallId
+DECLARE vEState ""
+DECLARE vECount ""
+DECLARE vERun ""
+DECLARE vEJob ""
+DECLARE vECsv ""
+DECLARE vEMsg ""
 
 DATA_FILE READ LINE_FIELD ( $vParams, 1, 2, vPwk, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 2, 2, vTemplate, "=", "On" )
@@ -90,6 +108,8 @@ DATA_FILE READ LINE_FIELD ( $vParams, 10, 2, vScale, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 11, 2, vDevice, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 12, 2, vResult, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 13, 2, vJobId, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 14, 2, vApp, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 15, 2, vStlHash, "=", "On" )
 MACRO GET_ERROR_STATUS ( vSt, vErr )
 IF "$vResult" == ""
     MACRO END ( "Error", "VLC_Evaluate: the parameters file $vParams could not be read." )
@@ -161,11 +181,25 @@ TREEVIEW OBJECT PROPERTIES NAME ( "Scan", { $vData } )
 
 TREEVIEW OBJECT SELECT NONE
 ALIGN BEST_FIT DATA_TO_REFERENCE CREATE FIT_TO_REFERENCE_OBJECT_SURFACES USING_PRE_ALIGNMENT AUTOMATIC ( "Best-fit to CAD" )
-TREEVIEW OBJECT SELECT NONE
-TREEVIEW FEATURE SELECT ALL
-MEASURE EXTRACT MEASURED
-TREEVIEW OBJECT SELECT NONE
-MEASURE COMPARISON_POINT EXTRACT MEASURED ALL
+MACRO GET_ERROR_STATUS ( vAlignSt, vAlignErr )
+# a failed measurement could leave values of the template in place: its error means no verdict
+TREEVIEW FEATURE COUNT GET ( vNf )
+TREEVIEW COMPARISON_POINT COUNT GET ( vNcp )
+IF $vNf > 0
+    TREEVIEW OBJECT SELECT NONE
+    TREEVIEW FEATURE SELECT ALL
+    MEASURE EXTRACT MEASURED
+    MACRO GET_ERROR_STATUS ( vExtractSt, vExtractErr )
+ENDIF
+IF $vNcp > 0
+    TREEVIEW OBJECT SELECT NONE
+    MEASURE COMPARISON_POINT EXTRACT MEASURED ALL
+    MACRO GET_ERROR_STATUS ( vSt, vErr )
+    IF "$vSt" == "Error" AND "$vExtractSt" != "Error"
+        SET vExtractSt $vSt
+        SET vExtractErr $vErr
+    ENDIF
+ENDIF
 TREEVIEW OBJECT SELECT NONE
 COMPARE VIEWING_OPTIONS COLOR_SCALE RANGE_LIMITS ( "Custom", $vNegScale, $vScale )
 COMPARE VIEWING_OPTIONS COLOR_SCALE SYMMETRICAL ( "On" )
@@ -178,10 +212,25 @@ IF "$vUtc" != ""
 ENDIF
 PIECE PROPERTIES CUSTOMIZABLE ( , { "Serial number", "Operator name", "Device" }, { $vPiece, $vUser, $vDevice } )
 
-# --- 5) results: every control with OK/NOK into the CSV, summary ----------------
-DATA_FILE CREATE ( $vCsv, "Ascii", "Yes" )
-DATA_FILE APPEND LINE ( $vCsv, { "Part;$vPiece;VL program;$vProgram;Operator;$vUser" } )
-DATA_FILE APPEND LINE ( $vCsv, { "Object;Control;Nominal;Measured;Deviation;Upper tol.;Lower tol.;Result" } )
+# --- 5) verdict: the raw control data -> Complete-Evaluation.ps1 (verdict and CSV) --------
+SET vCtl "${vResult}.controls"
+SET vVer "${vResult}.verdict"
+DATA_FILE CREATE ( $vCtl, "Unicode", "Yes" )
+DATA_FILE APPEND LINE ( $vCtl, { "FORMAT=VLC-CONTROLS-1" } )
+DATA_FILE APPEND LINE ( $vCtl, { "RUN=$vRun" } )
+DATA_FILE APPEND LINE ( $vCtl, { "JOBID=$vJobId" } )
+DATA_FILE APPEND LINE ( $vCtl, { "PIECE=$vPiece" } )
+DATA_FILE APPEND LINE ( $vCtl, { "TEMPLATE=$vTemplate" } )
+DATA_FILE APPEND LINE ( $vCtl, { "PROGRAM=$vProgram" } )
+DATA_FILE APPEND LINE ( $vCtl, { "OPERATOR=$vUser" } )
+DATA_FILE APPEND LINE ( $vCtl, { "STL=$vStl" } )
+DATA_FILE APPEND LINE ( $vCtl, { "STL_SHA256=$vStlHash" } )
+DATA_FILE APPEND LINE ( $vCtl, { "REPORT_DIR=$vReportDir" } )
+DATA_FILE APPEND LINE ( $vCtl, { "CSV=$vCsv" } )
+DATA_FILE APPEND LINE ( $vCtl, { "ALIGN_STATUS=$vAlignSt" } )
+DATA_FILE APPEND LINE ( $vCtl, { "ALIGN_ERROR=$vAlignErr" } )
+DATA_FILE APPEND LINE ( $vCtl, { "EXTRACT_STATUS=$vExtractSt" } )
+DATA_FILE APPEND LINE ( $vCtl, { "EXTRACT_ERROR=$vExtractErr" } )
 # pass 1 = features, pass 2 = comparison points; objects without controls (e.g. axes for a pitch) are skipped
 SET vPass 1
 WHILE $vPass <= 2
@@ -218,37 +267,60 @@ WHILE $vPass <= 2
             MEASURE CONTROL TOLERANCE_ZONE LIMITS GET ( $vCtrls[$vJ], vUt, vUw, vLw, vLt, $vObj )
             MEASURE CONTROL TEST TOLERANCE_ZONE_RESULT GET ( $vCtrls[$vJ], vRes, $vObj )
             ++ vCount
-            SET vVerdict "OK"
-            IF "$vRes" == ""
-                SET vVerdict "NOT MEASURED"
-                ++ vMissing
-            ENDIF
-            IF "$vRes" == "Beyond upper tolerance limit" OR "$vRes" == "Beyond lower tolerance limit"
-                SET vVerdict "NOK"
-                ++ vFail
-            ENDIF
-            IF "$vRes" == "Within upper warning zone" OR "$vRes" == "Within lower warning zone"
-                SET vVerdict "OK (warning)"
-                ++ vWarn
-            ENDIF
-            DATA_FILE APPEND LINE ( $vCsv, { "$vObj;$vCtrls[$vJ];$vNom;$vMeas;$vDev;$vUt;$vLt;$vVerdict" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "CONTROL=$vObj" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "NAME=$vCtrls[$vJ]" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "NOMINAL=$vNom" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "MEASURED=$vMeas" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "DEVIATION=$vDev" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "UPPER_TOL=$vUt" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "UPPER_WARN=$vUw" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "LOWER_WARN=$vLw" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "LOWER_TOL=$vLt" } )
+            DATA_FILE APPEND LINE ( $vCtl, { "RESULT=$vRes" } )
         ENDIF
         ++ vJ
     ENDWHILE
   ENDWHILE
   ++ vPass
 ENDWHILE
-IF $vFail > 0 OR $vMissing > 0
-    SET vDetail "$vFail of $vCount controls out of tolerance, $vMissing not measured"
-    SET vVerdictAll "NOK"
-ELSE
-    SET vDetail "all $vCount controls within tolerance"
-    IF $vWarn > 0
-        SET vDetail "all $vCount controls within tolerance ($vWarn in the warning zone)"
+DATA_FILE APPEND LINE ( $vCtl, { "END=$vCount" } )
+# the verdict file is emptied first: a verdict of an earlier piece can never be read
+DATA_FILE CREATE ( $vVer, "Ascii", "Yes" )
+SYSTEM COMMAND EXEC SYNC ( "powershell.exe", { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Complete-Evaluation.ps1${_QUOTES}", "-Controls", "${_QUOTES}${vCtl}${_QUOTES}", "-Out", "${_QUOTES}${vVer}${_QUOTES}" }, vCallId )
+DATA_FILE READ LINE_FIELD ( $vVer, 1, 2, vEState, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vVer, 2, 2, vVerdictAll, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vVer, 3, 2, vDetail, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vVer, 4, 2, vECount, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vVer, 5, 2, vERun, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vVer, 6, 2, vEJob, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vVer, 7, 2, vECsv, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vVer, 8, 2, vEMsg, "=", "On" )
+SYSTEM COMMAND EXEC SYNC ( "DEL", { "/Q", "${_QUOTES}${vCtl}${_QUOTES}", "${_QUOTES}${vVer}${_QUOTES}" } )
+# the verdict must be the one of this piece
+IF "$vEState" == "OK"
+    IF "$vERun" != "$vRun" OR "$vEJob" != "$vJobId" OR "$vECount" != "$vCount"
+        SET vEState "ERROR"
+        SET vEMsg "The verdict does not belong to this piece (run $vERun, job $vEJob, $vECount controls)."
     ENDIF
 ENDIF
+IF "$vEState" != "OK"
+    IF "$vEMsg" == ""
+        SET vEMsg "PowerShell could not run ${vApp}\polyworks\Complete-Evaluation.ps1."
+    ENDIF
+    # no verdict: the piece is kept for checking
+    FILE SAVE_PROJECT
+    DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
+    DATA_FILE APPEND LINE ( $vResult, { "STATE=ERROR" } )
+    DATA_FILE APPEND LINE ( $vResult, { "VERDICT=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "PDF=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "CSV=" } )
+    DATA_FILE APPEND LINE ( $vResult, { "PIECE=$vPiece" } )
+    DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=1" } )
+    DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=$vEMsg (No verdict; the piece $vPiece is kept for checking.)" } )
+    MACRO END ( "Error", "Verdict" )
+ENDIF
 SET vSummary "$vVerdictAll - $vDetail"
-DATA_FILE APPEND LINE ( $vCsv, { "RESULT;$vSummary;;;;;;" } )
 
 # --- 6) PDF report --------------------------------------------------------------
 # PolyWorks' own report layout: control snapshot and table, then top and front views of the color map.
@@ -303,7 +375,7 @@ DATA_FILE APPEND LINE ( $vResult, { "STATE=OK" } )
 DATA_FILE APPEND LINE ( $vResult, { "VERDICT=$vVerdictAll" } )
 DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=$vDetail" } )
 DATA_FILE APPEND LINE ( $vResult, { "PDF=$vPdf" } )
-DATA_FILE APPEND LINE ( $vResult, { "CSV=$vCsv" } )
+DATA_FILE APPEND LINE ( $vResult, { "CSV=$vECsv" } )
 DATA_FILE APPEND LINE ( $vResult, { "PIECE=$vPiece" } )
 DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=$vKept" } )
 DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=$vRepErr" } )

@@ -68,7 +68,7 @@ param(
 
 # FullLanguage mode is needed (docs\IT-Review); checked before anything is loaded
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-    & (Join-Path $PSScriptRoot 'lib\LanguageCheck.ps1') -Caller VLReplay -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $MarkerFile -Keys STATE, STL, PROGRAM, START, END, MESSAGE, USER, COMPUTER, JOBID, VERSION, START_UTC
+    & (Join-Path $PSScriptRoot 'lib\LanguageCheck.ps1') -Caller VLReplay -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $MarkerFile -Keys STATE, STL, PROGRAM, START, END, MESSAGE, USER, COMPUTER, JOBID, VERSION, START_UTC, STL_SHA256
     exit 1
 }
 
@@ -113,8 +113,13 @@ function Set-MarkerPath([string]$Path) {
 }
 
 # Marker for the caller (PolyWorks or the scan window). Line order is fixed: callers read by line number.
+# STL_SHA256 (line 12) lets the evaluation detect an STL that was replaced after the export.
 function Write-Marker([string]$State, [string]$StlPath, [string]$Message) {
     if (-not $script:markerPath) { return }
+    $hash = ''
+    if ($State -eq 'OK' -and $StlPath -and (Test-Path -LiteralPath $StlPath -PathType Leaf)) {
+        try { $hash = (Get-FileHash -LiteralPath $StlPath -Algorithm SHA256).Hash.ToLower() } catch { }
+    }
     $pairs = [ordered]@{
         STATE     = $State
         STL       = $StlPath
@@ -127,6 +132,7 @@ function Write-Marker([string]$State, [string]$StlPath, [string]$Message) {
         JOBID     = $JobId
         VERSION   = Get-VlcVersion
         START_UTC = $startTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        STL_SHA256 = $hash
     }
     try {
         Write-KeyValueFile $script:markerPath $pairs

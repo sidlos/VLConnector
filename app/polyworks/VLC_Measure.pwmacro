@@ -45,6 +45,7 @@ DECLARE vDevice ""
 DECLARE vMsg ""
 DECLARE vMarker ""
 DECLARE vLaunch ""
+DECLARE vStlHash ""
 DECLARE vStatus ""
 DECLARE vList
 DECLARE vFound 0
@@ -191,6 +192,7 @@ ELSE
     DATA_FILE READ LINE_FIELD ( $vMarker, 1, 2, vState, "=", "On" )
     DATA_FILE READ LINE_FIELD ( $vMarker, 2, 2, vStl, "=", "On" )
     DATA_FILE READ LINE_FIELD ( $vMarker, 6, 2, vMsg, "=", "On" )
+    DATA_FILE READ LINE_FIELD ( $vMarker, 12, 2, vStlHash, "=", "On" )
     SYSTEM COMMAND EXEC SYNC ( "DEL", { "/Q", "${_QUOTES}${vMarker}${_QUOTES}", "${_QUOTES}${vLaunch}${_QUOTES}" } )
     IF "$vState" == "CANCELLED"
         IF $vCancelled == 0
@@ -223,6 +225,8 @@ DATA_FILE APPEND LINE ( $vParams, { "COLOR_SCALE=$vScale" } )
 DATA_FILE APPEND LINE ( $vParams, { "DEVICE=$vDevice" } )
 DATA_FILE APPEND LINE ( $vParams, { "RESULT=$vResult" } )
 DATA_FILE APPEND LINE ( $vParams, { "JOBID=" } )
+DATA_FILE APPEND LINE ( $vParams, { "APP=$vApp" } )
+DATA_FILE APPEND LINE ( $vParams, { "STL_SHA256=$vStlHash" } )
 MACRO EXEC ( "${vApp}\polyworks\VLC_Evaluate.pwmacro", $vParams )
 MACRO GET_ERROR_STATUS ( vSt, vErr )
 MACRO INTERACTIVITY ( "On" )

@@ -62,8 +62,9 @@ switch ($Action) {
                     PROGRAM = $next.Job.PROGRAM; UTC = $next.Job.CREATED_UTC; KEEP_PIECES = [string]$cfg.polyworks.keepPieces
                     COLOR_SCALE = ([double]$cfg.polyworks.colorScaleMm).ToString([Globalization.CultureInfo]::InvariantCulture)
                     DEVICE = [string]$cfg.polyworks.deviceText; RESULT = $resultFile; JOBID = $id
+                    APP = $app; STL_SHA256 = [string]$next.Job.STL_SHA256
                 }
-                foreach ($k in 'PWK', 'STL', 'REPORT_DIR', 'RESULT') { if ([string]$params[$k] -match '=') { throw "The path $($params[$k]) contains '=', which the macro cannot read." } }
+                foreach ($k in 'PWK', 'STL', 'REPORT_DIR', 'RESULT', 'APP') { if ([string]$params[$k] -match '=') { throw "The path $($params[$k]) contains '=', which the macro cannot read." } }
                 $o.PARAMS = Join-Path $work "$id.params"
                 $o.RESULT = $resultFile
                 Write-KeyValueFile $o.PARAMS $params

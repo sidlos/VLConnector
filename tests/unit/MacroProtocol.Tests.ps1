@@ -45,16 +45,48 @@ Describe 'macro file protocol' {
     }
     It 'VLC_Evaluate reads the parameters in the order VLC_Measure and the station write them' {
         $keys = Get-MacroWrites $measure 'vParams'
-        $keys -join ',' | Should Be 'PWK,TEMPLATE,STL,RUN,REPORT_DIR,OPERATOR,PROGRAM,UTC,KEEP_PIECES,COLOR_SCALE,DEVICE,RESULT,JOBID'
+        $keys -join ',' | Should Be 'PWK,TEMPLATE,STL,RUN,REPORT_DIR,OPERATOR,PROGRAM,UTC,KEEP_PIECES,COLOR_SCALE,DEVICE,RESULT,JOBID,APP,STL_SHA256'
         $keyOf = @{ vPwk = 'PWK'; vTemplate = 'TEMPLATE'; vStl = 'STL'; vRun = 'RUN'; vReportDir = 'REPORT_DIR'; vUser = 'OPERATOR'; vProgram = 'PROGRAM'
-            vUtc = 'UTC'; vKeep = 'KEEP_PIECES'; vScale = 'COLOR_SCALE'; vDevice = 'DEVICE'; vResult = 'RESULT'; vJobId = 'JOBID' }
+            vUtc = 'UTC'; vKeep = 'KEEP_PIECES'; vScale = 'COLOR_SCALE'; vDevice = 'DEVICE'; vResult = 'RESULT'; vJobId = 'JOBID'; vApp = 'APP'; vStlHash = 'STL_SHA256' }
         $reads = Get-MacroReads $evaluate 'vParams'
         $reads.Count | Should Be $keys.Count
         Assert-Reads $reads $keys $keyOf
         # Station-Step.ps1 writes the same file with Write-KeyValueFile, in the order of its [ordered] table
         $block = [regex]::Match($station, '(?s)\$params = \[ordered\]@\{(.*?)\n\s*\}').Groups[1].Value
-        $stationKeys = @([regex]::Matches($block, '(?m)(?:^|;)\s*([A-Z_]+) =') | ForEach-Object { $_.Groups[1].Value })
+        $stationKeys = @([regex]::Matches($block, '(?m)(?:^|;)\s*([A-Z][A-Z0-9_]*) =') | ForEach-Object { $_.Groups[1].Value })
         $stationKeys -join ',' | Should Be ($keys -join ',')
+    }
+    It 'VLC_Evaluate writes the control data in the order Complete-Evaluation.ps1 reads it' {
+        . (Join-Path $repo 'app\lib\Verdict.ps1')
+        $keys = Get-MacroWrites $evaluate 'vCtl'
+        $keys -join ',' | Should Be ((@($script:VlcControlsHeader) + @($script:VlcControlKeys) + 'END') -join ',')
+        $evaluate | Should Match 'DATA_FILE APPEND LINE \( \$vCtl, \{ "FORMAT=VLC-CONTROLS-1" \} \)'
+    }
+    It 'VLC_Evaluate reads the verdict lines Complete-Evaluation.ps1 writes, after emptying the file' {
+        $script = [IO.File]::ReadAllText((Join-Path $poly 'Complete-Evaluation.ps1'))
+        $block = [regex]::Match($script, '\$o = \[ordered\]@\{([^}]*)\}').Groups[1].Value
+        $keys = @([regex]::Matches($block, '([A-Z_]+) =') | ForEach-Object { $_.Groups[1].Value })
+        $keys -join ',' | Should Be 'STATE,VERDICT,SUMMARY,COUNT,RUN,JOBID,CSV,MESSAGE'
+        $keyOf = @{ vEState = 'STATE'; vVerdictAll = 'VERDICT'; vDetail = 'SUMMARY'; vECount = 'COUNT'; vERun = 'RUN'; vEJob = 'JOBID'; vECsv = 'CSV'; vEMsg = 'MESSAGE' }
+        $reads = Get-MacroReads $evaluate 'vVer'
+        $reads.Count | Should Be 8
+        Assert-Reads $reads $keys $keyOf
+        $evaluate.IndexOf('DATA_FILE CREATE ( $vVer, "Ascii", "Yes" )') | Should BeLessThan $evaluate.IndexOf('Complete-Evaluation.ps1${_QUOTES}')
+    }
+    It 'VLC_Measure reads the marker lines VLReplay.ps1 writes' {
+        $replay = [IO.File]::ReadAllText((Join-Path $repo 'app\VLReplay.ps1'))
+        $block = [regex]::Match($replay, '(?s)function Write-Marker.*?\$pairs = \[ordered\]@\{(.*?)\n\s*\}').Groups[1].Value
+        $keys = @([regex]::Matches($block, '(?m)^\s*([A-Z][A-Z0-9_]*)\s*=') | ForEach-Object { $_.Groups[1].Value })
+        $keys -join ',' | Should Be 'STATE,STL,PROGRAM,START,END,MESSAGE,USER,COMPUTER,JOBID,VERSION,START_UTC,STL_SHA256'
+        Assert-Reads (Get-MacroReads $measure 'vMarker') $keys @{ vState = 'STATE'; vStl = 'STL'; vMsg = 'MESSAGE'; vStlHash = 'STL_SHA256' }
+    }
+    It 'hides the progress window before VLC_Evaluate runs its synchronous command (it would stay disabled)' {
+        foreach ($macro in $measure, [IO.File]::ReadAllText((Join-Path $poly 'VLC_Station.pwmacro'))) {
+            $call = $macro.IndexOf('VLC_Evaluate.pwmacro", $vParams )')
+            $call | Should BeGreaterThan 0
+            $before = $macro.Substring(0, $call)
+            $before.LastIndexOf('MACRO PROGRESS HIDE') | Should BeGreaterThan $before.LastIndexOf('MACRO PROGRESS SHOW')
+        }
     }
     It 'VLC_Measure reads the result lines VLC_Evaluate writes' {
         $keys = Get-MacroWrites $evaluate 'vResult'
