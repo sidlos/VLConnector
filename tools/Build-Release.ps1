@@ -13,7 +13,8 @@ param([switch]$AllowDirty)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $version = ([IO.File]::ReadAllText((Join-Path $repo 'VERSION'))).Trim()
-$name = "VLConnector-$version"
+# a test build never takes the name of a release package
+$name = if ($AllowDirty) { "VLConnector-$version-dirty" } else { "VLConnector-$version" }
 $dist = Join-Path $repo 'dist'
 $include = @('app', 'docs', 'Install.cmd', 'Install.ps1', 'Uninstall.cmd', 'Uninstall.ps1', 'README.md', 'LICENSE', 'CHANGELOG.md', 'VERSION', 'tools/Sign-Scripts.ps1')
 $exclude = '^docs/images/source/'
@@ -42,6 +43,14 @@ if ($AllowDirty) {
     }
 }
 Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { ($_.FullName.Substring($stage.Length + 1) -replace '\\', '/') -match $exclude } | Remove-Item -Force
+
+# every text file of the package uses CRLF: the installer compares signed scripts with the manifest by
+# cutting off the signature block, which only works on the exact line endings of the package
+$textExt = '.ps1', '.psm1', '.psd1', '.cmd', '.pwmacro', '.xaml', '.json', '.md', '.txt', '.svg', '.cs', '.html'
+$lfOnly = foreach ($f in Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $textExt -contains $_.Extension }) {
+    if ([regex]::IsMatch([IO.File]::ReadAllText($f.FullName), "(?<!`r)`n")) { $f.FullName.Substring($stage.Length + 1) }
+}
+if ($lfOnly) { throw "Files with LF-only line endings in the package (check .gitattributes): $($lfOnly -join ', ')" }
 
 # manifest: "<sha256>  <relative/path>", sorted
 $files = Get-ChildItem -LiteralPath $stage -Recurse -File | Sort-Object { $_.FullName.Substring($stage.Length + 1) -replace '\\', '/' }

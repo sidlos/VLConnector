@@ -25,9 +25,20 @@ if ($Static) {
 }
 
 if ($Unit) {
-    Import-Module Pester -MinimumVersion 3.4.0
-    $r = Invoke-Pester -Path (Join-Path $PSScriptRoot 'unit') -PassThru
-    $failed += $r.FailedCount
+    # the tests use Pester 3 syntax (Should Be); Windows ships 3.4.0, CI runners may carry newer versions
+    Import-Module Pester -RequiredVersion 3.4.0
+    # the tests and the scripts they start never see the real profile of this user
+    $saved = @{ APPDATA = $env:APPDATA; LOCALAPPDATA = $env:LOCALAPPDATA }
+    $profileDir = Join-Path ([IO.Path]::GetTempPath()) ('vlc_unit_' + [guid]::NewGuid().ToString('N'))
+    foreach ($k in 'APPDATA', 'LOCALAPPDATA') { $d = Join-Path $profileDir $k; New-Item -ItemType Directory -Force -Path $d | Out-Null; Set-Item "env:$k" $d }
+    try {
+        $r = Invoke-Pester -Path (Join-Path $PSScriptRoot 'unit') -PassThru
+        $failed += $r.FailedCount
+    }
+    finally {
+        foreach ($k in $saved.Keys) { Set-Item "env:$k" $saved[$k] }
+        Remove-Item -LiteralPath $profileDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 if ($Launcher) {
