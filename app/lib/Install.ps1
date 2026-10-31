@@ -61,6 +61,20 @@ function Read-VlcManifest([string]$Root) {
     return [pscustomobject]@{ Entries = $entries; Bytes = $bytes; Fingerprint = Get-VlcSha256 $bytes }
 }
 
+# Writes MANIFEST.sha256 for every file below $Root (tools\Build-Release.ps1): one "<sha256>  <relative/path>" per
+# line, the paths in ordinal order - the same order on every PC whatever its language, so that the package
+# fingerprint of a rebuild from the same commit is the same - UTF-8 without BOM, CRLF. Returns the fingerprint.
+function Write-VlcManifest([string]$Root) {
+    $base = $Root.TrimEnd('\')
+    $rels = [string[]]@(Get-VlcTreeFiles $base | Where-Object { -not $_.Link -and $_.Rel -ne 'MANIFEST.sha256' } | ForEach-Object { $_.Rel })
+    [Array]::Sort($rels, [StringComparer]::Ordinal)
+    $text = New-Object Text.StringBuilder
+    foreach ($rel in $rels) { [void]$text.Append((Get-VlcSha256 ([IO.File]::ReadAllBytes((Join-Path $base ($rel -replace '/', '\')))))).Append('  ').Append($rel).Append("`r`n") }
+    $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes($text.ToString())
+    [IO.File]::WriteAllBytes((Join-Path $base 'MANIFEST.sha256'), $bytes)
+    return Get-VlcSha256 $bytes
+}
+
 # The text encoding of a file by its byte order mark: Encoding (writes no BOM) and Bom (its bytes).
 function Get-VlcTextEncoding([byte[]]$Bytes) {
     if ($Bytes.Length -ge 3 -and $Bytes[0] -eq 0xEF -and $Bytes[1] -eq 0xBB -and $Bytes[2] -eq 0xBF) {

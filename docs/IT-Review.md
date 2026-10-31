@@ -163,9 +163,16 @@ The package carries no personal code signature. Its integrity is shown instead b
 
 - the **GitHub release** built by GitHub Actions from a tag of the source repository (`.github\workflows\release.yml`,
   actions pinned to commits), with `SHA256SUMS.txt`: the SHA-256 of the ZIP and the package fingerprint;
-- optionally a **build attestation** signed by GitHub, naming repository, workflow and commit
-  (`gh attestation verify <zip> --repo <owner>/<repo>`);
+- a **build attestation** signed by GitHub (public repository): this ZIP was built by the release workflow of that
+  repository from that commit (`gh attestation verify <zip> --repo <owner>/<repo>`);
+- a **rebuild check** that does not trust GitHub's build machine: check out the tag, run `tools\Build-Release.ps1`
+  (Windows PowerShell 5.1 and git) and compare the package fingerprint in the new `dist\SHA256SUMS.txt` with the
+  published one. For the same commit it is the same on any PC; the ZIP's own hash is not (ZIP files carry time
+  stamps);
 - `MANIFEST.sha256` inside, checked by the installer and by `Install.cmd -Verify`.
+
+These show that the package is exactly the code of that commit; whether that code is acceptable is what your review
+decides. Review the tagged commit (or the changes since the version you reviewed), not a branch.
 
 **AppLocker:** the default script rules allow `%PROGRAMFILES%\*`, so VL Connector runs in FullLanguage there
 without a signature. For hash rules, generate them with Windows' own cmdlets after the installation:

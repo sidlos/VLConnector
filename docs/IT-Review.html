@@ -102,9 +102,11 @@ Install.cmd -Quiet [-ConfirmStageMotion On|Off] [-MachineSettings &lt;file&gt;] 
 <p>The package carries no personal code signature. Its integrity is shown instead by:</p>
 <ul>
 <li>the <strong>GitHub release</strong> built by GitHub Actions from a tag of the source repository (<code>.github\workflows\release.yml</code>, actions pinned to commits), with <code>SHA256SUMS.txt</code>: the SHA-256 of the ZIP and the package fingerprint;</li>
-<li>optionally a <strong>build attestation</strong> signed by GitHub, naming repository, workflow and commit (<code>gh attestation verify &lt;zip&gt; --repo &lt;owner&gt;/&lt;repo&gt;</code>);</li>
+<li>a <strong>build attestation</strong> signed by GitHub (public repository): this ZIP was built by the release workflow of that repository from that commit (<code>gh attestation verify &lt;zip&gt; --repo &lt;owner&gt;/&lt;repo&gt;</code>);</li>
+<li>a <strong>rebuild check</strong> that does not trust GitHub&#39;s build machine: check out the tag, run <code>tools\Build-Release.ps1</code> (Windows PowerShell 5.1 and git) and compare the package fingerprint in the new <code>dist\SHA256SUMS.txt</code> with the published one. For the same commit it is the same on any PC; the ZIP&#39;s own hash is not (ZIP files carry time stamps);</li>
 <li><code>MANIFEST.sha256</code> inside, checked by the installer and by <code>Install.cmd -Verify</code>.</li>
 </ul>
+<p>These show that the package is exactly the code of that commit; whether that code is acceptable is what your review decides. Review the tagged commit (or the changes since the version you reviewed), not a branch.</p>
 <p><strong>AppLocker:</strong> the default script rules allow <code>%PROGRAMFILES%\*</code>, so VL Connector runs in FullLanguage there without a signature. For hash rules, generate them with Windows&#39; own cmdlets after the installation:</p>
 <pre><code>Get-AppLockerFileInformation -Directory &#39;C:\Program Files\VLConnector&#39; -Recurse -FileType Script, Dll |
     New-AppLockerPolicy -RuleType Hash -User Everyone -Xml &gt; VLConnector-applocker.xml</code></pre>

@@ -29,7 +29,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <p>Run these checks at the scanner before production use. Use a part with a finished PolyWorks template and an AI Replay program. Tick each line; note deviations.</p>
 <h2 id="installation-and-trust-it">Installation and trust (IT)</h2>
 <ul>
-<li class="task">&#9744; Package checked: SHA-256 of the ZIP matches <code>SHA256SUMS.txt</code> of the release; the fingerprint shown by Install.cmd matches; optional: <code>gh attestation verify &lt;zip&gt; --repo &lt;owner&gt;/&lt;repo&gt;</code>.</li>
+<li class="task">&#9744; Package checked: SHA-256 of the ZIP matches <code>SHA256SUMS.txt</code> of the release; the fingerprint shown by Install.cmd matches; optional: <code>gh attestation verify &lt;zip&gt; --repo &lt;owner&gt;/&lt;repo&gt;</code>, or rebuilt from the tag with <code>tools\Build-Release.ps1</code> and the same fingerprint.</li>
 <li class="task">&#9744; Installed with Install.cmd (Windows asked for administrator rights) to <code>C:\Program Files\VLConnector</code>; the setup wizard opens; the settings window opens from the Start menu.</li>
 <li class="task">&#9744; <code>Install.cmd -Verify</code> in the program folder: files, permissions and interface DLL OK.</li>
 <li class="task">&#9744; A standard user cannot change files in <code>C:\Program Files\VLConnector</code> (try to save a copy of a file there).</li>

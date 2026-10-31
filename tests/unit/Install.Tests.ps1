@@ -27,6 +27,19 @@ function New-TestTree([string]$Dir, [hashtable]$Files) {
 function New-Junction([string]$Link, [string]$Target) { [void](cmd.exe /c mklink /J "$Link" "$Target") }
 
 Describe 'package manifest' {
+    It 'is written in the same order on every PC, whatever its language, so a rebuild gives the same fingerprint' {
+        $dir = Join-Path $TestDrive 'm0'
+        New-TestTree $dir @{ 'CHANGELOG.md' = 'c'; 'docs\Acceptance-Checklist.md' = 'd'; 'app\a.ps1' = 'a'; 'Install.cmd' = 'i'; 'VERSION' = '1' }
+        $saved = [Threading.Thread]::CurrentThread.CurrentCulture
+        try {
+            # Czech collation puts "ch" after "h"; Turkish has its own i
+            $written = foreach ($culture in 'cs-CZ', 'en-US', 'tr-TR') { & { [Threading.Thread]::CurrentThread.CurrentCulture = $culture; Write-VlcManifest $dir } }
+        }
+        finally { [Threading.Thread]::CurrentThread.CurrentCulture = $saved }
+        @($written | Select-Object -Unique).Count | Should Be 1
+        @([IO.File]::ReadAllLines((Join-Path $dir 'MANIFEST.sha256')) | ForEach-Object { $_.Substring(66) }) -join ',' | Should Be 'CHANGELOG.md,Install.cmd,VERSION,app/a.ps1,docs/Acceptance-Checklist.md'
+        (Read-VlcManifest $dir).Fingerprint | Should Be @($written)[0]
+    }
     It 'is read once, with its fingerprint' {
         $dir = Join-Path $TestDrive 'm1'
         New-TestTree $dir @{ 'a.txt' = 'a'; 'sub\b.txt' = 'b' }

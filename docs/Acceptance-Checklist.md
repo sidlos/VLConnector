@@ -6,7 +6,8 @@ AI Replay program. Tick each line; note deviations.
 ## Installation and trust (IT)
 
 - [ ] Package checked: SHA-256 of the ZIP matches `SHA256SUMS.txt` of the release; the fingerprint shown by
-      Install.cmd matches; optional: `gh attestation verify <zip> --repo <owner>/<repo>`.
+      Install.cmd matches; optional: `gh attestation verify <zip> --repo <owner>/<repo>`, or rebuilt from the tag
+      with `tools\Build-Release.ps1` and the same fingerprint.
 - [ ] Installed with Install.cmd (Windows asked for administrator rights) to `C:\Program Files\VLConnector`; the
       setup wizard opens; the settings window opens from the Start menu.
 - [ ] `Install.cmd -Verify` in the program folder: files, permissions and interface DLL OK.

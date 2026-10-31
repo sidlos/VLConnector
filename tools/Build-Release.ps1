@@ -8,8 +8,9 @@
   tools\Sign-Package.ps1, tools\Build-Interop.ps1 and MANIFEST.sha256 (SHA-256 of every file; Install.ps1
   checks it). The package fingerprint (SHA-256 of MANIFEST.sha256) is shown by the installer; publish it
   together with the ZIP hash (SHA256SUMS.txt). Releases are built by GitHub Actions from a tag
-  (.github\workflows\release.yml). A release package that exists already is never built again (its hash may be
-  published): -Force only for one that was never handed out.
+  (.github\workflows\release.yml). Anyone can rebuild a release from its tag and compare: the fingerprint is the
+  same (the ZIP's own hash is not: ZIP files carry time stamps). A release package that exists already is never
+  built again (its hash may be published): -Force only for one that was never handed out.
 #>
 param([switch]$AllowDirty, [switch]$Force)
 
@@ -70,14 +71,11 @@ $lfOnly = foreach ($f in Get-ChildItem -LiteralPath $stage -Recurse -File | Wher
 }
 if ($lfOnly) { throw "Files with LF-only line endings in the package (check .gitattributes): $($lfOnly -join ', ')" }
 
-# manifest: "<sha256>  <relative/path>", sorted
-$files = Get-ChildItem -LiteralPath $stage -Recurse -File | Sort-Object { $_.FullName.Substring($stage.Length + 1) -replace '\\', '/' }
-$lines = foreach ($f in $files) {
-    '{0}  {1}' -f (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLower(), ($f.FullName.Substring($stage.Length + 1) -replace '\\', '/')
-}
-$manifest = Join-Path $stage 'MANIFEST.sha256'
-[IO.File]::WriteAllLines($manifest, [string[]]$lines, (New-Object Text.UTF8Encoding($false)))
-$fingerprint = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLower()
+# manifest "<sha256>  <relative/path>" in ordinal order: a rebuild of the same commit gives the same fingerprint on
+# any PC, whatever its language (Czech collation, for one, puts "ch" after "h")
+. (Join-Path $repo 'app\lib\Install.ps1')
+$files = @(Get-ChildItem -LiteralPath $stage -Recurse -File)
+$fingerprint = Write-VlcManifest $stage
 
 # ZIP with '/' separators and one top folder
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
