@@ -196,7 +196,7 @@ if ($scenario.launchFile) {
 }
 elseif ($scenario.programByName) {
     # the name only (as typed by an operator), found in the program folder
-    $launcherArgs.AddRange([string[]]@([IO.Path]::GetFileName($program) -replace '\.vld4$', '', '-ProgramDir', $programs))
+    $launcherArgs.AddRange([string[]]@(([IO.Path]::GetFileName($program) -replace '\.vld4$', ''), '-ProgramDir', $programs))
 }
 elseif (-not ($opt -and ($opt.exportOnly -or $opt.watch))) { $launcherArgs.Add($program) }
 if ($opt -and $opt.watch) { $launcherArgs.Add('-Watch') }

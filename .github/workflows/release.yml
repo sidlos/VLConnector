@@ -1,9 +1,10 @@
 # A tag v<VERSION> (e.g. v1.0.0-rc11) builds the release package from the tagged commit with
 # tools\Build-Release.ps1 (committed files only), creates the GitHub release with the ZIP and SHA256SUMS.txt
-# (the ZIP's SHA-256 and the package fingerprint Install.cmd shows) and, when the repository variable
-# VLC_ATTESTATION is 'true', a build attestation: GitHub signs which repository, workflow and commit built the
-# ZIP (check it: gh attestation verify <zip> --repo <owner>/<repo>; private repositories need GitHub Enterprise
-# Cloud for it). No personal code signature is involved; IT can sign with tools\Sign-Package.ps1.
+# (the ZIP's SHA-256 and the package fingerprint Install.cmd shows) and a build attestation: GitHub signs which
+# repository, workflow and commit built the ZIP (check it: gh attestation verify <zip> --repo <owner>/<repo>).
+# The attestation is made for a public repository; a private one needs GitHub Enterprise Cloud for it and the
+# repository variable VLC_ATTESTATION = 'true'. No personal code signature is involved; IT can sign with
+# tools\Sign-Package.ps1.
 # Actions are pinned to commits; the comment names the version.
 name: Release
 
@@ -46,7 +47,7 @@ jobs:
         run: .\tools\Build-Release.ps1
 
       - name: Build attestation
-        if: vars.VLC_ATTESTATION == 'true'
+        if: ${{ !github.event.repository.private || vars.VLC_ATTESTATION == 'true' }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/*.zip
