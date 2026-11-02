@@ -1,11 +1,12 @@
 <#
-  setup\Uninstall.ps1 - VL Connector for PolyWorks: removes VL Connector from this PC. Start it with Uninstall.cmd
-  (also in the Start menu: Uninstall VL Connector). Windows asks for administrator rights.
-    Uninstall.cmd                     removes the program folder, the Start menu entries, the agent's start with
+  setup\Uninstall.ps1 - VL Connector for PolyWorks: removes VL Connector from this PC. Start it with Start menu >
+  Uninstall VL Connector (setup\Uninstall.cmd of the program folder). Windows asks for administrator rights. Only a
+  folder the installer made (it holds install-info.txt) is removed: started from an unpacked package, it refuses.
+    setup\Uninstall.cmd               removes the program folder, the Start menu entries, the agent's start with
                                       Windows of every user, the forwarders of an older version and the event
                                       source "VL Connector"
-    Uninstall.cmd -RemoveUserData     also the settings and logs of the Windows user who runs it
-    Uninstall.cmd -Quiet              no questions (run it as administrator or SYSTEM; exit codes as Install.cmd)
+    setup\Uninstall.cmd -RemoveUserData  also the settings and logs of the Windows user who runs it
+    setup\Uninstall.cmd -Quiet        no questions (run it as administrator or SYSTEM; exit codes as Install.cmd)
   Scans, reports, PolyWorks projects and the shared network folder are never touched. The VL Connector buttons
   have to be removed from the PolyWorks ribbon by hand (File > Visual Layout > Customize).
 #>
@@ -79,13 +80,18 @@ Say 'Uninstall VL Connector for PolyWorks' 'Cyan'
 Say "Program folder: $InstallDir"
 $kind = Get-VlcFolderKind $InstallDir
 if (-not $kind -or $kind.Kind -ne 'VLConnector') { Say 'This folder does not look like a VL Connector installation. Nothing was removed.' 'Red'; Wait-Key; exit 1 }
+# an unpacked package looks the same, but only the installer writes install-info.txt
+if (-not (Test-Path -LiteralPath (Join-Path $InstallDir 'install-info.txt') -PathType Leaf)) {
+    Say 'This is a VL Connector package, not an installation. Nothing was removed. To remove VL Connector: Start menu > Uninstall VL Connector.' 'Red'
+    Wait-Key; exit 1
+}
 if (-not $Quiet) {
     $answer = Read-Host 'Remove VL Connector from this PC? [y/N]'
     if ($answer -notmatch '^[YyAa]') { Say 'Cancelled.'; exit 2 }
 }
 
 $admin = Test-VlcAdministrator
-if (-not $admin -and $Quiet) { Say 'Administrator rights are needed: run Uninstall.cmd -Quiet as administrator or as SYSTEM.' 'Red'; exit 740 }
+if (-not $admin -and $Quiet) { Say 'Administrator rights are needed: run setup\Uninstall.cmd -Quiet as administrator or as SYSTEM.' 'Red'; exit 740 }
 $temp = Copy-Uninstaller
 $result = Join-Path $temp 'result.txt'
 $code = 1

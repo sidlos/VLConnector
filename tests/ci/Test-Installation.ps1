@@ -118,8 +118,14 @@ try {
 }
 finally { Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue }
 
-# --- removal -------------------------------------------------------------------------------------------------------
-$code = Invoke-Batch (Join-Path $target 'Uninstall.cmd') @('-Quiet')
+# --- the uninstaller of an unpacked package removes nothing (it is not an installation) ---------------------------
+$code = Invoke-Batch (Join-Path $pkg 'setup\Uninstall.cmd') @('-Quiet')
+Test-Step 'uninstaller in the package folder refuses' ($code -eq 1) "exit $code"
+Test-Step 'package folder, installation, Start menu and event source still there' ((Test-Path -LiteralPath (Join-Path $pkg 'Install.cmd')) -and (Test-Path -LiteralPath (Join-Path $target 'install-info.txt')) -and (Test-Path -LiteralPath (Join-Path $menu 'VL Connector.lnk')) -and [Diagnostics.EventLog]::SourceExists('VL Connector'))
+
+# --- removal (as Start menu > Uninstall VL Connector does) ---------------------------------------------------------
+Test-Step 'Start menu: Uninstall VL Connector' ((New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $menu 'Uninstall VL Connector.lnk')).TargetPath -eq (Join-Path $target 'setup\Uninstall.cmd'))
+$code = Invoke-Batch (Join-Path $target 'setup\Uninstall.cmd') @('-Quiet')
 Test-Step 'removal' ($code -eq 0) "exit $code"
 foreach ($gone in $target, "$target.old", $menu) { Test-Step "removed: $gone" (-not (Test-Path -LiteralPath $gone)) }
 Test-Step 'the rc10 place stays as an empty folder only administrators can change' ((@(Get-ChildItem -LiteralPath $legacy -Force).Count -eq 1) -and -not @(Get-VlcAclProblems $legacy -Recurse).Count)

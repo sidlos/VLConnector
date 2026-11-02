@@ -315,7 +315,7 @@ Describe 'Start menu and startup shortcuts' {
 Describe 'installation, update and removal on temporary folders (no administrator rights)' {
     $root = Join-Path $TestDrive 'e2e'
     $pkg = Join-Path $root 'package'
-    foreach ($item in 'app', 'VERSION', 'setup\Install.ps1', 'Install.cmd', 'setup\Uninstall.ps1', 'Uninstall.cmd', 'tools\Build-Interop.ps1') {
+    foreach ($item in 'app', 'VERSION', 'setup\Install.ps1', 'Install.cmd', 'setup\Uninstall.ps1', 'setup\Uninstall.cmd', 'tools\Build-Interop.ps1') {
         $to = Join-Path $pkg $item
         New-Item -ItemType Directory -Force -Path (Split-Path $to) | Out-Null
         Copy-Item -LiteralPath (Join-Path $repo $item) -Destination $to -Recurse
@@ -369,6 +369,14 @@ Describe 'installation, update and removal on temporary folders (no administrato
         $before = (Get-Item -LiteralPath (Join-Path $target 'install-info.txt')).LastWriteTimeUtc
         { Install-VlcMachine -Source $pkg -Target $target -MachineSettings $bad -LegacyDir $legacy -MenuRoot $menuRoot -SkipAcl -Say $say } | Should Throw 'only be set in the policy'
         (Get-Item -LiteralPath (Join-Path $target 'install-info.txt')).LastWriteTimeUtc | Should Be $before
+    }
+    It 'never removes an unpacked package, nor the Start menu or the forwarders of the installation' {
+        $lines.Clear()
+        Uninstall-VlcMachine -InstallDir $pkg -LegacyDir $legacy -MenuRoot $menuRoot -ProfileDirs @() -SkipAcl -Say $say | Should Be 1
+        ($lines -join "`n") | Should Match 'is a VL Connector package, not an installation'
+        foreach ($kept in (Join-Path $pkg 'Install.cmd'), (Join-Path $menuRoot 'VL Connector'), (Join-Path $target 'install-info.txt')) { Test-Path -LiteralPath $kept | Should Be $true }
+        (Get-VlcFolderKind $legacy).Kind | Should Be 'Forwarders'
+        @(Get-ChildItem -LiteralPath $legacy -Recurse -File).Count | Should BeGreaterThan 1
     }
     It 'removes the installation, the previous version, the forwarders and the Start menu' {
         $lines.Clear()

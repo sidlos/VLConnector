@@ -44,7 +44,7 @@ working through forwarders.
   agent*); started again while it runs, it opens the settings window.
 - **PolyWorks button:** *Add to PolyWorks* puts the Measure (or Station) button at the end of the Home tab, in the
   group *VL Connector* (a tab of its own only when the ribbon has no Home tab or does not take the group).
-- **Package folder:** only *Install.cmd* and *Uninstall.cmd* are there to open; their scripts are in `setup\`.
+- **Package folder:** only *Install.cmd* is there to open; the scripts and *Uninstall.cmd* are in `setup\` (Start menu >`n  Uninstall VL Connector). The uninstaller removes only a folder the installer made, never an unpacked package.
 - Documentation: Notes for IT rewritten (trust model, policy, safety, what security software sees, rights of
   the shared folder), Protocol, User guide, Acceptance checklist with safety checks and sign-off.
 

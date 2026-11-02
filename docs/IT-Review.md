@@ -26,7 +26,7 @@ PolyWorks plug-in; no internet access, no telemetry.
 | `app\interop\*.cs` | compiled once by the installer | Windows and PolyWorks interface declarations, see section 7. |
 | `bin\VLConnector.Interop.dll` | loaded by the scripts | Built by the installer from `app\interop\*.cs`; carries the SHA-256 of its source in its file properties. |
 | `app\lib\*.ps1` | loaded by the scripts above | Shared code, e.g. `Install.ps1` (installation), `Settings.ps1` (settings layers), `StageWarning*.ps1` (warning window). |
-| `Install.cmd`, `Uninstall.cmd` with `setup\Install.ps1`, `setup\Uninstall.ps1` | by an administrator | Installation, update, removal. The scripts are kept in `setup\`, so the package folder shows only the two .cmd files to open. |
+| `Install.cmd`, `setup\Install.ps1`, `setup\Uninstall.cmd`, `setup\Uninstall.ps1` | by an administrator | Installation, update, removal. Only `Install.cmd` is in the package folder itself, so it is the one thing to open there; removal: Start menu > Uninstall VL Connector. The uninstaller removes only a folder the installer made (with `install-info.txt`), never an unpacked package. |
 | `tools\Sign-Package.ps1` | by IT, optional | Signs the package with your certificate before deployment (section 6). |
 | `tools\Build-Interop.ps1` | by the installer (or IT) | Builds the interface DLL from the source. |
 
@@ -84,7 +84,7 @@ had switched the automatic stage confirmation on; that is ignored now.
 manifest, the ACL of the folder and its parents, and the interface DLL against its source - **before** it loads
 any installed code - then shows the status of the PC.
 
-**Remove:** Start menu > Uninstall VL Connector, or `Uninstall.cmd [-Quiet] [-RemoveUserData]` (administrator).
+**Remove:** Start menu > Uninstall VL Connector, or `setup\Uninstall.cmd [-Quiet] [-RemoveUserData]` in the program folder (administrator).
 It runs from a temporary copy, stops the agents, removes the program folder (with `.old`), the Start menu
 entries, the agent startup shortcuts of all users, the forwarders and the event source, and checks that the
 folder is gone. At the old place of 1.0.0-rc10 an empty folder that only administrators can change stays behind,

@@ -5,7 +5,7 @@
 # stages the files in <folder>.new under an administrator-only ACL, builds the interface DLL and the button files
 # there, checks the staged copy against the manifest and its permissions, and swaps the folders; the previous
 # version stays in <folder>.old for one rollback. Nothing here follows a junction or symbolic link.
-# Exit codes of Install.cmd and Uninstall.cmd: 0 done, 1 failed, 2 cancelled, 740 administrator rights needed,
+# Exit codes of Install.cmd and setup\Uninstall.cmd: 0 done, 1 failed, 2 cancelled, 740 administrator rights needed,
 # 1618 VL Connector is in use (close it, or let the software deployment retry later).
 
 $script:VlcSid = @{
@@ -441,7 +441,7 @@ function Set-VlcStartMenu([string]$InstallDir, [string]$MenuRoot = [Environment]
     $run = '-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File'
     New-VlcShortcut (Join-Path $menu 'VL Connector.lnk') $ps "$run `"$app\VLConnector.ps1`"" $app $icon 'VL Connector for PolyWorks - settings'
     # started outside the program folder: a process whose current folder it is would keep it from being deleted
-    New-VlcShortcut (Join-Path $menu 'Uninstall VL Connector.lnk') (Join-Path $InstallDir 'Uninstall.cmd') '' $env:SystemRoot $icon 'Removes VL Connector for PolyWorks from this PC (administrator)'
+    New-VlcShortcut (Join-Path $menu 'Uninstall VL Connector.lnk') (Join-Path $InstallDir 'setup\Uninstall.cmd') '' $env:SystemRoot $icon 'Removes VL Connector for PolyWorks from this PC (administrator)'
     return $menu
 }
 
@@ -742,6 +742,8 @@ function Uninstall-VlcMachine {
     $dir = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
     $kind = Get-VlcFolderKind $dir
     if (-not $kind -or $kind.Kind -ne 'VLConnector') { & $Say "$dir holds no VL Connector installation. Nothing was removed." 'Red'; return 1 }
+    # an unpacked package looks the same, but only the installer writes install-info.txt
+    if (-not (Test-Path -LiteralPath (Join-Path $dir 'install-info.txt') -PathType Leaf)) { & $Say "$dir is a VL Connector package, not an installation. Nothing was removed." 'Red'; return 1 }
     $busy = @(Get-VlcProcesses @($dir) | Where-Object { $_.Kind -ne 'Agent' })
     if ($busy.Count) {
         & $Say "VL Connector is in use ($(@($busy | ForEach-Object { $_.Script } | Select-Object -Unique) -join ', ')). Close its windows, let running scans finish and try again." 'Yellow'
