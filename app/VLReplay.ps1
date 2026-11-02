@@ -490,6 +490,13 @@ function Invoke-DialogRules($State, [hashtable]$Seen, $Proc) {
     }
 }
 
+# The VL program of this run: the one given to the launcher, or (agent) the one chosen in VL's program dialog;
+# '' while it is not known.
+function Get-RunProgram {
+    if ($script:programPath) { return $script:programPath }
+    return [string]$script:watchedProgram
+}
+
 # A stage question of VL ("The stage will rotate. Continue?"). Answered by VL Connector only when the
 # administrator's policy allows it and nothing blocks it (Get-VlcStageConfirmBlocker); then, at least 0.5 s after
 # the question appeared: warning window and sound, and OK only after Windows reports the window on screen.
@@ -513,13 +520,13 @@ function Confirm-StageQuestion($Dialog, $Info, $Proc) {
     }
     if (-not $blocker) {
         $cfgNow = (Get-VlcSettingsState).Settings
-        $text = "VL asks '$($Info.Text)' - VL Connector answers OK (set by the administrator for this PC). Program: $([IO.Path]::GetFileName($script:programPath))"
+        $text = "VL asks '$($Info.Text)' - VL Connector answers OK (set by the administrator for this PC). Program: $([IO.Path]::GetFileName((Get-RunProgram)))"
         $shown = Show-VlcStageWarning $script:stageWarning $text ([int]$cfgNow.safety.stageWarningSec) ([bool]$cfgNow.safety.stageSound) ([Vl]::Rect($Dialog.Handle))
         if (-not $shown) { $blocker = 'Windows did not show the warning window within 1 s' }
         # the question must still be the one checked above
         elseif ((Get-DialogText $Dialog.Handle) -ne $Info.Text) { $blocker = 'the question changed' }
     }
-    $who = "user $env:USERDOMAIN\$env:USERNAME, PC $env:COMPUTERNAME, program $script:programPath, VL question '$($Info.Text)'"
+    $who = "user $env:USERDOMAIN\$env:USERNAME, PC $env:COMPUTERNAME, program $(Get-RunProgram), VL question '$($Info.Text)'"
     if ($blocker) {
         if ($Info.Skipped -ne $blocker) {
             $Info.Skipped = $blocker
@@ -551,7 +558,7 @@ function Show-StageStartWarning($Proc, [string]$Version = '') {
     if ($blocker) { Write-Log "  No start warning, the operator answers the stage questions in VL: $blocker." Yellow; return }
     $cfgNow = (Get-VlcSettingsState).Settings
     $text = "VL Connector answers the stage rotation questions of this scan itself (set by the administrator for this PC): the stage can start to turn within seconds."
-    if ($script:programPath) { $text += " Program: $([IO.Path]::GetFileName($script:programPath))" }
+    if (Get-RunProgram) { $text += " Program: $([IO.Path]::GetFileName((Get-RunProgram)))" }
     if (Show-VlcStageWarning $script:stageWarning $text ([int]$cfgNow.safety.stageWarningSec) ([bool]$cfgNow.safety.stageSound) @() 'The stage will rotate automatically - keep clear of the scanner') {
         Write-Log '  Start warning shown: VL Connector answers the stage questions of this scan.'
     }

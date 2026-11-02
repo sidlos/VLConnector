@@ -150,9 +150,9 @@ VL Connector evaluates controls on features and comparison points with a best-fi
 Automatically: open PolyWorks|Inspector (any project), then press **Add to PolyWorks** in the setup wizard or in
 the settings window, page **PolyWorks**. A ribbon tab **VL Connector** with the **Measure** button appears. Your
 PolyWorks visual layout is saved before (in `%LOCALAPPDATA%\VLConnector\polyworks-layout`); the wizard can undo it.
-If the PolyWorks ribbon has never been changed, PolyWorks does not let VL Connector add a tab: VL Connector then
-imports the macro and says so; add the tab once by hand (step 4 below, as a new tab **VL Connector**), and from then on
-**Add to PolyWorks** works. PolyWorks takes no own group on its built-in tabs such as Home, so the button is on a tab
+If the PolyWorks ribbon has never been changed, VL Connector cannot add its tab yet and says so. Then in PolyWorks open
+**File > Visual Layout > Customize > Customize...**, add any new group or tab, close with **OK** and press **Add to
+PolyWorks** again (the empty group or tab can be removed afterwards). PolyWorks takes no own group on its built-in tabs such as Home, so the button is on a tab
 of its own.
 
 By hand instead:

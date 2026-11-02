@@ -173,6 +173,14 @@ Describe 'machine settings of the administrator' {
     }
 }
 
+Describe 'Windows event log' {
+    It 'gets nothing from a copy that is not the installation the event source was registered for' {
+        # this test copy is never the registered installation (on a PC with VL Connector installed it is another
+        # folder; on CI the source is registered only later): its changes must not appear as changes of the PC
+        Write-VlcEventLog 'VL Connector unit test - must not be written' 1000 | Should Be $false
+    }
+}
+
 Describe 'Set-MachinePolicy.ps1' {
     It 'writes the policy only with administrator rights' {
         Reset-Files

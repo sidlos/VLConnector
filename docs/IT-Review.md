@@ -248,7 +248,7 @@ Replay finished) and `%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml` (t
 | `C:\Program Files\VLConnector\` (and `.old`) | The program, the interface DLL, the PolyWorks button files, `install-info.txt`, `machine.json` | installer; `machine.json` also by the administrator tool |
 | `C:\ProgramData\VLConnector\` | Only on PCs that had 1.0.0-rc10: the forwarders (administrator-only); after the removal of VL Connector an empty folder | installer, uninstaller |
 | `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\VL Connector\` | Start menu entries for all users | installer |
-| `HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\VL Connector` | The event source (the only registry key) | installer |
+| `HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\VL Connector` | The event source (the only registry key), with the value `VLConnectorInstallDir`: only that installation writes events, a copy elsewhere (e.g. a test copy) writes none | installer |
 | `%APPDATA%\VLConnector\settings.json` | The user's own settings | settings window, wizard |
 | `%LOCALAPPDATA%\VLConnector\` | `logs\` (30 days), agent `inbox\`, `outbox\` (with `failed\`), `pending.txt`, `runs\`, station work files, `polyworks-layout\` (backups of the PolyWorks visual layout made before *Add to PolyWorks*) | all parts |
 | `%TEMP%` | Short-lived exchange files between the macros and the scripts (launch, marker, status, cancel, results); during the removal a copy of `Uninstall.cmd`, which stays there | macros, launcher, uninstaller |

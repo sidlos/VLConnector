@@ -48,8 +48,13 @@ $verify = Invoke-Native $ps @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File
 Out-Check 'Install.cmd -Verify: files, permissions, interface DLL' ($verify.Code -eq 0) "`n$($verify.Output)"
 $parents = @(Get-VlcAclProblems $InstallDir -Parents)
 Out-Check 'the folders above can be changed only by administrators' (-not $parents.Count) ($parents -join '; ')
-$source = Test-Path -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\EventLog\Application\VL Connector'
+$sourceKey = 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\EventLog\Application\VL Connector'
+$source = Test-Path -LiteralPath $sourceKey
 Out-Check 'event source "VL Connector"' $source
+if ($source) {
+    $registered = [string](Get-ItemProperty -LiteralPath $sourceKey).VLConnectorInstallDir
+    Out-Check 'event source registered for this installation' ($registered -ieq $InstallDir.TrimEnd('\')) "registered: '$registered'"
+}
 $menu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'VL Connector'
 Out-Check 'Start menu for all users' ((Test-Path -LiteralPath (Join-Path $menu 'VL Connector.lnk')) -and (Test-Path -LiteralPath (Join-Path $menu 'Uninstall VL Connector.lnk')))
 

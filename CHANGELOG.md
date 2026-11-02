@@ -44,6 +44,9 @@ working through forwarders.
   agent*); started again while it runs, it opens the settings window.
 - **PolyWorks button:** *Add to PolyWorks* finds the ribbon in any language of PolyWorks; a ribbon nobody has changed
   yet (PolyWorks does not export it) gets a clear message with the one step to do by hand instead of an error.
+- **Event log:** only the installation the event source was registered for writes to it; a copy elsewhere (such as a
+  test copy on a PC where VL Connector is installed) cannot leave entries that look like changes of the PC. Events of the
+  agent's automatic answers name the program chosen in VL.
 - **Package folder:** only *Install.cmd* is there to open; the scripts and *Uninstall.cmd* are in `setup\` (Start menu >`n  Uninstall VL Connector). The uninstaller removes only a folder the installer made, never an unpacked package.
 - Documentation: Notes for IT rewritten (trust model, policy, safety, what security software sees, rights of
   the shared folder), Protocol, User guide, Acceptance checklist with safety checks and sign-off.

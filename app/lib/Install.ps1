@@ -464,8 +464,11 @@ function Remove-VlcStartupShortcuts([string]$AppDir, [string[]]$ProfileDirs = @(
     }
 }
 
-function Register-VlcEventSource {
+# The event source "VL Connector", with the folder of the installation that writes to it (Write-VlcEventLog: copies
+# elsewhere, such as test copies, write nothing). Only administrators can change the key.
+function Register-VlcEventSource([string]$InstallDir) {
     if (-not [Diagnostics.EventLog]::SourceExists('VL Connector')) { [Diagnostics.EventLog]::CreateEventSource('VL Connector', 'Application') }
+    Set-ItemProperty -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\EventLog\Application\VL Connector' -Name 'VLConnectorInstallDir' -Value ([IO.Path]::GetFullPath($InstallDir).TrimEnd('\')) -ErrorAction Stop
 }
 
 function Unregister-VlcEventSource {
@@ -687,7 +690,7 @@ function Install-VlcMachine {
     if ($installed) { & $Say "     The previous version ($installed) is kept in $Target.old." }
 
     & $Say '6/6  Machine settings, Start menu, older installation...'
-    if (-not $SkipAcl) { Register-VlcEventSource }
+    if (-not $SkipAcl) { Register-VlcEventSource $Target }
     foreach ($lib in 'Settings', 'PolyWorksSetup') { . (Join-Path $Target "app\lib\$lib.ps1") }
     $schema = Get-VlcSettingsSchema
     $legacy = $null

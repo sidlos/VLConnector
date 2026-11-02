@@ -411,9 +411,17 @@ function Write-VlcSettingsAudit([string]$Text) {
 }
 
 # Windows event log (Application, source "VL Connector", registered by the installer). Event ids: 1000 machine
-# settings changed, 1100 stage rotation confirmed automatically, 1101 automatic confirmation skipped. Returns
-# $false when the entry could not be written (source not registered); never throws.
+# settings changed, 1100 stage rotation confirmed automatically, 1101 automatic confirmation skipped. Only the
+# installation the source was registered for writes there (the installer notes its folder at the source): a copy
+# elsewhere - a test copy on a PC where VL Connector is installed - must not leave entries that look like changes
+# of this PC. Returns $false when nothing was written; never throws.
 function Write-VlcEventLog([string]$Text, [int]$EventId, [ValidateSet('Information', 'Warning', 'Error')] [string]$Type = 'Information') {
-    try { [Diagnostics.EventLog]::WriteEntry('VL Connector', $Text, $Type, $EventId); return $true }
+    try {
+        $key = Get-ItemProperty -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\EventLog\Application\VL Connector' -ErrorAction Stop
+        $registered = [string]$key.VLConnectorInstallDir
+        if (-not $registered -or -not [string]::Equals([IO.Path]::GetFullPath($registered).TrimEnd('\'), [IO.Path]::GetFullPath((Get-VlcPaths).InstallDir).TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) { return $false }
+        [Diagnostics.EventLog]::WriteEntry('VL Connector', $Text, $Type, $EventId)
+        return $true
+    }
     catch { return $false }
 }

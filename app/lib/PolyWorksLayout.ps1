@@ -9,8 +9,8 @@
 #   5. WINDOW VISUAL_LAYOUT LOAD                        loads it; the backup can be loaded back (Undo)
 # What PolyWorks 2026 allows (tried at the scanner on 2026-11-02): no group of one's own on a built-in tab such as
 # Home, not even by hand - a layout with one makes PolyWorks fall back to its standard ribbon. And a ribbon nobody
-# has changed yet is not written into the export at all, so there is nothing to add the tab to: then the macro is
-# imported and the user puts it on a tab by hand once; from then on Add works.
+# has changed yet is not written into the export at all, so there is nothing to add the tab to: then the user changes
+# the ribbon once by hand (any new group or tab is enough) and presses Add again.
 # The PolyWorks programming interface itself is in app\interop\PolyWorks.cs (VLConnector.Interop.VlcPolyWorks).
 # Dot-source this file; it needs lib\Settings.ps1, lib\PolyWorksSetup.ps1 and lib\Interop.ps1.
 
@@ -208,9 +208,9 @@ function Install-VlcPolyWorksButton([ValidateSet('Measure', 'Station')] [string]
     $xml = Read-ZipText $exported 'layout.xml'
     if (-not (Test-VlcRibbonInLayout $xml)) {
         foreach ($f in $exported, $buttons) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
-        throw ("PolyWorks|Inspector still has its standard ribbon, and VL Connector can add its tab only to a ribbon that was changed once. " +
-            "The macro '$macroName' is ready in PolyWorks: File > Visual Layout > Customize > Customize..., add a new tab 'VL Connector' and put the macro on it. " +
-            'From then on Add to PolyWorks renews the button by itself.')
+        throw ('PolyWorks|Inspector still has its standard ribbon, and VL Connector can add its tab only to a ribbon that was changed once. ' +
+            'In PolyWorks open File > Visual Layout > Customize > Customize..., add a new group or tab (any), close with OK, then press Add to PolyWorks again. ' +
+            'The empty group or tab can be removed afterwards.')
     }
     $bar = [regex]::Match($xml, '<CommandBar Class="CIMXtToolBar"[^>]*Title="Macros from VL Connector buttons[^"]*".*?</CommandBar>', 'Singleline')
     $ctl = [regex]::Match($bar.Value, '<Control Class="CIMXtControlButtonMacro"[^>]*resString="([^"]+)".*?</Control>', 'Singleline')

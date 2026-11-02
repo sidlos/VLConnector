@@ -58,6 +58,8 @@ Test-Step 'Install.cmd -Verify: files, permissions, interface DLL' ($code -eq 0)
 $acl = @(Get-VlcAclProblems $target -Recurse) + @(Get-VlcAclProblems $target -Parents)
 Test-Step 'only administrators can change the program folder' (-not $acl.Count) ($acl -join '; ')
 Test-Step 'event source "VL Connector"' ([Diagnostics.EventLog]::SourceExists('VL Connector'))
+$registered = (Get-ItemProperty -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\EventLog\Application\VL Connector' -ErrorAction SilentlyContinue).VLConnectorInstallDir
+Test-Step 'event source registered for this installation (copies elsewhere write nothing)' ($registered -eq $target) "registered: '$registered'"
 $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'VL Connector'; Id = 1000 } -ErrorAction SilentlyContinue)
 Test-Step 'policy change written to the event log (1000)' ($events.Count -ge 1)
 Test-Step 'policy: stage confirmation off' ((Get-Policy).vl.confirmStageMotion -eq $false)
