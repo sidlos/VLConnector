@@ -19,7 +19,7 @@ PolyWorks plug-in; no internet access, no telemetry.
 |---|---|---|
 | `app\VLConnector.ps1` | when a user opens it (Start menu; the installer offers the wizard) | Settings window and setup wizard (WPF). |
 | `app\Set-MachinePolicy.ps1` | only with administrator rights, from the *Change (administrator)* button (UAC prompt) | Small dialog that writes the machine policy (`machine.json`) and an Event Log entry. |
-| `app\Agent.ps1` | scenario B, scanner PC: at logon (only if the user switched it on) or from the Start menu | Notification-area agent: starts the launcher in watch mode, sends STL files to the shared folder, opens the user's reports. Its network work runs in `app\lib\AgentCycle.ps1`. |
+| `app\Agent.ps1` | scenario B, scanner PC: at logon (Startup shortcut "VL Connector", only if the user switched it on) or *Start now* in the settings window; started again while it runs, it opens the settings window | Notification-area agent: starts the launcher in watch mode, sends STL files to the shared folder, opens the user's reports. Its network work runs in `app\lib\AgentCycle.ps1`. |
 | `app\VLReplay.ps1` | started by the PolyWorks Measure macro or by the agent (`-Watch`) | Drives AI Replay in the VL Application (or follows a replay the operator started) and exports the STL. |
 | `app\polyworks\*.pwmacro` | inside PolyWorks, when the user presses the button | Evaluation, report, network station loop. |
 | `app\polyworks\*.ps1` | started by the macros | Settings for the macros (`Get-MacroContext`), the verdict and CSV (`Complete-Evaluation`), the station's file work (`Station-Step`). |
@@ -142,8 +142,14 @@ VL Connector answers a stage question only when **all** of these hold, checked a
 
 ![Warning window](images/stage-warning.png)
 
+The same warning window and sound come already **before AI Replay starts** (right after Measure, or when the
+agent sees an AI Replay started in VL), when these conditions hold at that moment: VL can ask for the first
+rotation seconds after the start, and the stage turns right after the answer.
+
 Every automatic answer is written to the Event Log, **event 1100** (user, PC, program, the question). A question
 VL Connector could have answered but did not, and why, is **event 1101** (warning); the operator answers it.
+A change of the policy is **event 1000**, with the value before and after (`vl.confirmStageMotion: false
+(default) -> true`, where "(default)" means the policy had not set it before).
 
 ## 5. PowerShell requirements
 
@@ -246,7 +252,7 @@ Replay finished) and `%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml` (t
 | `%APPDATA%\VLConnector\settings.json` | The user's own settings | settings window, wizard |
 | `%LOCALAPPDATA%\VLConnector\` | `logs\` (30 days), agent `inbox\`, `outbox\` (with `failed\`), `pending.txt`, `runs\`, station work files, `polyworks-layout\` (backups of the PolyWorks visual layout made before *Add to PolyWorks*) | all parts |
 | `%TEMP%` | Short-lived exchange files between the macros and the scripts (launch, marker, status, cancel, results); during the removal a copy of `Uninstall.cmd`, which stays there | macros, launcher, uninstaller |
-| `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector agent.lnk` | Only if the user switches on *Start the agent with Windows* | settings window |
+| `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector.lnk` | Only if the user switches on *Start with Windows* (page Network; up to the first builds of 1.0.0-rc11 named `VL Connector agent.lnk`, renamed when VL Connector starts) | settings window |
 | PolyWorks visual layout of the user | Only on *Add to PolyWorks*: a ribbon tab with the button macro; the previous layout is saved first (*Undo*) | settings window, wizard |
 | `Documents\VL Connector\` | Scans (STL) and, in scenario B, the received reports (marked as downloaded) | launcher, agent |
 | PolyWorks workspace of the part | Measured pieces (copies of the template), `Reports`/`Scans` folders. Templates are never modified. | macros |

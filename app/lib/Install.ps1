@@ -429,7 +429,8 @@ function New-VlcShortcut([string]$Path, [string]$Target, [string]$Arguments, [st
     $lnk.Save()
 }
 
-# The Start menu entries for all users of the PC: VL Connector (settings), VL Connector agent, Uninstall.
+# The Start menu entries for all users of the PC: VL Connector (the settings window; it also opens when the part in
+# the notification area is started again) and Uninstall.
 function Set-VlcStartMenu([string]$InstallDir, [string]$MenuRoot = [Environment]::GetFolderPath('CommonPrograms')) {
     $menu = Join-Path $MenuRoot 'VL Connector'
     Remove-VlcTree $menu
@@ -439,25 +440,27 @@ function Set-VlcStartMenu([string]$InstallDir, [string]$MenuRoot = [Environment]
     $icon = Join-Path $app 'assets\VLC_icon.ico'
     $run = '-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File'
     New-VlcShortcut (Join-Path $menu 'VL Connector.lnk') $ps "$run `"$app\VLConnector.ps1`"" $app $icon 'VL Connector for PolyWorks - settings'
-    New-VlcShortcut (Join-Path $menu 'VL Connector agent.lnk') $ps "$run `"$app\Agent.ps1`"" $app $icon 'VL Connector agent - exports the STL after AI Replay and opens the reports (network scenario, scanner PC)'
     # started outside the program folder: a process whose current folder it is would keep it from being deleted
     New-VlcShortcut (Join-Path $menu 'Uninstall VL Connector.lnk') (Join-Path $InstallDir 'Uninstall.cmd') '' $env:SystemRoot $icon 'Removes VL Connector for PolyWorks from this PC (administrator)'
     return $menu
 }
 
-# Startup shortcuts of the agent ("VL Connector agent.lnk") in the user profiles that start a script of the
-# folder: only such shortcut files are deleted. Returns the deleted files.
+# Startup shortcuts of the agent ("VL Connector.lnk", up to the first builds of 1.0.0-rc11 "VL Connector
+# agent.lnk") in the user profiles that start a script of the folder: only such shortcut files are deleted.
+# Returns the deleted files.
 function Remove-VlcStartupShortcuts([string]$AppDir, [string[]]$ProfileDirs = @(Get-VlcProfileDirs)) {
     $shell = New-Object -ComObject WScript.Shell
     $app = $AppDir.TrimEnd('\') + '\'
     foreach ($p in $ProfileDirs) {
-        $lnk = Join-Path $p 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector agent.lnk'
-        try {
-            $item = Get-Item -LiteralPath $lnk -Force -ErrorAction Stop
-            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
-            if ($shell.CreateShortcut($lnk).Arguments.IndexOf($app, [StringComparison]::OrdinalIgnoreCase) -ge 0) { [IO.File]::Delete($lnk); $lnk }
+        foreach ($name in 'VL Connector.lnk', 'VL Connector agent.lnk') {
+            $lnk = Join-Path $p "AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\$name"
+            try {
+                $item = Get-Item -LiteralPath $lnk -Force -ErrorAction Stop
+                if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+                if ($shell.CreateShortcut($lnk).Arguments.IndexOf($app, [StringComparison]::OrdinalIgnoreCase) -ge 0) { [IO.File]::Delete($lnk); $lnk }
+            }
+            catch { }
         }
-        catch { }
     }
 }
 
@@ -673,7 +676,7 @@ function Install-VlcMachine {
             return $result
         }
         $result.AgentSessions = @(Stop-VlcAgents @($Target, $LegacyDir))
-        if ($result.AgentSessions.Count) { & $Say '     Running agents were stopped for the update.' }
+        if ($result.AgentSessions.Count) { & $Say '     VL Connector in the notification area was stopped for the update.' }
         Invoke-VlcFolderSwap $stage $Target
     }
     catch {
@@ -744,7 +747,7 @@ function Uninstall-VlcMachine {
         & $Say "VL Connector is in use ($(@($busy | ForEach-Object { $_.Script } | Select-Object -Unique) -join ', ')). Close its windows, let running scans finish and try again." 'Yellow'
         return 1618
     }
-    if (@(Stop-VlcAgents @($dir, $LegacyDir)).Count) { & $Say 'Running agents were stopped.' }
+    if (@(Stop-VlcAgents @($dir, $LegacyDir)).Count) { & $Say 'VL Connector in the notification area was stopped.' }
     foreach ($f in @(Remove-VlcStartupShortcuts (Join-Path $dir 'app') $ProfileDirs)) { & $Say "Removed $f" }
     $menu = Join-Path $MenuRoot 'VL Connector'
     if (Test-Path -LiteralPath $menu) { Remove-VlcTree $menu; & $Say "Removed $menu" }

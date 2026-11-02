@@ -292,22 +292,23 @@ Describe 'Start menu and startup shortcuts' {
         $menu = Set-VlcStartMenu 'C:\Program Files\VLConnector' $menuRoot
         $names = [string[]]@(Get-ChildItem -LiteralPath $menu | ForEach-Object { $_.Name })
         [Array]::Sort($names, [StringComparer]::Ordinal)
-        $names -join ',' | Should Be 'Uninstall VL Connector.lnk,VL Connector agent.lnk,VL Connector.lnk'
+        $names -join ',' | Should Be 'Uninstall VL Connector.lnk,VL Connector.lnk'
         $shell = New-Object -ComObject WScript.Shell
         $shell.CreateShortcut((Join-Path $menu 'VL Connector.lnk')).Arguments | Should Match ([regex]::Escape('"C:\Program Files\VLConnector\app\VLConnector.ps1"'))
         $shell.CreateShortcut((Join-Path $menu 'Uninstall VL Connector.lnk')).WorkingDirectory | Should Be $env:SystemRoot
     }
-    It 'removes only the agent startup shortcuts of this installation' {
+    It 'removes only the agent startup shortcuts of this installation, under the old and the new name' {
         $profiles = Join-Path $TestDrive 'Users2'
-        foreach ($u in @(@('anna', 'C:\Program Files\VLConnector\app'), @('ben', 'D:\Other\app'))) {
+        foreach ($u in @(@('anna', 'C:\Program Files\VLConnector\app', 'VL Connector agent.lnk'), @('ben', 'D:\Other\app', 'VL Connector.lnk'),
+                @('carl', 'C:\Program Files\VLConnector\app', 'VL Connector.lnk'))) {
             $startup = Join-Path $profiles "$($u[0])\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup"
             New-Item -ItemType Directory -Force -Path $startup | Out-Null
-            New-VlcShortcut (Join-Path $startup 'VL Connector agent.lnk') 'powershell.exe' "-File `"$($u[1])\Agent.ps1`"" $u[1] 'x.ico' 'agent'
+            New-VlcShortcut (Join-Path $startup $u[2]) 'powershell.exe' "-File `"$($u[1])\Agent.ps1`"" $u[1] 'x.ico' 'agent'
         }
         $removed = @(Remove-VlcStartupShortcuts 'C:\Program Files\VLConnector\app' @(Get-ChildItem -LiteralPath $profiles | ForEach-Object { $_.FullName }))
-        $removed.Count | Should Be 1
-        $removed[0] | Should Match 'anna'
-        Test-Path -LiteralPath (Join-Path $profiles 'ben\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector agent.lnk') | Should Be $true
+        $removed.Count | Should Be 2
+        ($removed -join ',') | Should Match 'anna.*carl'
+        Test-Path -LiteralPath (Join-Path $profiles 'ben\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector.lnk') | Should Be $true
     }
 }
 
@@ -348,7 +349,7 @@ Describe 'installation, update and removal on temporary folders (no administrato
         $machine.policy.vl.confirmStageMotion | Should Be $false
         $machine.defaults.vl | Should Be $null
         ($lines -join "`n") | Should Match 'Not taken over .*vl\.confirmStageMotion'
-        @(Get-ChildItem -LiteralPath (Join-Path $menuRoot 'VL Connector')).Count | Should Be 3
+        @(Get-ChildItem -LiteralPath (Join-Path $menuRoot 'VL Connector')).Count | Should Be 2
     }
     It 'leaves only forwarders at the place of 1.0.0-rc10, without following its link' {
         (Get-VlcFolderKind $legacy).Kind | Should Be 'Forwarders'
@@ -392,11 +393,18 @@ Describe 'shortcuts of a user after an update' {
     $common = Join-Path $TestDrive 'CommonPrograms'
     New-Item -ItemType Directory -Force -Path $startup, (Join-Path $programs 'VL Connector'), (Join-Path $common 'VL Connector') | Out-Null
     New-VlcShortcut (Join-Path $startup 'VL Connector agent.lnk') 'powershell.exe' '-File "C:\ProgramData\VLConnector\app\Agent.ps1"' 'C:\ProgramData\VLConnector\app' 'x.ico' 'agent'
-    It 'points the agent start at this installation and removes the own Start menu folder of 1.0.0-rc10' {
+    It 'points the start with Windows at this installation under the name VL Connector and removes the own Start menu folder of 1.0.0-rc10' {
         @(Repair-VlcUserShortcuts $startup $programs $common).Count | Should Be 2
-        (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $startup 'VL Connector agent.lnk')).Arguments | Should Match ([regex]::Escape("`"$inst\app\Agent.ps1`""))
+        (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $startup 'VL Connector.lnk')).Arguments | Should Match ([regex]::Escape("`"$inst\app\Agent.ps1`""))
+        Test-Path -LiteralPath (Join-Path $startup 'VL Connector agent.lnk') | Should Be $false
         Test-Path -LiteralPath (Join-Path $programs 'VL Connector') | Should Be $false
+        Test-AgentAutostart $startup | Should Be $true
         @(Repair-VlcUserShortcuts $startup $programs $common).Count | Should Be 0
+    }
+    It 'leaves a VL Connector Startup shortcut alone that does not start an agent' {
+        New-VlcShortcut (Join-Path $startup 'VL Connector.lnk') 'notepad.exe' 'C:\notes.txt' 'C:\' 'x.ico' 'own'
+        @(Repair-VlcUserShortcuts $startup $programs $common).Count | Should Be 0
+        (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $startup 'VL Connector.lnk')).Arguments | Should Be 'C:\notes.txt'
     }
     It 'leaves the shortcuts alone in a development tree' {
         Remove-Item -LiteralPath (Join-Path $inst 'install-info.txt')

@@ -95,6 +95,14 @@ namespace FakeVlNative
         }
     }
 
+    // VL Connector's stage warning window, as the operator sees it.
+    public static class Warning
+    {
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string title);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+        public static bool Visible() { IntPtr w = FindWindow(null, "VL Connector - stage rotation"); return w != IntPtr.Zero && IsWindowVisible(w); }
+    }
+
     // A real Open / Save As dialog on its own STA thread.
     public class AsyncFileDialog
     {
@@ -164,6 +172,7 @@ namespace FakeVlNative
 $defaults = [ordered]@{
     startupSec          = 1.5     # until the start screen with the AI Replay button is ready
     startWithData       = $false  # open with scan data already loaded (export-only tests)
+    startMessage        = ''      # a message box right after the start, left open (a busy VL)
     highSpeedEnabled    = $true
     positions           = 2
     operatorMeasureSec  = 1.0     # simulated operator presses Measure after this delay
@@ -193,6 +202,10 @@ $fakevl = if ($json.PSObject.Properties['fakevl']) { $json.fakevl } else { $null
 $cfg = @{}
 foreach ($k in $defaults.Keys) { $cfg[$k] = $defaults[$k] }
 if ($fakevl) { foreach ($p in $fakevl.PSObject.Properties) { $cfg[$p.Name] = $p.Value } }
+# the FakeVL a scenario starts before the launcher (FAKEVL_PRESTART=1) takes the values of "prestart" on top
+if ($env:FAKEVL_PRESTART -eq '1' -and $fakevl -and $fakevl.PSObject.Properties['prestart']) {
+    foreach ($p in $fakevl.prestart.PSObject.Properties) { $cfg[$p.Name] = $p.Value }
+}
 if (-not $EventLog) { $EventLog = [IO.Path]::ChangeExtension($Scenario, '.events.log') }
 
 $vlAppData = Join-Path $env:APPDATA 'KEYENCE\VL-800 Series\VL Application'
@@ -329,7 +342,7 @@ function Set-StartScreen([string]$Why) {
 # --- AI Replay ---------------------------------------------------------------------------
 
 $script:replayButton.Add_Click({
-    Write-Event 'click:ai-replay'
+    Write-Event "click:ai-replay warning=$([int][FakeVlNative.Warning]::Visible())"
     $script:mode = New-Object Windows.Forms.Form
     $script:mode.Name = 'SelectReplayModeDialog'
     $script:mode.Text = 'AI Replay'
@@ -643,6 +656,7 @@ else {
         }
     }
 }
+if ($cfg.startMessage) { Invoke-After 0.3 { $script:startBox = Show-Box ([string]$cfg.startMessage) 0x40; Write-Event 'dialog:start-message' } }
 $timer.Start()
 [Windows.Forms.Application]::Run($script:main)
 Write-Event 'exit:end'

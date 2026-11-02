@@ -351,7 +351,8 @@ function Repair-VlcUserSettings {
 
 # Changes machine.json in the program folder (needs administrator rights): the policy (locked for all users) or the
 # machine defaults. Values are checked against the schema; machine-only keys go only into the policy. Every change
-# goes to the log and to the Windows event log. Returns the changes as text.
+# goes to the log and to the Windows event log. Returns the changes as text: "key: before -> after", where a value
+# this section did not set yet is the default it replaces, marked "(default)".
 function Set-VlcMachineSettings([ValidateSet('policy', 'defaults')] [string]$Section = 'policy', [hashtable]$Set = @{}, [string[]]$Remove = @(), [string]$RequestedBy = '') {
     $schema = Get-VlcSettingsSchema
     $values = @{}
@@ -363,6 +364,9 @@ function Set-VlcMachineSettings([ValidateSet('policy', 'defaults')] [string]$Sec
         $values[$key] = $r.Value
     }
     $paths = Get-VlcPaths
+    # below the policy: the product and machine defaults; below the machine defaults: the product defaults
+    $below = if ($Section -eq 'policy') { (Get-VlcSettingsState).Inherited } else { (ConvertTo-VlcFlatSettings (Read-JsonFile $paths.Defaults) $schema).Values }
+    $default = { param([string]$Key) if ($below.Contains($Key)) { "$(ConvertTo-Json $below[$Key] -Compress) (default)" } else { '(no default)' } }
     $changes = New-Object Collections.Generic.List[string]
     Use-VlcLock 'Global\VLConnector_MachineSettings' {
         $machine = Read-JsonFile $paths.MachineFile
@@ -373,11 +377,15 @@ function Set-VlcMachineSettings([ValidateSet('policy', 'defaults')] [string]$Sec
         $own = (ConvertTo-VlcFlatSettings $machine.$Section $schema).Values
         foreach ($key in $values.Keys) {
             if ($own.Contains($key) -and (Test-VlcSameValue $values[$key] $own[$key])) { continue }
-            $was = if ($own.Contains($key)) { ConvertTo-Json $own[$key] -Compress } else { 'not set' }
+            $was = if ($own.Contains($key)) { ConvertTo-Json $own[$key] -Compress } else { & $default $key }
             Set-VlcJsonValue $machine.$Section $key $values[$key]
-            $changes.Add("$key = $(ConvertTo-Json $values[$key] -Compress) (was $was)")
+            $changes.Add("$key`: $was -> $(ConvertTo-Json $values[$key] -Compress)")
         }
-        foreach ($key in $Remove) { if ($own.Contains($key)) { Remove-VlcJsonValue $machine.$Section $key; $changes.Add("$key removed") } }
+        foreach ($key in $Remove) {
+            if (-not $own.Contains($key)) { continue }
+            Remove-VlcJsonValue $machine.$Section $key
+            $changes.Add("$key`: $(ConvertTo-Json $own[$key] -Compress) -> $(& $default $key)")
+        }
         if ($changes.Count) { Write-JsonFile $paths.MachineFile $machine }
     }
     if ($changes.Count) {

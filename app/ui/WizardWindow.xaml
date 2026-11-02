@@ -41,7 +41,7 @@
                         <StackPanel Margin="0,0,26,0">
                             <TextBlock Text="Scanner PC - PolyWorks is on another PC" FontSize="15" FontWeight="SemiBold"/>
                             <TextBlock Style="{StaticResource CaptionText}" FontSize="13" Margin="0,4,0,0"
-                                       Text="Operators scan with AI Replay in VL as usual. The VL Connector agent exports the STL, sends it to a shared network folder and opens the PDF report when it comes back."/>
+                                       Text="Operators scan with AI Replay in VL as usual. VL Connector exports the STL in the background, sends it to a shared network folder and opens the PDF report when it comes back."/>
                         </StackPanel>
                     </RadioButton>
                     <RadioButton x:Name="ChooseStation" GroupName="Scenario" Style="{StaticResource ChoiceCard}">
@@ -184,7 +184,7 @@
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Start the VL Connector agent with Windows" Style="{StaticResource BodyText}"/>
+                                <TextBlock Text="Start VL Connector with Windows" Style="{StaticResource BodyText}"/>
                                 <TextBlock Text="It waits in the notification area. After each AI Replay it exports the STL, sends it to the station and opens the report." Style="{StaticResource CaptionText}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <CheckBox x:Name="AgentAutostart" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>

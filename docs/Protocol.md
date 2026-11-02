@@ -39,8 +39,9 @@ to the operator), `VLMESSAGE` (text of a VL dialog), `UPDATED`, `BEAT` (a counte
 **Cancel:** the caller creates `<marker>.cancel` (a stale one is deleted before the start); the launcher ends with
 `STATE=CANCELLED`.
 
-**Exit codes:** 0 OK, 1 error, 2 cancelled, 3 bad parameters or program not found, 4 another scan running
-(`STATE=BUSY`: a second VL window is never opened).
+**Exit codes:** 0 OK, 1 error, 2 cancelled, 3 bad parameters or program not found, 4 another scan running or
+VL busy (`STATE=BUSY`: a scan runs in VL or VL shows a message; a second VL window is never opened next to a busy
+VL, only next to VL windows that show earlier scans).
 
 **Program names:** the name of a .vld4 file without `.vld4` (only that ending is removed: `Part.A` stays
 `Part.A`), compared without regard to case; the configured program folders are searched first, then VL's recent

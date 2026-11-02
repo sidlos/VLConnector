@@ -57,7 +57,7 @@ try {
             else {
                 $answer = Show-Message ("Switch ON the automatic confirmation of the stage rotation for all users of this PC?`n`n" +
                     "When VL asks 'The stage will rotate. Continue?' or 'Return the stage to the origin?', VL Connector then answers OK itself. " +
-                    "A warning window and a sound appear each time, and every confirmation is written to the Windows event log.`n`n" +
+                    "A warning window and a sound appear when such a scan starts and again before each answer, and every confirmation is written to the Windows event log.`n`n" +
                     "VL Connector confirms only on tested VL versions and only while the PC is unlocked and used at its own screen, not over Remote Desktop.`n`n" +
                     "Switch it on only when the scanner is safeguarded: nothing may block the stage and nobody may reach into the scanner while it turns.") 'YesNo' 'Warning'
                 if ($answer -ne 'Yes') { exit 2 }
@@ -83,7 +83,9 @@ try {
         }
     }
     $changes = @(Set-VlcMachineSettings -Section policy -Set $set -RequestedBy $RequestedBy)
-    if ($changes.Count) { [void](Show-Message ("Changed for all users of this PC:`n`n" + ($changes -join "`n"))) }
+    $head = 'Changed for all users of this PC:'
+    if ($set.ContainsKey('vl.confirmStageMotion')) { $head = "The automatic confirmation of the stage rotation is now $(if ($set['vl.confirmStageMotion']) { 'ON' } else { 'OFF' }) for all users of this PC. Changed:" }
+    if ($changes.Count) { [void](Show-Message ("$head`n`n" + ($changes -join "`n"))) }
     else { [void](Show-Message 'Nothing changed: the setting already had this value.') }
     exit 0
 }

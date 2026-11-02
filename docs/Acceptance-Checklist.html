@@ -43,7 +43,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <ul>
 <li class="task">&#9744; <strong>Policy off (default):</strong> Measure with a part - VL&#39;s stage questions wait for the operator; VL Connector never answers them. The log shows no <code>Confirmed:</code> line.</li>
 <li class="task">&#9744; A user cannot switch it on: settings window &gt; Scanning shows <em>Off</em> without a switch; the template option <code>-ConfirmStageMotion On</code> stops the scan with a message.</li>
-<li class="task">&#9744; <strong>Policy on</strong> (<em>Change (administrator)</em>, Windows asks for administrator rights; Event Viewer shows event 1000 with the change): Measure - before each automatic OK the red warning window appears with a sound, without covering VL&#39;s question and without taking the keyboard focus; event 1100 per answer.</li>
+<li class="task">&#9744; <strong>Policy on</strong> (<em>Change (administrator)</em>, Windows asks for administrator rights; the message and event 1000 in Event Viewer show the change, e.g. <code>vl.confirmStageMotion: false (default) -&gt; true</code>): Measure - the red warning window and the sound come right after Measure, before AI Replay starts; again before each automatic OK, without covering VL&#39;s question and without taking the keyboard focus; event 1100 per answer.</li>
 <li class="task">&#9744; Policy on, screen locked (Windows+L) during the scan: VL Connector does not answer; event 1101 names the reason; after unlocking the operator answers.</li>
 <li class="task">&#9744; Policy switched off during a scan: the next question waits for the operator.</li>
 <li class="task">&#9744; Safety officer informed: who may switch the policy on, and that the stage then rotates without a person confirming it.</li>
@@ -60,7 +60,8 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <li class="task">&#9744; <strong>Measure</strong> again while the piece is open: starts from the template.</li>
 <li class="task">&#9744; <strong>Cancel</strong> in the progress window during the scan: the run stops with &quot;cancelled&quot;.</li>
 <li class="task">&#9744; Scanner disconnected: clear message &quot;The scanner is not connected&quot;, no hanging.</li>
-<li class="task">&#9744; VL busy (another AI Replay open in VL): clear message, no second VL window.</li>
+<li class="task">&#9744; <strong>Measure</strong> again while VL still shows the previous scan: a new VL window opens and scans; the old window stays as it was.</li>
+<li class="task">&#9744; VL busy (another AI Replay or a message open in VL): clear message, no second VL window.</li>
 <li class="task">&#9744; Optional: <em>VL window after the export</em> = Close / Save and close - VL closes only after the export.</li>
 <li class="task">&#9744; Optional: keep pieces <em>Only NOK</em> - an OK piece is removed, the PDF stays.</li>
 <li class="task">&#9744; A NOK part (or tightened tolerance) gives the verdict NOK; a control without a result gives NOK (<em>not measured</em>), never OK.</li>

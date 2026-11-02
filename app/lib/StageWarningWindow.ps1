@@ -4,7 +4,8 @@
   without ever taking the keyboard focus), plays the sound and reports when it is on screen. It is started as a
   file, not as script text, so an application control policy that trusts the program folder trusts it too.
   $Sync (synchronized hashtable): Request @{ Id; Text; Seconds; Sound; Avoid = left, top, right, bottom of VL's
-  question } in, Hwnd / Ready / Shown (id of the request on screen) / Error out, Quit to end.
+  question; Title = headline, '' for the default } in, Hwnd / Ready / Shown (id of the request on screen) / Error
+  out, Quit to end.
 #>
 param([Parameter(Mandatory = $true)] [hashtable]$Sync)
 
@@ -20,7 +21,7 @@ try {
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="44" Foreground="White" VerticalAlignment="Center" Margin="0,0,20,0"/>
             <StackPanel MaxWidth="600" VerticalAlignment="Center">
-                <TextBlock Text="The stage rotates - keep clear of the scanner" FontSize="22" FontWeight="SemiBold" Foreground="White"/>
+                <TextBlock Name="Headline" FontSize="22" FontWeight="SemiBold" Foreground="White"/>
                 <TextBlock Name="Detail" FontSize="14" Foreground="White" TextWrapping="Wrap" Margin="0,6,0,0"/>
             </StackPanel>
         </StackPanel>
@@ -35,13 +36,14 @@ try {
 
     $timer = New-Object System.Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromMilliseconds(40)
-    $timer.Tag = [pscustomobject]@{ Sync = $Sync; Window = $window; Detail = $window.FindName('Detail'); Player = $player }
+    $timer.Tag = [pscustomobject]@{ Sync = $Sync; Window = $window; Headline = $window.FindName('Headline'); Detail = $window.FindName('Detail'); Player = $player }
     $timer.Add_Tick({
         $t = $this.Tag
         $s = $t.Sync
         $request = $s.Request
         if ($request) {
             $s.Request = $null
+            $t.Headline.Text = if ($request.Title) { [string]$request.Title } else { 'The stage rotates - keep clear of the scanner' }
             $t.Detail.Text = $request.Text
             $content = $t.Window.Content
             $content.Measure((New-Object System.Windows.Size([double]::PositiveInfinity, [double]::PositiveInfinity)))

@@ -1,0 +1,6 @@
+{
+    "flavors": [ "en" ],
+    "prestartFakeVl": true,
+    "fakevl": { "prestart": { "startWithData": true } },
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "vlStarts": 2, "logIncludes": [ "The open VL windows show earlier scans", "opening a new VL window" ] }
+}

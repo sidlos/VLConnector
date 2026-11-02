@@ -3,12 +3,14 @@
   from outside (the PolyWorks Measure button or the VL Connector scan window) and hands the STL over.
 
   Steps:
-    1. finds a VL window on its start screen (AI Replay button), otherwise opens a new VL window,
+    1. finds a VL window on its start screen (AI Replay button), otherwise opens a new VL window (VL windows
+       that show earlier scans stay open; next to a VL that is busy the run ends with BUSY),
     2. clicks AI Replay, chooses the mode (HighSpeed / Standard, or lets the operator choose: Ask)
        and enters the .vld4 program,
     3. the operator works as usual (places the part, presses Measure); VL's stage rotation questions are
        answered by the operator, or by VL Connector with a warning window and a sound only when the
-       administrator's policy for this PC allows it (lib\StageWarning.ps1); "scanner not connected" ends
+       administrator's policy for this PC allows it (lib\StageWarning.ps1): the warning appears already
+       before AI Replay starts, and again at every question it answers; "scanner not connected" ends
        the run,
     4. when the part is finished, exports the STL via the menu File > Export > STL... (binary, no
        thinning) and checks it,
@@ -38,7 +40,7 @@
 
   Files next to the marker while the run is active: <marker>.status (current step, read by the callers)
   and <marker>.cancel (created by a caller to cancel the run).
-  Exit code: 0 OK, 1 error, 2 cancelled, 3 bad parameters / program not found, 4 already running.
+  Exit code: 0 OK, 1 error, 2 cancelled, 3 bad parameters / program not found, 4 already running or VL busy.
   Log: %LOCALAPPDATA%\VLConnector\logs\VLReplay_<date>.log
 #>
 using namespace VLConnector.Interop
@@ -364,22 +366,25 @@ function Get-DialogRule([string]$Text) {
 
 # --- VL window on its start screen -------------------------------------------------------
 
-# The VL window to start AI Replay in: one of this session, idle on its start screen. VL is started only when
-# none runs at all; a VL that is busy (the operator works in it, a message is open) is never joined by a second
-# VL window: after waiting 15 s for it, the run ends with BUSY (C44).
+# The VL window to start AI Replay in: one of this session, idle on its start screen (with -NewWindow never).
+# Otherwise a new VL window is opened, also next to VL windows that still show an earlier scan: the operator may
+# keep those open. A VL that is busy (a scan runs in it, it shows a message, the operator works in a window of it)
+# is never joined by a second VL window, which would compete with it for the scanner and the stage: VL Connector
+# waits up to 15 s for it, then the run ends with BUSY (C44).
 function Get-StartScreenVl {
-    if ($NewWindow) { Write-Log '-NewWindow is ignored: VL Connector never opens a second VL window.' Yellow }
-    $idle = {
-        foreach ($p in Get-VlProcesses) {
-            $state = Get-VlState $p.Id
-            if ($state.StartScreen -and $state.Idle -and [Vl]::IsWindowEnabled($state.Button)) { return $p }
+    if (@(Get-VlProcesses).Count) {
+        $choice = Wait-Until 15 {
+            $states = @(Get-VlProcesses | ForEach-Object { [pscustomobject]@{ Proc = $_; State = Get-VlState $_.Id } })
+            $start = @($states | Where-Object { $_.State.StartScreen -and $_.State.Idle -and [Vl]::IsWindowEnabled($_.State.Button) }) | Select-Object -First 1
+            if ($start -and -not $NewWindow) { return $start.Proc }
+            if (-not @($states | Where-Object { -not $_.State.Idle }).Count) { return 'new' }
+        } 500
+        if (-not $choice) {
+            $busy = @(Get-VlProcesses | Where-Object { -not (Get-VlState $_.Id).Idle } | ForEach-Object { $_.Id })
+            Exit-Run $EXIT_BUSY 'BUSY' "VL is busy (PID $($busy -join ', ')): a scan runs in it or it shows a message. Finish that in VL, then start the scan again."
         }
-    }
-    $running = @(Get-VlProcesses)
-    if ($running.Count) {
-        $p = Wait-Until 15 $idle 500
-        if ($p) { Write-Log "Using the open VL window (PID $($p.Id))."; return $p }
-        Exit-Run $EXIT_BUSY 'BUSY' "VL is open but not idle on its start screen (PID $(($running | ForEach-Object Id) -join ', ')). Finish or close the work in VL, then start the scan again."
+        if ($choice -ne 'new') { Write-Log "Using the open VL window (PID $($choice.Id))."; return $choice }
+        Write-Log 'The open VL windows show earlier scans and stay as they are.'
     }
     $exe = $script:vlExe
     if (-not (Test-Path -LiteralPath $exe)) { throw "VL is not installed: $exe" }
@@ -532,6 +537,27 @@ function Confirm-StageQuestion($Dialog, $Info, $Proc) {
     [void](Write-VlcEventLog "VL Connector answered a stage question of VL with OK (administrator's policy for this PC, warning window shown; $who)." 1100)
 }
 
+# Before AI Replay starts (the Measure button, or an AI Replay the operator starts while the agent follows VL):
+# when VL Connector is going to answer the stage questions of this scan itself, the warning window and the sound
+# come already now. VL can ask for the first rotation seconds after the start, before position 1, and the stage
+# turns right after the automatic answer. Nothing is shown when the operator answers the questions anyway.
+function Show-StageStartWarning($Proc, [string]$Version = '') {
+    $blocker = Get-VlcStageConfirmBlocker $Proc $Version
+    if ($blocker -eq 'off') { return }
+    if (-not $blocker -and -not ($script:stageWarning -and $script:stageWarning.Ready)) {
+        $script:stageWarning = Start-VlcStageWarning
+        if (-not $script:stageWarning.Ready) { $blocker = "the warning window cannot be shown ($($script:stageWarning.Error))" }
+    }
+    if ($blocker) { Write-Log "  No start warning, the operator answers the stage questions in VL: $blocker." Yellow; return }
+    $cfgNow = (Get-VlcSettingsState).Settings
+    $text = "VL Connector answers the stage rotation questions of this scan itself (set by the administrator for this PC): the stage can start to turn within seconds."
+    if ($script:programPath) { $text += " Program: $([IO.Path]::GetFileName($script:programPath))" }
+    if (Show-VlcStageWarning $script:stageWarning $text ([int]$cfgNow.safety.stageWarningSec) ([bool]$cfgNow.safety.stageSound) @() 'The stage will rotate automatically - keep clear of the scanner') {
+        Write-Log '  Start warning shown: VL Connector answers the stage questions of this scan.'
+    }
+    else { Write-Log '  The start warning window did not appear within 1 s.' Yellow }
+}
+
 # --- Waiting for the end of the part ------------------------------------------------------------
 
 # Done: data in VL, VL started applying the program (it rewrites the program list only after the
@@ -679,6 +705,10 @@ function Wait-WatchedReplay {
                 if (-not $modeDialogs.ContainsKey([string]$d.Handle)) {
                     $modeDialogs[[string]$d.Handle] = $true; $program = ''; $stamp = Get-FileStamp $templateList
                     Write-Log "AI Replay started in VL (PID $($p.Id)), waiting for the program."
+                    # the AI Replay of a Measure run (it holds the run mutex) got its start warning from that run
+                    $other = $null
+                    if ([System.Threading.Mutex]::TryOpenExisting('Local\VLConnector_VLReplay', [ref]$other)) { $other.Dispose() }
+                    else { Show-StageStartWarning $p }
                 }
             }
             $dialog = Find-ProgramDialog $p.Id
@@ -1074,6 +1104,7 @@ $what = if ($ExportOnly) { "export only $Program".Trim() } elseif ($Watch) { 'wa
 $flags = @($(if ($DryRun) { 'DRY RUN' }), $(if ($NewWindow) { 'new window' })) | Where-Object { $_ }
 $stagePolicy = if ($cfg.vl.confirmStageMotion) { 'by VL Connector (administrator)' } else { 'by the operator' }
 Write-Log ("=== VLReplay $(Get-VlcVersion) $what | account $env:USERNAME | mode $Mode | export immediately $ExportImmediately | stage questions $stagePolicy | after export $AfterExport " + ($flags -join ' | ')).Trim() Cyan
+$vlVersion = ''
 if (Test-Path -LiteralPath $script:vlExe) {
     $vlVersion = (Get-Item -LiteralPath $script:vlExe).VersionInfo.FileVersion
     if ($vlVersion -and $script:testedVersions -and $script:testedVersions -notcontains $vlVersion) {
@@ -1151,6 +1182,7 @@ try {
         Write-Log "AI Replay is running in VL (PID $($proc.Id))." Green
     }
     else {
+        if (-not $DryRun) { Show-StageStartWarning $null $vlVersion }
         Write-Status 'starting' 'Opening VL...'
         $proc = Get-StartScreenVl
         $started = Start-AiReplay $proc $script:programPath

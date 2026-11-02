@@ -10,7 +10,7 @@ press one button, scan the part in VL as usual, and get a clear OK/NOK verdict w
 
 | | Scenario A: PolyWorks on the scanner PC | Scenario B: PolyWorks on another PC |
 |---|---|---|
-| Start | **Measure** button in PolyWorks (the template knows its VL program) | AI Replay in VL as usual - the **VL Connector agent** waits in the background |
+| Start | **Measure** button in PolyWorks (the template knows its VL program) | AI Replay in VL as usual - **VL Connector** waits in the notification area |
 | Scan | AI Replay in VL, STL exported automatically | the same; the STL is named after the .vld4 program plus date and time |
 | Evaluation | in the same PolyWorks | a PolyWorks **station** takes the STL from a shared network folder and picks the template by the VL program |
 | Report | PDF and CSV, opened automatically | the PDF comes back and opens only on the PC that scanned the part |

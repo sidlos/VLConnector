@@ -70,13 +70,15 @@ function Get-VlcStatusItems($Settings, [string[]]$Warnings = @()) {
                 }
             }
             if (-not $station) {
-                $auto = Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('Startup')) 'VL Connector agent.lnk')
+                # the Startup shortcut "VL Connector" (up to the first builds of 1.0.0-rc11 "VL Connector agent")
+                $startup = [Environment]::GetFolderPath('Startup')
+                $auto = (Test-Path -LiteralPath (Join-Path $startup 'VL Connector.lnk')) -or (Test-Path -LiteralPath (Join-Path $startup 'VL Connector agent.lnk'))
                 $running = $false
                 $m = $null
                 if ([System.Threading.Mutex]::TryOpenExisting('Local\VLConnector_Agent', [ref]$m)) { $m.Dispose(); $running = $true }
-                if ($running -and $auto) { $items.Add((New-VlcStatusItem 'agent' 'Ok' 'Agent running' 'It exports the STL after each AI Replay and opens the report. Starts with Windows.')) }
-                elseif ($running) { $items.Add((New-VlcStatusItem 'agent' 'Warning' 'Agent running, but not started with Windows' 'Switch on "Start with Windows" on the Network page.' 'Set up')) }
-                else { $items.Add((New-VlcStatusItem 'agent' 'Warning' 'Agent not running' 'Without the agent no STL is exported after AI Replay. Start it on the Network page.' 'Set up')) }
+                if ($running -and $auto) { $items.Add((New-VlcStatusItem 'agent' 'Ok' 'VL Connector runs in the notification area' 'It exports the STL after each AI Replay and opens the report. Starts with Windows.')) }
+                elseif ($running) { $items.Add((New-VlcStatusItem 'agent' 'Warning' 'VL Connector runs in the notification area, but does not start with Windows' 'Switch on "Start with Windows" on the Network page.' 'Set up')) }
+                else { $items.Add((New-VlcStatusItem 'agent' 'Warning' 'VL Connector does not run in the notification area' 'Without it no STL is exported after AI Replay. Start it on the Network page.' 'Set up')) }
             }
         }
     }

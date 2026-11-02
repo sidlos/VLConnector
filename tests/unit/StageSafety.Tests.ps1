@@ -60,6 +60,14 @@ Describe 'who may answer a stage question' {
         (Get-Decision '9.9.9.9').Blocker | Should Be "VL version '9.9.9.9' is not one of the tested versions"
         (Get-Decision '').Blocker | Should Be "VL version '' is not one of the tested versions"
     }
+    It 'before VL runs (start warning): the same decision from the version of the VL Application' {
+        [IO.File]::WriteAllText($machine, '{ "policy": { "vl": { "confirmStageMotion": true } } }')
+        $code = ". '$root\app\lib\Settings.ps1'; . '$app\lib\Interop.ps1'; Import-VlcInterop; . '$app\lib\StageWarning.ps1'; " +
+            "'[' + (Get-VlcStageConfirmBlocker `$null '4.6.1.6002') + ']|[' + (Get-VlcSessionBlocker) + ']|[' + (Get-VlcStageConfirmBlocker `$null '9.9.9.9') + ']'"
+        $parts = (Invoke-Child $code).Text.Trim() -split '\|'
+        $parts[0] | Should Be $parts[1]
+        $parts[2] | Should Be "[VL version '9.9.9.9' is not one of the tested versions]"
+    }
     It 'stops at once when the policy is switched off' {
         [IO.File]::WriteAllText($machine, '{ "policy": { "vl": { "confirmStageMotion": false } } }')
         (Get-Decision '4.6.1.6002').Blocker | Should Be 'off'

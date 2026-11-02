@@ -99,11 +99,11 @@ function Update-WizardPage([string]$Page) {
             }
             if ($kind -ne 'Scanner' -and $script:tabAdded) { $lines.Add('VL Connector tab added to PolyWorks.') }
             if ($kind -ne 'Local') { $lines.Add("Shared folder: $($cfg.network.share)") }
-            if ($kind -eq 'Scanner') { $lines.Add($(if (Test-AgentAutostart) { 'The agent starts with Windows.' } else { 'The agent does not start with Windows (Start menu: VL Connector agent).' })) }
+            if ($kind -eq 'Scanner') { $lines.Add($(if (Test-AgentAutostart) { 'VL Connector starts with Windows (notification area).' } else { 'VL Connector does not start with Windows (settings window, page Network: Start now).' })) }
             $c.Summary.ItemsSource = $lines.ToArray()
             $c.NextText.Text = switch ($kind) {
                 'Local' { 'Next: open a part template in PolyWorks|Inspector, add the project property "VL program" (path to the .vld4) and press Measure on the VL Connector tab.' }
-                'Scanner' { 'Next: scan with AI Replay in VL as usual. The agent exports the STL, sends it to the PolyWorks station and opens the report.' }
+                'Scanner' { 'Next: scan with AI Replay in VL as usual. VL Connector exports the STL in the background, sends it to the PolyWorks station and opens the report.' }
                 'Station' { 'Next: fill the Measurement Programs List, open a PolyWorks|Inspector used only for the station and press VL Station on the VL Connector tab.' }
             }
         }

@@ -1,9 +1,10 @@
 # The stage safety of VL Connector (docs\IT-Review). Only when the administrator's policy for this PC allows it,
 # VL Connector answers VL's stage rotation questions itself; before every such answer a warning window (on top of
 # all windows, never taking the keyboard focus) and a sound appear, and OK is pressed only after Windows reports
-# the window on screen. Nobody must be away from the PC for it: the PC must be unlocked and used at its own
-# screen, not over Remote Desktop. Dot-source this file; it needs lib\Settings.ps1 and lib\Interop.ps1 (after
-# Import-VlcInterop).
+# the window on screen. The same warning comes already before AI Replay starts, as VL can ask for the first
+# rotation seconds after the start. Nobody must be away from the PC for it: the PC must be unlocked and used at
+# its own screen, not over Remote Desktop. Dot-source this file; it needs lib\Settings.ps1 and lib\Interop.ps1
+# (after Import-VlcInterop).
 
 $script:StageWarningWindowScript = Join-Path $PSScriptRoot 'StageWarningWindow.ps1'
 
@@ -36,12 +37,13 @@ function Start-VlcStageWarning {
 }
 
 # Shows the warning for $Seconds, with the sound when $Sound, away from VL's question ($Avoid: its window
-# rectangle). Returns $true once Windows reports the window visible, $false when that does not happen within 1 s.
-function Show-VlcStageWarning($Warning, [string]$Text, [int]$Seconds, [bool]$Sound, [int[]]$Avoid = @()) {
+# rectangle), under the headline $Title (default: the stage rotates). Returns $true once Windows reports the
+# window visible, $false when that does not happen within 1 s.
+function Show-VlcStageWarning($Warning, [string]$Text, [int]$Seconds, [bool]$Sound, [int[]]$Avoid = @(), [string]$Title = '') {
     if (-not $Warning -or -not $Warning.Ready -or $Warning.Async.IsCompleted) { return $false }
     $Warning.Next = $Warning.Next + 1
     $id = $Warning.Next
-    $Warning.Sync.Request = @{ Id = $id; Text = $Text; Seconds = $Seconds; Sound = $Sound; Avoid = $Avoid }
+    $Warning.Sync.Request = @{ Id = $id; Text = $Text; Seconds = $Seconds; Sound = $Sound; Avoid = $Avoid; Title = $Title }
     $deadline = (Get-Date).AddSeconds(1)
     do {
         if ($Warning.Sync.Shown -eq $id -and [VLConnector.Interop.Vl]::IsWindowVisible($Warning.Sync.Hwnd)) { return $true }
@@ -57,16 +59,18 @@ function Stop-VlcStageWarning($Warning) {
     try { $Warning.PowerShell.Dispose(); $Warning.Runspace.Dispose() } catch { }
 }
 
-# Why VL Connector must not answer a stage question of VL ($Proc: the VL process) itself now; '' = it may, 'off'
-# = the administrator's policy does not allow it (the normal case). The policy is read again for every question,
-# so switching it off applies at once; VL must be a tested version (the questions depend on the VL build), and
-# somebody must be at this PC (Get-VlcSessionBlocker).
-function Get-VlcStageConfirmBlocker($Proc) {
+# Why VL Connector must not answer a stage question of VL ($Proc: the VL process; before VL runs, $Version of
+# the VL Application instead) itself now; '' = it may, 'off' = the administrator's policy does not allow it (the
+# normal case). The policy is read again for every question, so switching it off applies at once; VL must be a
+# tested version (the questions depend on the VL build), and somebody must be at this PC (Get-VlcSessionBlocker).
+function Get-VlcStageConfirmBlocker($Proc, [string]$Version = '') {
     $cfgNow = (Get-VlcSettingsState).Settings
     if (-not $cfgNow.vl.confirmStageMotion) { return 'off' }
-    $version = ''
-    try { $version = [string]$Proc.MainModule.FileVersionInfo.FileVersion } catch { }
-    if (-not $version -or @($cfgNow.vl.testedVersions) -notcontains $version) { return "VL version '$version' is not one of the tested versions" }
+    if ($Proc) {
+        $Version = ''
+        try { $Version = [string]$Proc.MainModule.FileVersionInfo.FileVersion } catch { }
+    }
+    if (-not $Version -or @($cfgNow.vl.testedVersions) -notcontains $Version) { return "VL version '$Version' is not one of the tested versions" }
     return Get-VlcSessionBlocker
 }
 

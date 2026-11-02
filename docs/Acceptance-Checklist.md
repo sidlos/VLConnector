@@ -26,9 +26,10 @@ AI Replay program. Tick each line; note deviations.
       never answers them. The log shows no `Confirmed:` line.
 - [ ] A user cannot switch it on: settings window > Scanning shows *Off* without a switch; the template option
       `-ConfirmStageMotion On` stops the scan with a message.
-- [ ] **Policy on** (*Change (administrator)*, Windows asks for administrator rights; Event Viewer shows event
-      1000 with the change): Measure - before each automatic OK the red warning window appears with a sound,
-      without covering VL's question and without taking the keyboard focus; event 1100 per answer.
+- [ ] **Policy on** (*Change (administrator)*, Windows asks for administrator rights; the message and event 1000
+      in Event Viewer show the change, e.g. `vl.confirmStageMotion: false (default) -> true`): Measure - the red
+      warning window and the sound come right after Measure, before AI Replay starts; again before each automatic
+      OK, without covering VL's question and without taking the keyboard focus; event 1100 per answer.
 - [ ] Policy on, screen locked (Windows+L) during the scan: VL Connector does not answer; event 1101 names the
       reason; after unlocking the operator answers.
 - [ ] Policy switched off during a scan: the next question waits for the operator.
@@ -49,7 +50,9 @@ AI Replay program. Tick each line; note deviations.
 - [ ] **Measure** again while the piece is open: starts from the template.
 - [ ] **Cancel** in the progress window during the scan: the run stops with "cancelled".
 - [ ] Scanner disconnected: clear message "The scanner is not connected", no hanging.
-- [ ] VL busy (another AI Replay open in VL): clear message, no second VL window.
+- [ ] **Measure** again while VL still shows the previous scan: a new VL window opens and scans; the old window
+      stays as it was.
+- [ ] VL busy (another AI Replay or a message open in VL): clear message, no second VL window.
 - [ ] Optional: *VL window after the export* = Close / Save and close - VL closes only after the export.
 - [ ] Optional: keep pieces *Only NOK* - an OK piece is removed, the PDF stays.
 - [ ] A NOK part (or tightened tolerance) gives the verdict NOK; a control without a result gives NOK

@@ -1,4 +1,5 @@
 {
     "flavors": [ "en" ],
-    "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator", "warningVisibleOnAnswer": false }
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "neverConfirmed": true, "stageAnsweredBy": "operator", "warningVisibleOnAnswer": false,
+                "eventsInclude": [ "click:ai-replay warning=0" ], "logExcludes": [ "Start warning", "No start warning" ] }
 }

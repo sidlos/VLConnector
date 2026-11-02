@@ -1,0 +1,8 @@
+{
+    "prestartFakeVl": true,
+    "launcher": { "watch": true, "confirmStageMotion": true },
+    "fakevl": { "operatorStartSec": 3, "operatorModeSec": 3, "operatorMode": "Standard", "rotateOperatorOkSec": 0 },
+    "flavors": [ "en" ],
+    "expect": { "state": "OK", "exitCode": 0, "stl": true, "stageAnsweredBy": "launcher", "warningVisibleOnAnswer": true,
+                "logIncludes": [ "Start warning shown", "Confirmed: The stage will rotate" ] }
+}

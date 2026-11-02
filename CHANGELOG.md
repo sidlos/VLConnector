@@ -21,22 +21,27 @@ working through forwarders.
   an administrator may set; values checked against a schema; the settings window and the wizard save only real
   changes; changes are logged, machine changes also in the Event Log. *Change (administrator)* button.
 - **Stage rotation:** only by the machine policy, only VL's two exact questions on a tested VL version, only at
-  an unlocked console (no remote desktop), and only after a red warning window and a sound are on screen; every
-  automatic answer is in the Event Log. The template's values reach the launcher in a launch file, never on the
-  command line.
+  an unlocked console (no remote desktop), and only after a red warning window and a sound are on screen; the
+  same warning comes already before AI Replay starts; every automatic answer is in the Event Log, a policy
+  change with its value before and after. The template's values reach the launcher in a launch file, never on
+  the command line.
 - **Verdict:** computed fail-closed in tested PowerShell: OK only for PolyWorks' documented results inside the
   tolerance; not measured or unknown results are NOK; no verdict after a failed alignment or measurement or for
   a replaced STL (checked by its SHA-256). CSV as UTF-8 with BOM, protected against spreadsheet formulas.
 - **Launcher:** language mode checked first; heartbeat to the Measure macro ("could not start", "stopped
   unexpectedly"); only expected dialogs (the STL Save As dialog is no longer taken for the program); program
-  names exact (`Part.A`); no second VL window; export retries with a new name; after-export errors no longer
-  turn an OK into an error; full path of `powershell.exe` everywhere.
+  names exact (`Part.A`); no second VL window next to a VL that is busy (a new one only next to VL windows that
+  show earlier scans); export retries with a new name; after-export errors no longer turn an OK into an error;
+  full path of `powershell.exe` everywhere.
 - **Network:** durable inbox and a single writer of the outbox; five send attempts, then set aside with a
   notification; reports wait for their complete PDF; a station never loses a claimed job and never overwrites
   an OK result; stale jobs are reported; the Measurement Programs List is validated; liveness by a heartbeat
   counter on the scanner PC's own clock; *station paused*; NOK keeps the tray red until it is seen.
 - **Trust without a personal signature:** releases built by GitHub Actions from a tag with `SHA256SUMS.txt` and
   an optional build attestation; `tools\Sign-Package.ps1` for IT replaces `Sign-Scripts.ps1`.
+- **Names and windows:** the Start menu has only *VL Connector* (the settings window) and *Uninstall VL Connector*;
+  the part in the notification area is shown as *VL Connector* (the Startup shortcut too, renamed from *VL Connector
+  agent*); started again while it runs, it opens the settings window.
 - Documentation: Notes for IT rewritten (trust model, policy, safety, what security software sees, rights of
   the shared folder), Protocol, User guide, Acceptance checklist with safety checks and sign-off.
 

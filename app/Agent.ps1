@@ -9,8 +9,10 @@
     3. opens the PDF report when the station has evaluated the scan (only scans made on this PC).
   A NOK result keeps the tray icon red until it is looked at. Problems that last (the watcher keeps failing,
   the settings cannot be read) show an orange icon and the reason in the menu.
-  Start: Start menu "VL Connector agent", or at Windows logon (settings window, page Network).
-  Only one agent runs per user. Agent.ps1 -Stop ends the running agent (used by the installer).
+  Users see it as "VL Connector" in the notification area. Start: at Windows logon (the Startup shortcut
+  "VL Connector"; settings window, page Network), or Start now on that page.
+  Only one agent runs per user: started again while it runs (e.g. from a shortcut), it opens the settings window.
+  Agent.ps1 -Stop ends the running agent (used by the installer).
 #>
 param([switch]$Stop)
 
@@ -32,7 +34,12 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $script:agentMutex = New-Object System.Threading.Mutex($false, 'Local\VLConnector_Agent')
 $owned = $false
 try { $owned = $script:agentMutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
-if (-not $owned) { exit 0 }
+if (-not $owned) {
+    # it runs already: whoever started it again wants to see VL Connector
+    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    Start-Process -FilePath $ps -ArgumentList '-NoProfile', '-STA', '-ExecutionPolicy', 'RemoteSigned', '-WindowStyle', 'Hidden', '-File', "`"$(Join-Path $PSScriptRoot 'VLConnector.ps1')`"" -WindowStyle Hidden
+    exit 0
+}
 
 $script:stopEvent = New-Object System.Threading.EventWaitHandle($false, 'AutoReset', 'Local\VLConnector_AgentStop')
 [void](Initialize-VlcLog 'Agent')
@@ -83,7 +90,7 @@ $script:iconNok = New-BadgeIcon $script:iconNormal ([System.Drawing.Color]::From
 $script:iconProblem = New-BadgeIcon $script:iconNormal ([System.Drawing.Color]::FromArgb(230, 130, 0))
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray.Icon = $script:iconNormal
-$tray.Text = 'VL Connector agent'
+$tray.Text = 'VL Connector'
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $itemStatus = $menu.Items.Add('Waiting for AI Replay in VL')
 $itemStatus.Enabled = $false

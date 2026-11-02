@@ -123,7 +123,7 @@ function Update-ProgramsSummary([string]$Share) {
 }
 
 function Update-AgentStatus {
-    $script:sc.AgentStatus.Text = if (Test-AgentRunning) { 'The agent is running.' } else { 'The agent is not running.' }
+    $script:sc.AgentStatus.Text = if (Test-AgentRunning) { 'VL Connector runs in the notification area.' } else { 'VL Connector does not run in the notification area.' }
 }
 
 function Invoke-StatusAction([string]$Id) {
@@ -278,12 +278,12 @@ function Show-SettingsWindow {
         }
     })
     $c.AutoOpenReports.Add_Checked({ Save-SettingValue 'network.autoOpenReports' $true }); $c.AutoOpenReports.Add_Unchecked({ Save-SettingValue 'network.autoOpenReports' $false })
-    $c.AgentAutostart.Add_Checked({ try { Set-AgentAutostart $true; Show-SettingsToast 'The agent starts with Windows' } catch { Show-SettingsToast "Not saved: $($_.Exception.Message)" } })
-    $c.AgentAutostart.Add_Unchecked({ try { Set-AgentAutostart $false; Show-SettingsToast 'The agent no longer starts with Windows' } catch { Show-SettingsToast "Not saved: $($_.Exception.Message)" } })
+    $c.AgentAutostart.Add_Checked({ try { Set-AgentAutostart $true; Show-SettingsToast 'VL Connector starts with Windows' } catch { Show-SettingsToast "Not saved: $($_.Exception.Message)" } })
+    $c.AgentAutostart.Add_Unchecked({ try { Set-AgentAutostart $false; Show-SettingsToast 'VL Connector no longer starts with Windows' } catch { Show-SettingsToast "Not saved: $($_.Exception.Message)" } })
     $c.StartAgent.Add_Click({
-        if (Test-AgentRunning) { Show-SettingsToast 'The agent is already running'; return }
+        if (Test-AgentRunning) { Show-SettingsToast 'VL Connector runs in the notification area already'; return }
         Start-VlcAgent
-        Show-SettingsToast 'Agent started'
+        Show-SettingsToast 'VL Connector started in the notification area'
         $t = New-Object System.Windows.Threading.DispatcherTimer
         $t.Interval = [TimeSpan]::FromSeconds(3)
         $t.Add_Tick({ $this.Stop(); Update-AgentStatus })

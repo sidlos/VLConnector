@@ -154,8 +154,10 @@ Describe 'saving user settings' {
 Describe 'machine settings of the administrator' {
     It 'writes the policy and the machine defaults, machine-only keys only into the policy' {
         Reset-Files
-        @(Set-VlcMachineSettings -Section policy -Set @{ 'vl.confirmStageMotion' = $true; 'safety.stageWarningSec' = 6 } -RequestedBy 'operator').Count | Should Be 2
-        @(Set-VlcMachineSettings -Section defaults -Set @{ 'vl.mode' = 'Standard' }).Count | Should Be 1
+        $policy = @(Set-VlcMachineSettings -Section policy -Set @{ 'vl.confirmStageMotion' = $true; 'safety.stageWarningSec' = 6 } -RequestedBy 'operator')
+        # before -> after; a value the policy did not set yet is the default it replaces
+        ($policy | Sort-Object) -join '|' | Should Be 'safety.stageWarningSec: 4 (default) -> 6|vl.confirmStageMotion: false (default) -> true'
+        @(Set-VlcMachineSettings -Section defaults -Set @{ 'vl.mode' = 'Standard' }) | Should Be 'vl.mode: "HighSpeed" (default) -> "Standard"'
         { Set-VlcMachineSettings -Section defaults -Set @{ 'vl.confirmStageMotion' = $true } } | Should Throw 'only be set in the policy'
         { Set-VlcMachineSettings -Section policy -Set @{ 'vl.confirmStageMotion' = 'yes' } } | Should Throw 'must be true or false'
         $s = Get-VlcSettingsState
@@ -164,9 +166,10 @@ Describe 'machine settings of the administrator' {
         $s.Settings.vl.mode | Should Be 'Standard'
         ($s.Locked -join ',') | Should Be 'vl.confirmStageMotion,safety.stageWarningSec'
         @(Set-VlcMachineSettings -Section policy -Set @{ 'vl.confirmStageMotion' = $true }).Count | Should Be 0
-        @(Set-VlcMachineSettings -Section policy -Remove 'vl.confirmStageMotion').Count | Should Be 1
+        @(Set-VlcMachineSettings -Section policy -Set @{ 'safety.stageWarningSec' = 8 }) | Should Be 'safety.stageWarningSec: 6 -> 8'
+        @(Set-VlcMachineSettings -Section policy -Remove 'vl.confirmStageMotion') | Should Be 'vl.confirmStageMotion: true -> false (default)'
         (Read-VlcSettings).vl.confirmStageMotion | Should Be $false
-        Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA "VLConnector\logs\Settings_$(Get-Date -Format yyyyMMdd).log") -Raw | Should Match 'machine policy for .* changed by .* \(requested in the session of operator\): .*vl.confirmStageMotion = true \(was not set\)'
+        Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA "VLConnector\logs\Settings_$(Get-Date -Format yyyyMMdd).log") -Raw | Should Match 'machine policy for .* changed by .* \(requested in the session of operator\): .*vl.confirmStageMotion: false \(default\) -> true'
     }
 }
 
@@ -181,6 +184,8 @@ Describe 'Set-MachinePolicy.ps1' {
         if ($elevated) {
             $LASTEXITCODE | Should Be 0
             (Read-VlcSettings).vl.confirmStageMotion | Should Be $true
+            $out | Should Match 'stage rotation is now ON for all users of this PC'
+            $out | Should Match 'vl.confirmStageMotion: false \(default\) -> true'
         }
         else {
             $LASTEXITCODE | Should Be 5

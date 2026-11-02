@@ -14,7 +14,7 @@ template, a color map, the **OK** or **NOK** verdict, a PDF report in PolyWorks'
 3. [The settings window](#3-the-settings-window)
 4. [Part templates in PolyWorks](#4-part-templates-in-polyworks)
 5. [Scenario A: the Measure button](#5-scenario-a-the-measure-button)
-6. [Scenario B: network folder, station and agent](#6-scenario-b-network-folder-station-and-agent)
+6. [Scenario B: network folder and station](#6-scenario-b-network-folder-and-station)
 7. [Options per part](#7-options-per-part)
 8. [Troubleshooting](#8-troubleshooting)
 9. [Support](#9-support)
@@ -26,7 +26,7 @@ template, a color map, the **OK** or **NOK** verdict, a PDF report in PolyWorks'
 goes straight to PolyWorks, which evaluates it and shows the verdict and the report.
 
 **B - PolyWorks on another PC.** The scanner PC has only VL and VL Connector. The operator scans with AI
-Replay in VL as usual; the VL Connector **agent** in the background exports the STL and sends it to a shared
+Replay in VL as usual; **VL Connector** waits in the notification area, exports the STL and sends it to a shared
 network folder. A **PolyWorks station** evaluates it with the template of the VL program, and the PDF report
 comes back and opens on the scanner PC - only the reports of scans made on that PC.
 
@@ -43,13 +43,13 @@ is not a PolyWorks plug-in).
 3. The installer checks every file against its manifest and shows the **package fingerprint**. Compare it with
    the fingerprint published with the package, then confirm. Windows asks for administrator rights.
 4. It installs to `C:\Program Files\VLConnector`, which only administrators can change, with the PolyWorks
-   button files and the Start menu entries **VL Connector** (settings), **VL Connector agent** and **Uninstall
+   button files and the Start menu entries **VL Connector** (the settings window) and **Uninstall
    VL Connector** for all users of the PC. IT can install it silently and set the machine settings at the same
    time (see the Notes for IT).
 5. At the end it offers the **setup wizard** (also later: settings window > Setup > *Setup wizard*). The wizard
    asks for the scenario and the main options, **adds the VL Connector tab with the
    Measure or Station button to PolyWorks** (open PolyWorks|Inspector first; your PolyWorks layout is saved
-   before and the wizard can undo it) and, for the network scenario, sets the shared folder and the agent.
+   before and the wizard can undo it) and, for the network scenario, sets the shared folder and the start with Windows.
 
 **Update:** run Install.cmd of the new version. Settings and the PolyWorks buttons stay; the previous version is
 kept in `C:\Program Files\VLConnector.old`. If a VL Connector window or a scan is still running, the installer
@@ -73,7 +73,7 @@ of this PC"); a note at the top says so.
 | **Setup** | Scenario A or B; in scenario B whether this PC is the scanner PC or the PolyWorks station. The status list checks this PC and offers the next step (for example *Locate* when the VL Application is not found). **Setup wizard** runs the guided setup again. |
 | **Scanning** | AI Replay mode (High speed, Standard, or let the operator choose in VL), export right after the scan, the automatic confirmation of the stage rotation (shown; changed only by an administrator), what happens to the VL window after the export, where VL programs are. |
 | **PolyWorks** | Which measured pieces to keep, opening the PDF, the Measure (or Station) button. |
-| **Network** | The shared folder (scenario B), opening reports automatically, the agent (start with Windows), the **Measurement Programs List**. |
+| **Network** | The shared folder (scenario B), opening reports automatically, VL Connector in the notification area (start with Windows), the **Measurement Programs List**. |
 | **Diagnostics** | Log folder, a support ZIP, versions. |
 
 ### Scanning options in detail
@@ -99,9 +99,12 @@ Normally **the operator answers** in VL. An administrator can decide, for all us
 Connector answers these two questions with OK itself (settings window > Scanning > **Change
 (administrator)**, or when IT installs it). It cannot be switched on by a user, per part or per template.
 
-When it is on, every automatic answer is announced: a **red warning window** appears at the top of the screen
-(it never takes the keyboard focus and does not cover VL's question) with a sound, and only then VL Connector
-presses OK. Every automatic answer is written to the Windows event log.
+When it is on, the scan is announced before AI Replay starts: right after **Measure** (or when you start AI
+Replay in VL while VL Connector follows the scans in the notification area) a **red warning window** appears at the top of the screen with a
+sound, because VL can ask for the first rotation a few seconds later. Every automatic answer is announced the
+same way again: the warning window (it never takes the keyboard focus and does not cover VL's question) and the
+sound come first, and only then VL Connector presses OK. Every automatic answer is written to the Windows event
+log.
 
 ![Warning window](images/stage-warning.png)
 
@@ -131,7 +134,7 @@ so pressing Measure in an open piece starts the next part from the template agai
 **Report:** the PDF uses PolyWorks' standard report layout: the table of all controls with a snapshot, then top
 and front views of the color map. The CSV (opens in Excel) has one line per control with nominal, measured,
 deviation, tolerances and result, and the verdict in its last line; its header names the STL and its SHA-256.
-PolyWorks shows the verdict after the evaluation (scenario A), the agent in its notification (scenario B).
+PolyWorks shows the verdict after the evaluation (scenario A), VL Connector in its notification (scenario B).
 
 **Verdict rules.** The verdict is **OK** only when every control has one of PolyWorks' results inside the
 tolerance (*Within ... safe zone*, or *Within ... warning zone*, shown as OK with a warning). It is **NOK** when a
@@ -172,10 +175,10 @@ The button only calls the installed macro, so updates of VL Connector need no ne
 **Keep measured pieces** (page PolyWorks): *Every piece*, *Only NOK pieces* or *None* - the PDF and CSV are
 always kept. Pieces that are not kept are removed from the workspace after the report is created.
 
-## 6. Scenario B: network folder, station and agent
+## 6. Scenario B: network folder and station
 
 The operator on the scanner PC works **in VL as usual**: AI Replay, choose the program (.vld4) in VL, scan.
-The **VL Connector agent** waits in the background and does the rest: after the last position it exports the
+**VL Connector** waits in the notification area and does the rest: after the last position it exports the
 STL (named `<program>_<date>_<time>.stl`), sends it to a shared folder, and opens the PDF report when the
 PolyWorks station has evaluated it.
 
@@ -209,16 +212,16 @@ The Setup page names every line that cannot be used (missing values, `=` or quot
 then neither line is used). Without its first line `Program;Workspace;Template` the list is not usable at all,
 and the station pauses until it is corrected.
 
-### The agent (scanner PC)
+### VL Connector in the notification area (scanner PC)
 
-On the scanner PC set the role **Scanner PC** (page Setup). On page **Network**, switch on **Start the
-agent with Windows** and press **Start now** once. The agent shows the VL Connector icon in the notification
-area; its menu shows the state (waiting for AI Replay, station online or offline), opens the last report or
-the reports folder, and can pause or end the agent.
+On the scanner PC set the role **Scanner PC** (page Setup). On page **Network**, switch on **Start with
+Windows** and press **Start now** once. VL Connector shows its icon in the notification area; its menu shows
+the state (waiting for AI Replay, station online or offline), opens the last report, the reports folder or the
+settings window, and can pause or end it. Starting **VL Connector** from the Start menu opens the settings window.
 
 ![Network page](images/settings-network.png)
 
-Then scan as usual. After each AI Replay the agent:
+Then scan as usual. After each AI Replay VL Connector:
 
 1. exports the STL (with the options of page **Scanning**: right after the scan or after VL's alignment, and
    what happens to the VL window),
@@ -244,7 +247,7 @@ The station takes the scans one by one (oldest first), opens the template of the
 Measurement Programs List, evaluates the scan and sends the report back; it uses the PolyWorks settings of the
 station PC (keep pieces, color scale). Keep the station PC logged on (a locked screen is fine) while scanning.
 When a problem stops it - for example an unusable Measurement Programs List - its window shows *Paused* with the
-reason and the agents show *station paused*; it continues by itself once the problem is solved. A scan that
+reason and the scanner PCs show *station paused*; it continues by itself once the problem is solved. A scan that
 cannot be evaluated is reported to its scanner PC with the reason; none stays unanswered (after
 `network.jobTimeoutMin`, 15 minutes by default, a scan a station did not finish is reported as failed).
 
@@ -261,7 +264,7 @@ operator starts AI Replay in VL, so the settings of the scanner PC apply.) Use a
 | `-ReturnFocus` | `On`, `Off` |
 | `-TimeoutMin` | minutes to wait for the scan, 1 to 600 (default 45) |
 | `-SettleSec` | seconds to wait before the export, 0 to 60 (default 2) |
-| `-NewWindow` | always open a new VL window |
+| `-NewWindow` | open a new VL window even when one waits on its start screen |
 
 Example: `-Mode Standard -AfterExport Minimize`. An unknown option or a value out of range stops the scan with a
 clear message. The stage confirmation is not an option per part (only the administrator sets it for the PC);
@@ -272,7 +275,7 @@ clear message. The stage confirmation is not an option per part (only the admini
 | Message or problem | What to do |
 |---|---|
 | *The scanner is not connected* | Check the scanner cable and power, then start again. |
-| *Another scan is running on this PC* / *VL is open but not idle on its start screen* | Finish or close the work in VL first; VL Connector never opens a second VL window. |
+| *Another scan is running on this PC* / *VL is busy* | A scan runs in VL or VL shows a message: finish it in VL first. VL Connector opens a new VL window next to VL windows that only show earlier scans, but never next to a busy VL, which would compete for the scanner and the stage. |
 | *VL Connector could not start the scan* / *stopped unexpectedly* (in PolyWorks) | The launcher gave no sign of life; the log (page Diagnostics) says why. Finish or close AI Replay in VL, then press Measure again. |
 | The stage question was not answered automatically | Expected when the screen is locked, in a remote desktop session, with an untested VL version or when the setting is off. The Windows event log (source VL Connector, event 1101) names the reason. |
 | *VL Connector is in use* (installation) | Close the VL Connector windows and let running scans finish, then install again. |
@@ -281,9 +284,9 @@ clear message. The stage confirmation is not an option per part (only the admini
 | *VL Connector could not start* (in PolyWorks) | Open the settings window: the Setup page shows what is missing. |
 | *PowerShell runs in ConstrainedLanguage mode* | Ask IT: VL Connector needs FullLanguage mode (see Notes for IT). |
 | *Template ... could not be opened* | The template name or workspace is wrong, or the template is open in another PolyWorks. |
-| Scenario B: no STL after AI Replay | Is the agent running (icon in the notification area)? Settings > page Network > Start now. |
-| Scenario B: *station offline* in the agent menu | Start the station (VL Station button) and check the shared folder on the station PC. |
-| Scenario B: *station paused* in the agent menu | The station window shows the reason (e.g. the Measurement Programs List); correct it, the station continues. |
+| Scenario B: no STL after AI Replay | Does VL Connector run (icon in the notification area)? Settings > page Network > Start now. |
+| Scenario B: *station offline* in the menu of the icon | Start the station (VL Station button) and check the shared folder on the station PC. |
+| Scenario B: *station paused* in the menu of the icon | The station window shows the reason (e.g. the Measurement Programs List); correct it, the station continues. |
 | Scenario B: *Scan not sent* | The scan could not be sent five times; the reason is in the notification and in `%LOCALAPPDATA%\VLConnector\outbox\failed`. Scan the part again once the cause is solved. |
 | Scenario B: no report arrives | The station is busy or stopped; the scan is evaluated as soon as it runs. |
 | Scenario B: *not in the Measurement Programs List* | Add the VL program (the .vld4 name without extension) to the list (page Network > Edit list). |

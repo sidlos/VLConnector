@@ -189,7 +189,7 @@ try {
     foreach ($c in @(Repair-VlcUserShortcuts)) { Say "     Brought up to date: $c" }
     $removed = @(Repair-VlcUserSettings)
     if ($removed.Count) { Say "     Settings cleaned up: $($removed -join ', ')" }
-    if ($agentWasRunning) { Start-VlcAgent; Say '     Agent started again.' 'Green' }
+    if ($agentWasRunning) { Start-VlcAgent; Say '     VL Connector runs again in the notification area.' 'Green' }
 }
 catch { Say "     Not everything could be brought up to date: $($_.Exception.Message) (done again when you start VL Connector)" 'Yellow' }
 Say ''

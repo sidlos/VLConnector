@@ -12,6 +12,8 @@
 
   Scenario file (JSON): { "fakevl": {...}, "launcher": {...}, "machine": {...}, "user": {...},
     "prestartFakeVl": bool, "holdMutex": bool, "expect": {...}, "expectByFlavor": { "<flavor>": {...} } }
+  fakevl:   options of FakeVL.ps1; fakevl.prestart: options only for the FakeVL started before the launcher
+            (prestartFakeVl), e.g. one that shows an earlier scan while the launcher opens a new VL window
   launcher: exportImmediately, dryRun, exportOnly, mode (HighSpeed|Standard), timeoutMin, afterExport,
             returnFocus, watch, extra { <flavor>: [args] },
             confirmStageMotion (the machine policy of the copy allows VL Connector to answer stage questions),
@@ -168,9 +170,11 @@ function New-StartInfo([string]$File, [string]$Arguments) {
     return $psi
 }
 
-# FakeVL already open with scan data (export-only tests)
+# FakeVL already open, e.g. with scan data (export-only tests); it takes fakevl.prestart on top of fakevl
 if ($scenario.prestartFakeVl) {
-    [void][Diagnostics.Process]::Start((New-StartInfo $fakeExe $fakeArgs))
+    $pre = New-StartInfo $fakeExe $fakeArgs
+    $pre.EnvironmentVariables['FAKEVL_PRESTART'] = '1'
+    [void][Diagnostics.Process]::Start($pre)
     $deadline = (Get-Date).AddSeconds(30)
     while ((Get-Date) -lt $deadline -and -not ((Test-Path -LiteralPath $events) -and (Get-Content -LiteralPath $events -Raw) -match 'data-loaded|start-screen:ready')) { Start-Sleep -Milliseconds 200 }
     Start-Sleep -Seconds 1
