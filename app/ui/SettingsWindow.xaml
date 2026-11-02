@@ -335,7 +335,7 @@
                                             </Border>
                                         </Grid>
                                         <TextBlock Style="{StaticResource CaptionText}" FontSize="13" Margin="0,8,0,0" TextWrapping="Wrap"
-                                                   Text="Open PolyWorks|Inspector (any project) and press Add to PolyWorks: the button appears at the end of the Home tab (group 'VL Connector'). Your PolyWorks layout is saved first."/>
+                                                   Text="Open PolyWorks|Inspector (any project) and press Add to PolyWorks: a ribbon tab 'VL Connector' with the button appears. Your PolyWorks layout is saved first."/>
                                         <TextBlock Style="{StaticResource CaptionText}" FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"
                                                    Text="By hand instead: File > Visual Layout > Customize > Customize, tab Macro Scripts > Import the macro (Copy macro path), then add it to the ribbon."/>
                                         <StackPanel Orientation="Horizontal" Margin="0,12,0,0">

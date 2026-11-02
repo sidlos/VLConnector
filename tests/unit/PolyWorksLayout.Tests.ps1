@@ -46,30 +46,31 @@ Describe 'button picture' {
     }
 }
 
-Describe 'place of the button in the ribbon' {
+Describe 'VL Connector tab in the ribbon' {
     # the structure of PolyWorks 2026 layout.xml, shortened; built-in tabs carry a resource name in any language
-    $ribbon = '<Tabs><Tab Class="CIMXtRibbonTab" Caption="Start" resString="Ribbon Home" tabType="0"><Groups><Group Class="CIMXtRibbonGroup" Caption="Piece" resString="Ribbon Home Piece" groupType="0"><Controls/></Group></Groups></Tab>' +
+    $ribbon = '<CommandBar Class="CRibbonBar" BarID="25"><Tabs><Tab Class="CIMXtRibbonTab" Caption="Start" resString="Ribbon Home" tabType="0"><Groups/></Tab>' +
         '<Tab Class="CIMXtRibbonTab" Caption="Hilfe" resString="Ribbon Help" tabType="0"><Groups/></Tab>' +
-        '<Tab Class="CIMXtRibbonTab" Caption="VL Connector" Selected="1" tabType="2"><Groups><Group Class="CIMXtRibbonGroup" Caption="VL Connector" groupType="2"><Controls><Control resString="VLC_Measure_Button_old.pwmacro"/></Controls></Group></Groups></Tab></Tabs>' +
+        '<Tab Class="CIMXtRibbonTab" Caption="VL Connector" Selected="1" tabType="2"><Groups><Group Class="CIMXtRibbonGroup" Caption="VL Connector" groupType="2"><Controls><Control resString="VLC_Measure_Button_old.pwmacro"/></Controls></Group></Groups></Tab>' +
+        '<Tab Class="CIMXtRibbonTab" Caption="Context" resString="Ribbon Data" tabType="1"><Groups/></Tab></Tabs></CommandBar>' +
         '<CommandBar Class="CIMXtToolBar" Title="Macros from VL Connector buttons" Id="1"><Controls/></CommandBar>'
     $control = '<Control Class="CIMXtControlButtonMacro" Caption="Measure" resString="VLC_Measure_Button.pwmacro"/>'
-    It 'removes the tab of earlier versions, the group of an earlier Add and the hidden import toolbar' {
+    It 'removes the tab of an earlier Add and the hidden import toolbar' {
         $clean = Remove-VlcLayoutParts $ribbon
         $clean | Should Not Match 'Caption="VL Connector"'
         $clean | Should Not Match 'Macros from VL Connector'
         $clean | Should Match 'Caption="Hilfe"'
     }
-    It 'puts the group at the end of the Home tab first, a tab of its own second' {
-        $variants = @(Get-VlcRibbonVariants (Remove-VlcLayoutParts $ribbon) $control)
-        ($variants | ForEach-Object { $_.Place }) -join ',' | Should Be 'Home,Tab'
-        $homeTab = [regex]::Match($variants[0].Xml, '<Tab [^>]*resString="Ribbon Home".*?</Tab>').Value
-        $homeTab | Should Match ('Caption="Piece".*</Group><Group Class="CIMXtRibbonGroup" Caption="VL Connector" groupType="2"><Controls>' + [regex]::Escape($control) + '</Controls>.*</Group></Groups></Tab>$')
-        $variants[1].Xml | Should Match ('resString="Ribbon Help" tabType="0"><Groups/></Tab><Tab Class="CIMXtRibbonTab" Caption="VL Connector" tabType="2"><Groups><Group [^>]*><Controls>' + [regex]::Escape($control))
-        # a second Add replaces the group of the first one
-        @(Get-VlcRibbonVariants (Remove-VlcLayoutParts $variants[0].Xml) $control)[0].Xml | Should Be $variants[0].Xml
+    It 'puts the tab after Help, found in any language, and after the last tab of the user' {
+        $xml = Add-VlcRibbonTab (Remove-VlcLayoutParts $ribbon) $control
+        $xml | Should Match ('resString="Ribbon Help" tabType="0"><Groups/></Tab><Tab Class="CIMXtRibbonTab" Caption="VL Connector" tabType="2"><Groups><Group [^>]*><Controls>' + [regex]::Escape($control))
+        # a second Add replaces the tab of the first one
+        Add-VlcRibbonTab (Remove-VlcLayoutParts $xml) $control | Should Be $xml
+        $own = (Remove-VlcLayoutParts $ribbon) -replace '(<Tab Class="CIMXtRibbonTab" Caption="Context")', '<Tab Class="CIMXtRibbonTab" Caption="Mine" tabType="2"><Groups/></Tab>$1'
+        Add-VlcRibbonTab $own $control | Should Match ('Caption="Mine" tabType="2"><Groups/></Tab><Tab Class="CIMXtRibbonTab" Caption="VL Connector"')
     }
-    It 'without a Home tab only the tab of its own' {
-        $noHome = (Remove-VlcLayoutParts $ribbon) -replace 'resString="Ribbon Home"', 'resString="Ribbon Other"'
-        (@(Get-VlcRibbonVariants $noHome $control) | ForEach-Object { $_.Place }) -join ',' | Should Be 'Tab'
+    It 'finds no ribbon in the layout of a ribbon nobody has changed' {
+        Test-VlcRibbonInLayout $ribbon | Should Be $true
+        Test-VlcRibbonInLayout '<Settings><CommandBars Schema="45"><Layout><DockState/></Layout></CommandBars></Settings>' | Should Be $false
+        Add-VlcRibbonTab '<Settings/>' $control | Should Be ''
     }
 }

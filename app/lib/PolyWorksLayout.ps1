@@ -1,14 +1,16 @@
-# Adds the Measure (or Station) button to the PolyWorks|Inspector ribbon, as a group "VL Connector" at the end
-# of the Home tab - the same thing a user does by hand in File > Visual Layout > Customize - and undoes it. It
-# works only with documented PolyWorks macro commands, sent through the PolyWorks programming interface (COM) to
-# the PolyWorks|Inspector that is open on this PC:
+# Adds the VL Connector tab with the Measure (or Station) button to the PolyWorks|Inspector ribbon - the
+# same thing a user does by hand in File > Visual Layout > Customize - and undoes it. It works only with
+# documented PolyWorks macro commands, sent through the PolyWorks programming interface (COM) to the
+# PolyWorks|Inspector that is open on this PC:
 #   1. WINDOW VISUAL_LAYOUT EXPORT                      backup of the current visual layout (user's profile)
 #   2. WINDOW VISUAL_LAYOUT IMPORT_MACRO_SCRIPTS        imports the button macro with its icon
 #   3. WINDOW VISUAL_LAYOUT EXPORT                      the layout with the imported button
-#   4. (here) the group with that button is added to the Home tab of the exported layout.xml
+#   4. (here) a "VL Connector" ribbon tab with that button is added to the exported layout.xml
 #   5. WINDOW VISUAL_LAYOUT LOAD                        loads it; the backup can be loaded back (Undo)
-# A ribbon without a Home tab, or one that does not take the group, gets a "VL Connector" tab of its own (as
-# before 1.0.0-rc11). Experienced users move the button wherever they like; VL Connector does not look for it.
+# What PolyWorks 2026 allows (tried at the scanner on 2026-11-02): no group of one's own on a built-in tab such as
+# Home, not even by hand - a layout with one makes PolyWorks fall back to its standard ribbon. And a ribbon nobody
+# has changed yet is not written into the export at all, so there is nothing to add the tab to: then the macro is
+# imported and the user puts it on a tab by hand once; from then on Add works.
 # The PolyWorks programming interface itself is in app\interop\PolyWorks.cs (VLConnector.Interop.VlcPolyWorks).
 # Dot-source this file; it needs lib\Settings.ps1, lib\PolyWorksSetup.ps1 and lib\Interop.ps1.
 
@@ -133,29 +135,25 @@ function New-VlcButtonLayout([string]$Path, [string]$Kind, [string]$InfoXml, [st
     return $name
 }
 
-# layout.xml without VL Connector's ribbon parts - its group (on the Home tab), its own tab of earlier versions -
-# and without the hidden toolbars of earlier button imports.
+# layout.xml without the VL Connector tab and without the hidden toolbars of earlier button imports.
 function Remove-VlcLayoutParts([string]$Xml) {
     $Xml = [regex]::Replace($Xml, '<CommandBar Class="CIMXtToolBar"[^>]*Title="Macros from VL Connector buttons[^"]*".*?</CommandBar>', '', 'Singleline')
-    $Xml = [regex]::Replace($Xml, '<Tab Class="CIMXtRibbonTab" Caption="VL Connector".*?</Tab>', '', 'Singleline')
-    return [regex]::Replace($Xml, '<Group Class="CIMXtRibbonGroup" Caption="VL Connector" groupType="2">.*?</Group>', '', 'Singleline')
+    return [regex]::Replace($Xml, '<Tab Class="CIMXtRibbonTab" Caption="VL Connector".*?</Tab>', '', 'Singleline')
 }
 
-# The layout.xml variants to try, best first: the group "VL Connector" at the end of the Home tab (found by its
-# resource name, which does not depend on the language of PolyWorks), then a "VL Connector" tab of its own
-# after the last tab of the user (or after Help).
-function Get-VlcRibbonVariants([string]$Xml, [string]$Control) {
-    $group = '<Group Class="CIMXtRibbonGroup" Caption="VL Connector" groupType="2"><Controls>' + $Control +
-        '</Controls><ControlGroupOption Flags="16" HideFlags="129" Width="0" Height="0"/><ControlGroupPopup Type="3" Id="0" Flags="24" HideFlags="128" Caption="VL Connector" Width="0" Height="0"/></Group>'
-    $homeTab = [regex]::Match($Xml, '<Tab Class="CIMXtRibbonTab"[^>]*resString="Ribbon Home"[^>]*>.*?</Tab>', 'Singleline')
-    if ($homeTab.Success -and $homeTab.Value.LastIndexOf('</Groups>') -gt 0) {
-        [pscustomobject]@{ Place = 'Home'; Xml = $Xml.Insert($homeTab.Index + $homeTab.Value.LastIndexOf('</Groups>'), $group) }
-    }
+# $true when the layout holds the ribbon. PolyWorks writes it only once somebody has changed it; a ribbon nobody has
+# changed yet is not in the export (and cannot be added to).
+function Test-VlcRibbonInLayout([string]$Xml) { return [regex]::IsMatch($Xml, '<CommandBar Class="CRibbonBar"') }
+
+# layout.xml with the tab "VL Connector" holding $Control, after the last tab of the user, else after Help (found by
+# its resource name, which does not depend on the language of PolyWorks); '' when the ribbon has neither.
+function Add-VlcRibbonTab([string]$Xml, [string]$Control) {
+    $tab = '<Tab Class="CIMXtRibbonTab" Caption="VL Connector" tabType="2"><Groups><Group Class="CIMXtRibbonGroup" Caption="VL Connector" groupType="2"><Controls>' +
+        $Control + '</Controls><ControlGroupOption Flags="16" HideFlags="129" Width="0" Height="0"/><ControlGroupPopup Type="3" Id="0" Flags="24" HideFlags="128" Caption="VL Connector" Width="0" Height="0"/></Group></Groups></Tab>'
     $anchor = [regex]::Matches($Xml, '<Tab Class="CIMXtRibbonTab" Caption="[^"]*"[^>]*tabType="2">.*?</Tab>', 'Singleline') | Select-Object -Last 1
     if (-not $anchor) { $anchor = [regex]::Match($Xml, '<Tab Class="CIMXtRibbonTab"[^>]*resString="Ribbon Help".*?</Tab>', 'Singleline') }
-    if ($anchor -and $anchor.Success) {
-        [pscustomobject]@{ Place = 'Tab'; Xml = $Xml.Insert($anchor.Index + $anchor.Length, '<Tab Class="CIMXtRibbonTab" Caption="VL Connector" tabType="2"><Groups>' + $group + '</Groups></Tab>') }
-    }
+    if (-not $anchor -or -not $anchor.Success) { return '' }
+    return $Xml.Insert($anchor.Index + $anchor.Length, $tab)
 }
 
 # ZIP entries (macro text, icon, description) of VL Connector button macros that no control in $Xml uses.
@@ -172,9 +170,8 @@ function Get-VlcUnusedButtonEntries([string]$Zip, [string]$Xml) {
     finally { $z.Dispose() }
 }
 
-# Adds (or renews) the button of $Kind (Measure or Station) in the open PolyWorks|Inspector: the group "VL
-# Connector" on the Home tab (or a tab of its own, see Get-VlcRibbonVariants). Returns the path of the backup of
-# the previous layout; $script:VlcButtonPlace says where the button is ('Home' or 'Tab').
+# Adds (or renews) the "VL Connector" ribbon tab with the button of $Kind (Measure or Station) in the open
+# PolyWorks|Inspector. Returns the path of the backup of the previous layout.
 function Install-VlcPolyWorksButton([ValidateSet('Measure', 'Station')] [string]$Kind = 'Measure') {
     $insp = Get-VlcRunningInspector
     if (-not $insp) { throw 'Open PolyWorks|Inspector first (any project), then try again.' }
@@ -205,10 +202,16 @@ function Install-VlcPolyWorksButton([ValidateSet('Measure', 'Station')] [string]
     if ($r.vSt -ne 'No Error') { throw "PolyWorks could not import the button: $($r.vErr)" }
     if ($r.vSt2 -ne 'No Error' -or -not (Test-Path -LiteralPath $exported)) { throw "The PolyWorks visual layout could not be read: $($r.vErr2)" }
 
-    # 4) the button control PolyWorks created (with its icon), moved into the group "VL Connector". It is
+    # 4) the button control PolyWorks created (with its icon), moved into a "VL Connector" ribbon tab. It is
     #    taken from the toolbar of this import: when an earlier copy of the macro exists, PolyWorks names the new
     #    one "<name> (2)", "(3)", ..., and a search by name would find the old button with the old icon.
     $xml = Read-ZipText $exported 'layout.xml'
+    if (-not (Test-VlcRibbonInLayout $xml)) {
+        foreach ($f in $exported, $buttons) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
+        throw ("PolyWorks|Inspector still has its standard ribbon, and VL Connector can add its tab only to a ribbon that was changed once. " +
+            "The macro '$macroName' is ready in PolyWorks: File > Visual Layout > Customize > Customize..., add a new tab 'VL Connector' and put the macro on it. " +
+            'From then on Add to PolyWorks renews the button by itself.')
+    }
     $bar = [regex]::Match($xml, '<CommandBar Class="CIMXtToolBar"[^>]*Title="Macros from VL Connector buttons[^"]*".*?</CommandBar>', 'Singleline')
     $ctl = [regex]::Match($bar.Value, '<Control Class="CIMXtControlButtonMacro"[^>]*resString="([^"]+)".*?</Control>', 'Singleline')
     if (-not $ctl.Success) { $ctl = [regex]::Match($xml, '<Control Class="CIMXtControlButtonMacro"[^>]*resString="(' + [regex]::Escape($macroName) + ')".*?</Control>', 'Singleline') }
@@ -229,42 +232,33 @@ function Install-VlcPolyWorksButton([ValidateSet('Measure', 'Station')] [string]
         $control = [regex]::Replace($control, '(<CustomIcon><Icon [^>]*?Data=")[A-P]+', ('${1}' + (ConvertTo-VlcIconData $svg)))
         $replace["icon/$newName"] = Get-VlcIconEntry $svg
     }
-    # the hidden toolbar of the import and the group or tab of an earlier Add are replaced
-    $variants = @(Get-VlcRibbonVariants (Remove-VlcLayoutParts $xml) $control)
-    if (-not $variants.Count) { throw 'The ribbon of this PolyWorks version has an unknown format. Add the button by hand, see the User Guide.' }
+    # the hidden toolbar of the import and an older VL Connector tab are replaced
+    $xml = Add-VlcRibbonTab (Remove-VlcLayoutParts $xml) $control
+    if (-not $xml) { throw 'The ribbon of this PolyWorks version has an unknown format. Add the button by hand, see the User Guide.' }
+    # earlier copies of VL Connector button macros that no button uses any more are left out. (Loading a layout
+    # without any macro button sets the ribbon back to the standard one, so this happens only here, together
+    # with the new button, never in a step of its own.)
+    Write-LayoutWithXml $exported $final $xml @(Get-VlcUnusedButtonEntries $exported $xml) $replace
 
-    # 5) load it and check: the ribbon is complete (a layout PolyWorks does not understand can lose all its tabs)
-    #    and the group holds the new button; otherwise the backup is loaded back and the next variant is tried.
-    #    Earlier copies of VL Connector button macros that no button uses any more are left out. (A layout
-    #    without any macro button makes PolyWorks drop its whole ribbon, so this happens only here, together
-    #    with the new button, never in a step of its own.)
+    # 5) load it and check: the ribbon is there (a layout PolyWorks does not take sets it back to the standard
+    #    ribbon, which the export does not show) and the tab holds the new button
     $check = Join-Path $work "check_$stamp"
-    $error1 = ''
-    foreach ($v in $variants) {
-        Write-LayoutWithXml $exported $final $v.Xml @(Get-VlcUnusedButtonEntries $exported $v.Xml) $replace
-        Remove-Item -LiteralPath $check -Force -ErrorAction SilentlyContinue
-        $script = "version `"7.0`"`r`nMACRO END_ON_ERROR ( `"Off`" )`r`nDECLARE vSt `"`"`r`nDECLARE vErr `"`"`r`n" +
-            "WINDOW VISUAL_LAYOUT LOAD ( `"$final`", `"Off`" )`r`nMACRO GET_ERROR_STATUS ( vSt, vErr )`r`nWINDOW VISUAL_LAYOUT EXPORT ( `"$check`" )`r`n"
-        $r = Invoke-VlcInspectorScript $insp $script @('vSt', 'vErr')
-        $ok = $false
-        if ($r.vSt -eq 'No Error' -and (Test-Path -LiteralPath $check)) {
-            $loaded = Read-ZipText $check 'layout.xml'
-            $ok = [regex]::Matches($loaded, '<Tab Class="CIMXtRibbonTab"').Count -ge [regex]::Matches($v.Xml, '<Tab Class="CIMXtRibbonTab"').Count -and
-                  [regex]::IsMatch($loaded, ('<Group Class="CIMXtRibbonGroup" Caption="VL Connector" groupType="2"><Controls>(?:(?!</Group>).)*?resString="' + $esc + '"'), 'Singleline')
-        }
-        if ($ok) {
-            $script:VlcButtonPlace = $v.Place
-            foreach ($f in $exported, $final, $check, $buttons) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
-            return $backup
-        }
-        if (-not $error1) { $error1 = $r.vErr }
-        [void](Invoke-VlcInspectorScript $insp ("version `"7.0`"`r`nWINDOW VISUAL_LAYOUT LOAD ( `"$backup`", `"Off`" )`r`n") @())
+    $script = "version `"7.0`"`r`nMACRO END_ON_ERROR ( `"Off`" )`r`nDECLARE vSt `"`"`r`nDECLARE vErr `"`"`r`n" +
+        "WINDOW VISUAL_LAYOUT LOAD ( `"$final`", `"Off`" )`r`nMACRO GET_ERROR_STATUS ( vSt, vErr )`r`nWINDOW VISUAL_LAYOUT EXPORT ( `"$check`" )`r`n"
+    $r = Invoke-VlcInspectorScript $insp $script @('vSt', 'vErr')
+    $ok = $false
+    if ($r.vSt -eq 'No Error' -and (Test-Path -LiteralPath $check)) {
+        $loaded = Read-ZipText $check 'layout.xml'
+        $ok = [regex]::IsMatch($loaded, '<Tab Class="CIMXtRibbonTab"[^>]*resString="Ribbon Home"') -and
+              [regex]::IsMatch($loaded, ('Caption="VL Connector"[^>]*tabType="2"><Groups>.*?resString="' + $esc + '"'), 'Singleline')
     }
-    throw "PolyWorks did not take the button ($error1); the previous layout was loaded back."
+    if (-not $ok) {
+        [void](Invoke-VlcInspectorScript $insp ("version `"7.0`"`r`nWINDOW VISUAL_LAYOUT LOAD ( `"$backup`", `"Off`" )`r`n") @())
+        throw "PolyWorks did not take the new ribbon tab ($($r.vErr)); the previous layout was loaded back."
+    }
+    foreach ($f in $exported, $final, $check, $buttons) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
+    return $backup
 }
-
-# Where the last Add put the button, for messages.
-function Get-VlcButtonPlaceText { if ($script:VlcButtonPlace -eq 'Tab') { return "on the tab 'VL Connector'" } else { return "on the Home tab (group 'VL Connector')" } }
 
 # Loads the layout backup made by Install-VlcPolyWorksButton back into the open PolyWorks|Inspector.
 function Restore-VlcPolyWorksLayout([string]$Backup) {

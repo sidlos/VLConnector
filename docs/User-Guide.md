@@ -47,8 +47,8 @@ is not a PolyWorks plug-in).
    VL Connector** for all users of the PC. IT can install it silently and set the machine settings at the same
    time (see the Notes for IT).
 5. At the end it offers the **setup wizard** (also later: settings window > Setup > *Setup wizard*). The wizard
-   asks for the scenario and the main options, **adds the Measure or Station button to the Home tab
-   of PolyWorks** (group VL Connector; open PolyWorks|Inspector first; your PolyWorks layout is saved
+   asks for the scenario and the main options, **adds the VL Connector tab with the
+   Measure or Station button to PolyWorks** (open PolyWorks|Inspector first; your PolyWorks layout is saved
    before and the wizard can undo it) and, for the network scenario, sets the shared folder and the start with Windows.
 
 **Update:** run Install.cmd of the new version. Settings and the PolyWorks buttons stay; the previous version is
@@ -148,15 +148,19 @@ VL Connector evaluates controls on features and comparison points with a best-fi
 ### Add the button to PolyWorks (once per Windows user)
 
 Automatically: open PolyWorks|Inspector (any project), then press **Add to PolyWorks** in the setup wizard or in
-the settings window, page **PolyWorks**. The **Measure** button appears at the end of the **Home** tab, in the group **VL Connector** (move it elsewhere if you like). Your
+the settings window, page **PolyWorks**. A ribbon tab **VL Connector** with the **Measure** button appears. Your
 PolyWorks visual layout is saved before (in `%LOCALAPPDATA%\VLConnector\polyworks-layout`); the wizard can undo it.
+If the PolyWorks ribbon has never been changed, PolyWorks does not let VL Connector add a tab: VL Connector then
+imports the macro and says so; add the tab once by hand (step 4 below, as a new tab **VL Connector**), and from then on
+**Add to PolyWorks** works. PolyWorks takes no own group on its built-in tabs such as Home, so the button is on a tab
+of its own.
 
 By hand instead:
 
 1. In the settings window, page **PolyWorks**, press **Copy macro path**.
 2. In PolyWorks|Inspector open **File > Visual Layout > Customize > Customize**.
 3. Tab **Macro Scripts** > **Import**, paste the path (`C:\Program Files\VLConnector\VLC_Measure_Button.pwmacro`) and confirm.
-4. Tab **Customize Ribbon** (or Quick Access Toolbar) > choose **Macro Script Files** > select
+4. Tab **Customize Ribbon** (or Quick Access Toolbar) > **New Tab** (name it **VL Connector**) > choose **Macro Script Files** > select
    **VLC_Measure_Button** > **Add**. As icon, use the file from **Copy icon path** (`VLC_icon_32.png`).
 
 The button only calls the installed macro, so updates of VL Connector need no new import.

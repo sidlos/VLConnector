@@ -253,7 +253,7 @@ Replay finished) and `%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml` (t
 | `%LOCALAPPDATA%\VLConnector\` | `logs\` (30 days), agent `inbox\`, `outbox\` (with `failed\`), `pending.txt`, `runs\`, station work files, `polyworks-layout\` (backups of the PolyWorks visual layout made before *Add to PolyWorks*) | all parts |
 | `%TEMP%` | Short-lived exchange files between the macros and the scripts (launch, marker, status, cancel, results); during the removal a copy of `Uninstall.cmd`, which stays there | macros, launcher, uninstaller |
 | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector.lnk` | Only if the user switches on *Start with Windows* (page Network; up to the first builds of 1.0.0-rc11 named `VL Connector agent.lnk`, renamed when VL Connector starts) | settings window |
-| PolyWorks visual layout of the user | Only on *Add to PolyWorks*: the button macro in a group "VL Connector" at the end of the Home tab; the previous layout is saved first (*Undo*) | settings window, wizard |
+| PolyWorks visual layout of the user | Only on *Add to PolyWorks*: a ribbon tab with the button macro; the previous layout is saved first (*Undo*) | settings window, wizard |
 | `Documents\VL Connector\` | Scans (STL) and, in scenario B, the received reports (marked as downloaded) | launcher, agent |
 | PolyWorks workspace of the part | Measured pieces (copies of the template), `Reports`/`Scans` folders. Templates are never modified. | macros |
 | Shared folder (scenario B) | See section 9 and [Protocol](Protocol.md) | agent, station |

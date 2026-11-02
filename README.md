@@ -37,8 +37,8 @@ is never changed.
    (only administrators can change it) and creates the Start menu entries for all users.
    IT: `Install.cmd -Quiet [-ConfirmStageMotion On|Off] [-MachineSettings <file>]` as administrator or SYSTEM.
 3. The **setup wizard** opens at the end (later: Start menu > VL Connector > Setup wizard). It asks for the
-   scenario and the main options and **adds the Measure or Station button to the Home tab of
-   PolyWorks** (group VL Connector; PolyWorks|Inspector must be open; the PolyWorks layout is saved before and
+   scenario and the main options and **adds the VL Connector tab with the Measure or
+   Station button to PolyWorks** (PolyWorks|Inspector must be open; the PolyWorks layout is saved before and
    can be restored). The settings window only holds settings (modes, options, start with Windows); scanning
    stays in VL and evaluating in PolyWorks.
 
