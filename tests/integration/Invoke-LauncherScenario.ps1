@@ -26,7 +26,7 @@
   pending:  the scenario is skipped by Run-Tests.ps1 (unless -IncludePending) until this step is done
   programFile: file name of the program in the program folder (default demo-part.vld4); programByName: pass only
             its name (without .vld4) and the folder as -ProgramDir
-  cancelAfterSec, cancelOnce: the caller creates <marker>.cancel after this time (cancelOnce: only once)
+  cancelAfterSec: the caller creates <marker>.cancel once after this time, like the Cancel button (cancelOnce: the same; kept for older scenario files)
   expect:   state (canonical OK|ERROR|CANCELLED|DRYRUN|BUSY|none), exitCode, stl (bool),
             eventsInclude [...], eventsExclude [...], eventsOrder [...], vlRunning (bool),
             logIncludes [...], logExcludes [...], maxSeconds, vldExists (bool),
@@ -231,12 +231,13 @@ if ($opt -and $opt.extraRaw) { $argLine += ' ' + [string]$opt.extraRaw }
 
 $t0 = Get-Date
 $proc = [Diagnostics.Process]::Start((New-StartInfo $psExe $argLine))
-# a caller cancels by creating <marker>.cancel (cancelOnce: once, like a Cancel pressed while the launcher starts)
+# a caller cancels by creating <marker>.cancel once, like the Cancel button. Creating it again after the launcher removed
+# it would race with the end of the launcher and leave a .cancel behind that the launcher never saw.
 if ($scenario.cancelAfterSec) {
     $cancelAt = $t0.AddSeconds([double]$scenario.cancelAfterSec)
     $cancelled = $false
     while (-not $proc.HasExited -and (Get-Date) -lt $t0.AddSeconds($TimeoutSec)) {
-        if ((Get-Date) -ge $cancelAt -and -not (Test-Path -LiteralPath "$marker.cancel") -and -not ($scenario.cancelOnce -and $cancelled)) {
+        if ((Get-Date) -ge $cancelAt -and -not $cancelled) {
             [IO.File]::WriteAllText("$marker.cancel", 'cancel'); $cancelled = $true
         }
         Start-Sleep -Milliseconds 100
