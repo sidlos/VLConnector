@@ -1,8 +1,10 @@
 # Changelog
 
-## 1.0.0-rc11 - 2026-10-30
+## 1.0.0 - 2026-11-02
 
-Hardening after an enterprise IT safety audit of 1.0.0-rc10 (84 findings).
+First stable release: the release candidates (below) hardened after an enterprise IT safety audit of 1.0.0-rc10
+(84 findings) and tested live at the scanner (installation, Measure with the stage policy off and on, a stored NOK
+scan, the network scenario on one PC, removal and new installation).
 
 **Note for users of 1.0.0-rc10:** the installation moves to `C:\Program Files\VLConnector` and needs
 administrator rights once. *Confirm stage movement automatically* is no longer a setting of a user or a template:
@@ -47,13 +49,14 @@ working through forwarders.
 - **Event log:** only the installation the event source was registered for writes to it; a copy elsewhere (such as a
   test copy on a PC where VL Connector is installed) cannot leave entries that look like changes of the PC. Events of the
   agent's automatic answers name the program chosen in VL.
-- **Package folder:** only *Install.cmd* is there to open; the scripts and *Uninstall.cmd* are in `setup\` (Start menu >`n  Uninstall VL Connector). The uninstaller removes only a folder the installer made, never an unpacked package.
+- **Package folder:** only *Install.cmd* is there to open; the scripts and *Uninstall.cmd* are in `setup\` (Start menu >
+  Uninstall VL Connector). The uninstaller removes only a folder the installer made, never an unpacked package.
 - Documentation: Notes for IT rewritten (trust model, policy, safety, what security software sees, rights of
   the shared folder), Protocol, User guide, Acceptance checklist with safety checks and sign-off.
 
-## 1.0.0 - 2026-10-27
+## 1.0.0-rc1 to 1.0.0-rc10 - 2026-10-27 to 2026-10-29
 
-First release for a closed group of users.
+Release candidates for a closed group of users.
 
 - **Scenario A** (PolyWorks on the scanner PC): Measure button in PolyWorks - AI Replay in VL, automatic STL
   export, evaluation against the part template (pre-alignment, best-fit, all controls, color map), OK/NOK

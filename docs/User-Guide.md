@@ -38,7 +38,7 @@ asks); using VL Connector does not. Nothing is copied into the program folders o
 is not a PolyWorks plug-in).
 
 1. Check that the SHA-256 of the downloaded ZIP matches `SHA256SUMS.txt`:
-   `Get-FileHash .\VLConnector-1.0.0-rc11.zip` in PowerShell.
+   `Get-FileHash .\VLConnector-1.0.0.zip` in PowerShell.
 2. Extract the ZIP (right click > Extract All) and double-click **Install.cmd**.
 3. The installer checks every file against its manifest and shows the **package fingerprint**. Compare it with
    the fingerprint published with the package, then confirm. Windows asks for administrator rights.

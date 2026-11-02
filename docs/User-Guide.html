@@ -46,7 +46,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <h2 id="2-installation">2. Installation</h2>
 <p>You need Windows 10 or 11, the VL Application 4.6 with its <strong>English</strong> user interface (scanner PC) and PolyWorks Metrology Suite 2026 (evaluating PC). The installation needs <strong>administrator rights</strong> once (Windows asks); using VL Connector does not. Nothing is copied into the program folders of VL or PolyWorks (VL Connector is not a PolyWorks plug-in).</p>
 <ol>
-<li>Check that the SHA-256 of the downloaded ZIP matches <code>SHA256SUMS.txt</code>: <code>Get-FileHash .\VLConnector-1.0.0-rc11.zip</code> in PowerShell.</li>
+<li>Check that the SHA-256 of the downloaded ZIP matches <code>SHA256SUMS.txt</code>: <code>Get-FileHash .\VLConnector-1.0.0.zip</code> in PowerShell.</li>
 <li>Extract the ZIP (right click &gt; Extract All) and double-click <strong>Install.cmd</strong>.</li>
 <li>The installer checks every file against its manifest and shows the <strong>package fingerprint</strong>. Compare it with the fingerprint published with the package, then confirm. Windows asks for administrator rights.</li>
 <li>It installs to <code>C:\Program Files\VLConnector</code>, which only administrators can change, with the PolyWorks button files and the Start menu entries <strong>VL Connector</strong> (the settings window) and <strong>Uninstall VL Connector</strong> for all users of the PC. IT can install it silently and set the machine settings at the same time (see the Notes for IT).</li>
