@@ -42,6 +42,9 @@ working through forwarders.
 - **Names and windows:** the Start menu has only *VL Connector* (the settings window) and *Uninstall VL Connector*;
   the part in the notification area is shown as *VL Connector* (the Startup shortcut too, renamed from *VL Connector
   agent*); started again while it runs, it opens the settings window.
+- **PolyWorks button:** *Add to PolyWorks* puts the Measure (or Station) button at the end of the Home tab, in the
+  group *VL Connector* (a tab of its own only when the ribbon has no Home tab or does not take the group).
+- **Package folder:** only *Install.cmd* and *Uninstall.cmd* are there to open; their scripts are in `setup\`.
 - Documentation: Notes for IT rewritten (trust model, policy, safety, what security software sees, rights of
   the shared folder), Protocol, User guide, Acceptance checklist with safety checks and sign-off.
 

@@ -91,15 +91,15 @@ Describe 'entry scripts in ConstrainedLanguage mode' {
             Get-Content -LiteralPath (Join-Path $logDir "$($case.Log)_$today.log") -Raw | Should Match $message
         }
     }
-    It 'Install.ps1 and Uninstall.ps1 stop before they change anything' {
+    It 'setup\Install.ps1 and setup\Uninstall.ps1 stop before they change anything' {
         # copies without the rest of the package: if the check did not stop them, they would stop at their
         # own folder checks with another message
         $pkg = Join-Path $TestDrive 'package'
-        New-Item -ItemType Directory -Force -Path (Join-Path $pkg 'app\lib') | Out-Null
-        Copy-Item -LiteralPath (Join-Path $repo 'Install.ps1'), (Join-Path $repo 'Uninstall.ps1') -Destination $pkg
+        New-Item -ItemType Directory -Force -Path (Join-Path $pkg 'app\lib'), (Join-Path $pkg 'setup') | Out-Null
+        Copy-Item -LiteralPath (Join-Path $repo 'setup\Install.ps1'), (Join-Path $repo 'setup\Uninstall.ps1') -Destination (Join-Path $pkg 'setup')
         Copy-Item -LiteralPath (Join-Path $app 'lib\LanguageCheck.ps1') -Destination (Join-Path $pkg 'app\lib')
         foreach ($script in 'Install.ps1', 'Uninstall.ps1') {
-            $r = Invoke-Entry (Join-Path $pkg $script) '-Quiet' -Constrained
+            $r = Invoke-Entry (Join-Path $pkg "setup\$script") '-Quiet' -Constrained
             $r.ExitCode | Should Be 1
             $r.Output | Should Match $message
         }

@@ -114,7 +114,7 @@ Describe 'interfaces in a development tree' {
 
 Describe 'type names in the shipped scripts' {
     It 'all resolve once the interfaces and the Windows assemblies are loaded (using namespace included)' {
-        $files = @(Get-ChildItem -LiteralPath $app -Recurse -Filter '*.ps1') + @(Get-Item (Join-Path $repo 'Install.ps1'), (Join-Path $repo 'Uninstall.ps1'))
+        $files = @(Get-ChildItem -LiteralPath $app -Recurse -Filter '*.ps1') + @(Get-Item (Join-Path $repo 'setup\Install.ps1'), (Join-Path $repo 'setup\Uninstall.ps1'))
         $checks = foreach ($f in $files) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
             $using = @($ast.UsingStatements | ForEach-Object { $_.Extent.Text })

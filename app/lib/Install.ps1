@@ -1,4 +1,4 @@
-# Installation and removal of VL Connector, used by Install.ps1 and Uninstall.ps1 at the package root.
+# Installation and removal of VL Connector, used by setup\Install.ps1 and setup\Uninstall.ps1 of the package.
 # Dot-source this file; it needs nothing else.
 #
 # The machine part runs as administrator (docs\IT-Review, installation). It reads the package manifest once,

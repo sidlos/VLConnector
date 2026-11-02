@@ -1,5 +1,5 @@
 <#
-  Uninstall.ps1 - VL Connector for PolyWorks: removes VL Connector from this PC. Start it with Uninstall.cmd
+  setup\Uninstall.ps1 - VL Connector for PolyWorks: removes VL Connector from this PC. Start it with Uninstall.cmd
   (also in the Start menu: Uninstall VL Connector). Windows asks for administrator rights.
     Uninstall.cmd                     removes the program folder, the Start menu entries, the agent's start with
                                       Windows of every user, the forwarders of an older version and the event
@@ -20,15 +20,17 @@ param(
 
 # FullLanguage mode is needed (docs\IT-Review); checked before anything else runs
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-    & (Join-Path $PSScriptRoot 'app\lib\LanguageCheck.ps1') -Caller Uninstall -Mode $ExecutionContext.SessionState.LanguageMode
+    & (Join-Path (Split-Path $PSScriptRoot) 'app\lib\LanguageCheck.ps1') -Caller Uninstall -Mode $ExecutionContext.SessionState.LanguageMode
     if (-not $Quiet -and -not $MachinePart) { $null = Read-Host 'Press Enter to close' }
     exit 1
 }
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'app\lib\Install.ps1')
+# the installation folder (or a temporary copy of the uninstaller): this script is in its setup\ folder
+$root = Split-Path $PSScriptRoot
+. (Join-Path $root 'app\lib\Install.ps1')
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-if (-not $InstallDir) { $InstallDir = $PSScriptRoot }
+if (-not $InstallDir) { $InstallDir = $root }
 $InstallDir = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 # nothing may have its current folder in the program folder, or it cannot be deleted
 Set-Location -LiteralPath $env:SystemRoot
@@ -45,10 +47,10 @@ function Wait-Key { if (-not $Quiet -and -not $MachinePart) { [void](Read-Host '
 # nothing runs from it.
 function Copy-Uninstaller {
     $temp = Join-Path ([IO.Path]::GetTempPath()) ('VLConnector-uninstall-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-    foreach ($rel in 'Uninstall.ps1', 'app\lib\Install.ps1', 'app\lib\LanguageCheck.ps1') {
+    foreach ($rel in 'setup\Uninstall.ps1', 'app\lib\Install.ps1', 'app\lib\LanguageCheck.ps1') {
         $to = Join-Path $temp $rel
         [void][IO.Directory]::CreateDirectory((Split-Path $to))
-        [IO.File]::Copy((Join-Path $PSScriptRoot $rel), $to)
+        [IO.File]::Copy((Join-Path $root $rel), $to)
     }
     return $temp
 }
@@ -88,7 +90,7 @@ $temp = Copy-Uninstaller
 $result = Join-Path $temp 'result.txt'
 $code = 1
 try {
-    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$temp\Uninstall.ps1`"", '-MachinePart', '-InstallDir', "`"$InstallDir`"", '-ResultFile', "`"$result`"")
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$temp\setup\Uninstall.ps1`"", '-MachinePart', '-InstallDir', "`"$InstallDir`"", '-ResultFile', "`"$result`"")
     if ($admin) {
         $p = Start-Process -FilePath $ps -ArgumentList $argList -NoNewWindow -Wait -PassThru
         $code = $p.ExitCode

@@ -6,7 +6,7 @@
   - no binaries in app\ and docs\ except PNG and ICO
   - .cmd files use CRLF line endings (cmd.exe misparses LF-only batch files)
   - C# is compiled or loaded only by lib\Interop.ps1 (the installer builds the DLL; nothing compiles at run time)
-  - every entry script (app\*.ps1, app\polyworks\*.ps1, Install.ps1, Uninstall.ps1) checks the PowerShell
+  - every entry script (app\*.ps1, app\polyworks\*.ps1, setup\Install.ps1, setup\Uninstall.ps1) checks the PowerShell
     language mode as its first statement, before it loads anything
   - shipped text files hold no control characters but tab and line breaks
   - Windows PowerShell is started by its full System32 path, never as a bare powershell.exe (C24)
@@ -22,7 +22,7 @@ $files = @(Get-ChildItem -LiteralPath $Root -Recurse -File | Where-Object {
     $_.FullName -notmatch '\\(\.git|dist|tests\\_work)\\' })
 $shipped = @($files | Where-Object {
     $rel = $_.FullName.Substring($Root.Length + 1)
-    $rel -match '^(app|docs)\\' -or $rel -match '^(Install|Uninstall)\.(cmd|ps1)$' -or $rel -match '^(README\.md|LICENSE|CHANGELOG\.md|VERSION)$' -or $rel -in 'tools\Sign-Package.ps1', 'tools\Build-Interop.ps1' })
+    $rel -match '^(app|docs)\\' -or $rel -match '^(Install|Uninstall)\.cmd$' -or $rel -match '^setup\\(Install|Uninstall)\.ps1$' -or $rel -match '^(README\.md|LICENSE|CHANGELOG\.md|VERSION)$' -or $rel -in 'tools\Sign-Package.ps1', 'tools\Build-Interop.ps1' })
 
 # 1. PowerShell syntax
 foreach ($f in $files | Where-Object { $_.Extension -in '.ps1', '.psm1', '.psd1' }) {
@@ -99,7 +99,7 @@ foreach ($f in $shipped | Where-Object { $_.Extension -in '.ps1', '.pwmacro', '.
 }
 
 # 7. Entry scripts: the language mode check is the first statement (C48)
-foreach ($f in $shipped | Where-Object { $_.Extension -eq '.ps1' -and $_.FullName.Substring($Root.Length + 1) -match '^(app\\[^\\]+|app\\polyworks\\[^\\]+|Install|Uninstall)(\.ps1)$' }) {
+foreach ($f in $shipped | Where-Object { $_.Extension -eq '.ps1' -and $_.FullName.Substring($Root.Length + 1) -match '^(app\\[^\\]+|app\\polyworks\\[^\\]+|setup\\Install|setup\\Uninstall)(\.ps1)$' }) {
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
     $first = if ($ast.EndBlock) { @($ast.EndBlock.Statements)[0] } else { $null }
     $ok = $first -is [System.Management.Automation.Language.IfStatementAst] -and -not $ast.BeginBlock -and -not $ast.ProcessBlock -and

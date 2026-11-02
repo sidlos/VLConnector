@@ -242,8 +242,8 @@ function Show-SettingsWindow {
         $script:sc.ButtonPillText.Text = 'Adding...'
         $script:sw.Dispatcher.Invoke([Action] {}, [System.Windows.Threading.DispatcherPriority]::Render)
         try {
-            [void](Install-VlcPolyWorksTab $kind)
-            Show-SettingsToast 'The VL Connector tab is in PolyWorks'
+            [void](Install-VlcPolyWorksButton $kind)
+            Show-SettingsToast "The $(if ($kind -eq 'Station') { 'VL Station' } else { 'Measure' }) button is in PolyWorks, $(Get-VlcButtonPlaceText)"
             $script:sc.ButtonPill.Background = Get-Brush 'SuccessBackBrush'; $script:sc.ButtonPillText.Foreground = Get-Brush 'SuccessBrush'
             $script:sc.ButtonPillText.Text = 'Added to PolyWorks'
         }

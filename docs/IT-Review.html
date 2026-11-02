@@ -41,7 +41,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <tr><td><code>app\interop\*.cs</code></td><td>compiled once by the installer</td><td>Windows and PolyWorks interface declarations, see section 7.</td></tr>
 <tr><td><code>bin\VLConnector.Interop.dll</code></td><td>loaded by the scripts</td><td>Built by the installer from <code>app\interop\*.cs</code>; carries the SHA-256 of its source in its file properties.</td></tr>
 <tr><td><code>app\lib\*.ps1</code></td><td>loaded by the scripts above</td><td>Shared code, e.g. <code>Install.ps1</code> (installation), <code>Settings.ps1</code> (settings layers), <code>StageWarning*.ps1</code> (warning window).</td></tr>
-<tr><td><code>Install.ps1</code>, <code>Uninstall.ps1</code></td><td>by an administrator</td><td>Installation, update, removal.</td></tr>
+<tr><td><code>Install.cmd</code>, <code>Uninstall.cmd</code> with <code>setup\Install.ps1</code>, <code>setup\Uninstall.ps1</code></td><td>by an administrator</td><td>Installation, update, removal. The scripts are kept in <code>setup\</code>, so the package folder shows only the two .cmd files to open.</td></tr>
 <tr><td><code>tools\Sign-Package.ps1</code></td><td>by IT, optional</td><td>Signs the package with your certificate before deployment (section 6).</td></tr>
 <tr><td><code>tools\Build-Interop.ps1</code></td><td>by the installer (or IT)</td><td>Builds the interface DLL from the source.</td></tr>
 </table>
@@ -127,7 +127,7 @@ Install.cmd -Quiet -InteropDll &lt;folder&gt;\VLConnector.Interop.dll</code></pr
 <tr><td><code>explorer.exe</code> (Startup shortcut)</td><td><code>powershell.exe -STA ... app\Agent.ps1</code></td><td>logon, if the user switched it on</td></tr>
 <tr><td>the agent</td><td><code>powershell.exe -STA ... app\VLReplay.ps1 -Watch -MarkerFile ...</code></td><td>while the agent runs</td></tr>
 <tr><td>the settings window, UAC</td><td><code>powershell.exe ... app\Set-MachinePolicy.ps1</code> (elevated)</td><td><em>Change (administrator)</em></td></tr>
-<tr><td>the installer</td><td><code>powershell.exe ... Install.ps1 -MachinePart</code> (elevated), <code>tools\Build-Interop.ps1</code> (C# compiler <code>csc.exe</code>, once), <code>icacls.exe</code>, <code>takeown.exe</code> (only for an rc10 folder)</td><td>installation</td></tr>
+<tr><td>the installer</td><td><code>powershell.exe ... setup\Install.ps1 -MachinePart</code> (elevated), <code>tools\Build-Interop.ps1</code> (C# compiler <code>csc.exe</code>, once), <code>icacls.exe</code>, <code>takeown.exe</code> (only for an rc10 folder)</td><td>installation</td></tr>
 </table>
 <p><strong>Access to the VL process</strong> (<code>VLApplication4.exe</code> of the same user; KEYENCE files are never written, VL is never terminated):</p>
 <ul>
@@ -149,7 +149,7 @@ Install.cmd -Quiet -InteropDll &lt;folder&gt;\VLConnector.Interop.dll</code></pr
 <tr><td><code>%LOCALAPPDATA%\VLConnector\</code></td><td><code>logs\</code> (30 days), agent <code>inbox\</code>, <code>outbox\</code> (with <code>failed\</code>), <code>pending.txt</code>, <code>runs\</code>, station work files, <code>polyworks-layout\</code> (backups of the PolyWorks visual layout made before <em>Add to PolyWorks</em>)</td><td>all parts</td></tr>
 <tr><td><code>%TEMP%</code></td><td>Short-lived exchange files between the macros and the scripts (launch, marker, status, cancel, results); during the removal a copy of <code>Uninstall.cmd</code>, which stays there</td><td>macros, launcher, uninstaller</td></tr>
 <tr><td><code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector.lnk</code></td><td>Only if the user switches on <em>Start with Windows</em> (page Network; up to the first builds of 1.0.0-rc11 named <code>VL Connector agent.lnk</code>, renamed when VL Connector starts)</td><td>settings window</td></tr>
-<tr><td>PolyWorks visual layout of the user</td><td>Only on <em>Add to PolyWorks</em>: a ribbon tab with the button macro; the previous layout is saved first (<em>Undo</em>)</td><td>settings window, wizard</td></tr>
+<tr><td>PolyWorks visual layout of the user</td><td>Only on <em>Add to PolyWorks</em>: the button macro in a group &quot;VL Connector&quot; at the end of the Home tab; the previous layout is saved first (<em>Undo</em>)</td><td>settings window, wizard</td></tr>
 <tr><td><code>Documents\VL Connector\</code></td><td>Scans (STL) and, in scenario B, the received reports (marked as downloaded)</td><td>launcher, agent</td></tr>
 <tr><td>PolyWorks workspace of the part</td><td>Measured pieces (copies of the template), <code>Reports</code>/<code>Scans</code> folders. Templates are never modified.</td><td>macros</td></tr>
 <tr><td>Shared folder (scenario B)</td><td>See section 9 and <a href="Protocol.html">Protocol</a></td><td>agent, station</td></tr>

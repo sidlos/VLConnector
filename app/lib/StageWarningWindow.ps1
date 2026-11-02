@@ -20,8 +20,8 @@ try {
     <Border BorderBrush="#7A1A12" BorderThickness="2" Padding="24,18">
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="44" Foreground="White" VerticalAlignment="Center" Margin="0,0,20,0"/>
-            <StackPanel MaxWidth="600" VerticalAlignment="Center">
-                <TextBlock Name="Headline" FontSize="22" FontWeight="SemiBold" Foreground="White"/>
+            <StackPanel MaxWidth="800" VerticalAlignment="Center">
+                <TextBlock Name="Headline" FontSize="22" FontWeight="SemiBold" Foreground="White" TextWrapping="Wrap"/>
                 <TextBlock Name="Detail" FontSize="14" Foreground="White" TextWrapping="Wrap" Margin="0,6,0,0"/>
             </StackPanel>
         </StackPanel>

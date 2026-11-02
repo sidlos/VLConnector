@@ -26,7 +26,7 @@ PolyWorks plug-in; no internet access, no telemetry.
 | `app\interop\*.cs` | compiled once by the installer | Windows and PolyWorks interface declarations, see section 7. |
 | `bin\VLConnector.Interop.dll` | loaded by the scripts | Built by the installer from `app\interop\*.cs`; carries the SHA-256 of its source in its file properties. |
 | `app\lib\*.ps1` | loaded by the scripts above | Shared code, e.g. `Install.ps1` (installation), `Settings.ps1` (settings layers), `StageWarning*.ps1` (warning window). |
-| `Install.ps1`, `Uninstall.ps1` | by an administrator | Installation, update, removal. |
+| `Install.cmd`, `Uninstall.cmd` with `setup\Install.ps1`, `setup\Uninstall.ps1` | by an administrator | Installation, update, removal. The scripts are kept in `setup\`, so the package folder shows only the two .cmd files to open. |
 | `tools\Sign-Package.ps1` | by IT, optional | Signs the package with your certificate before deployment (section 6). |
 | `tools\Build-Interop.ps1` | by the installer (or IT) | Builds the interface DLL from the source. |
 
@@ -217,7 +217,7 @@ compare the rest with the manifest.
 | `explorer.exe` (Startup shortcut) | `powershell.exe -STA ... app\Agent.ps1` | logon, if the user switched it on |
 | the agent | `powershell.exe -STA ... app\VLReplay.ps1 -Watch -MarkerFile ...` | while the agent runs |
 | the settings window, UAC | `powershell.exe ... app\Set-MachinePolicy.ps1` (elevated) | *Change (administrator)* |
-| the installer | `powershell.exe ... Install.ps1 -MachinePart` (elevated), `tools\Build-Interop.ps1` (C# compiler `csc.exe`, once), `icacls.exe`, `takeown.exe` (only for an rc10 folder) | installation |
+| the installer | `powershell.exe ... setup\Install.ps1 -MachinePart` (elevated), `tools\Build-Interop.ps1` (C# compiler `csc.exe`, once), `icacls.exe`, `takeown.exe` (only for an rc10 folder) | installation |
 
 **Access to the VL process** (`VLApplication4.exe` of the same user; KEYENCE files are never written, VL is
 never terminated):
@@ -253,7 +253,7 @@ Replay finished) and `%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml` (t
 | `%LOCALAPPDATA%\VLConnector\` | `logs\` (30 days), agent `inbox\`, `outbox\` (with `failed\`), `pending.txt`, `runs\`, station work files, `polyworks-layout\` (backups of the PolyWorks visual layout made before *Add to PolyWorks*) | all parts |
 | `%TEMP%` | Short-lived exchange files between the macros and the scripts (launch, marker, status, cancel, results); during the removal a copy of `Uninstall.cmd`, which stays there | macros, launcher, uninstaller |
 | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector.lnk` | Only if the user switches on *Start with Windows* (page Network; up to the first builds of 1.0.0-rc11 named `VL Connector agent.lnk`, renamed when VL Connector starts) | settings window |
-| PolyWorks visual layout of the user | Only on *Add to PolyWorks*: a ribbon tab with the button macro; the previous layout is saved first (*Undo*) | settings window, wizard |
+| PolyWorks visual layout of the user | Only on *Add to PolyWorks*: the button macro in a group "VL Connector" at the end of the Home tab; the previous layout is saved first (*Undo*) | settings window, wizard |
 | `Documents\VL Connector\` | Scans (STL) and, in scenario B, the received reports (marked as downloaded) | launcher, agent |
 | PolyWorks workspace of the part | Measured pieces (copies of the template), `Reports`/`Scans` folders. Templates are never modified. | macros |
 | Shared folder (scenario B) | See section 9 and [Protocol](Protocol.md) | agent, station |

@@ -1,4 +1,4 @@
-# VL Connector setup wizard: scenario -> scanning options -> PolyWorks (ribbon tab, measured pieces) or network
+# VL Connector setup wizard: scenario -> scanning options -> PolyWorks (button on the Home tab, measured pieces) or network
 # (shared folder, agent, Measurement Programs List) -> summary. Every step saves the settings you changed when
 # you go on; settings the administrator locked for this PC are shown read-only and left alone.
 # Dot-source this file (it needs the libraries loaded by VLConnector.ps1) and call Show-SetupWizard.
@@ -73,14 +73,14 @@ function Update-WizardPage([string]$Page) {
         }
         'PolyWorks' {
             $what = if ($kind -eq 'Station') { 'Station' } else { 'Measure' }
-            $c.TabTitle.Text = "VL Connector tab with the $what button in PolyWorks"
+            $c.TabTitle.Text = "$what button in PolyWorks (Home tab)"
             $c.PropertyHint.Visibility = if ($kind -eq 'Station') { 'Collapsed' } else { 'Visible' }
             $pw = Get-PolyWorksInfo
             if (-not $pw) { Set-WizardBar $c.PwBar $c.PwText 'PolyWorks was not found on this PC. Install PolyWorks Metrology Suite first.' 'Error'; $c.AddTab.IsEnabled = $false }
             else {
                 $insp = $null
                 try { $insp = Get-VlcRunningInspector } catch { }
-                $state = if ($insp) { 'PolyWorks|Inspector is open.' } else { 'Open PolyWorks|Inspector (any project) to add the VL Connector tab.' }
+                $state = if ($insp) { 'PolyWorks|Inspector is open.' } else { 'Open PolyWorks|Inspector (any project) to add the button.' }
                 Set-WizardBar $c.PwBar $c.PwText "$($pw.Name) (Inspector $($pw.InspectorVersion)) found. $state" $(if ($insp) { 'Success' } else { 'Info' })
             }
         }
@@ -97,14 +97,14 @@ function Update-WizardPage([string]$Page) {
                 $mode = @{ HighSpeed = 'High speed'; Standard = 'Standard'; Ask = 'operator chooses' }[[string]$cfg.vl.mode]
                 $lines.Add("AI Replay mode: $mode; STL " + $(if ($cfg.vl.exportImmediately) { 'right after the scan.' } else { 'after VL''s alignment.' }))
             }
-            if ($kind -ne 'Scanner' -and $script:tabAdded) { $lines.Add('VL Connector tab added to PolyWorks.') }
+            if ($kind -ne 'Scanner' -and $script:tabAdded) { $lines.Add("Button added to PolyWorks, $(Get-VlcButtonPlaceText).") }
             if ($kind -ne 'Local') { $lines.Add("Shared folder: $($cfg.network.share)") }
             if ($kind -eq 'Scanner') { $lines.Add($(if (Test-AgentAutostart) { 'VL Connector starts with Windows (notification area).' } else { 'VL Connector does not start with Windows (settings window, page Network: Start now).' })) }
             $c.Summary.ItemsSource = $lines.ToArray()
             $c.NextText.Text = switch ($kind) {
-                'Local' { 'Next: open a part template in PolyWorks|Inspector, add the project property "VL program" (path to the .vld4) and press Measure on the VL Connector tab.' }
+                'Local' { 'Next: open a part template in PolyWorks|Inspector, add the project property "VL program" (path to the .vld4) and press Measure (Home tab, group VL Connector).' }
                 'Scanner' { 'Next: scan with AI Replay in VL as usual. VL Connector exports the STL in the background, sends it to the PolyWorks station and opens the report.' }
-                'Station' { 'Next: fill the Measurement Programs List, open a PolyWorks|Inspector used only for the station and press VL Station on the VL Connector tab.' }
+                'Station' { 'Next: fill the Measurement Programs List, open a PolyWorks|Inspector used only for the station and press VL Station (Home tab, group VL Connector).' }
             }
         }
     }
@@ -199,12 +199,12 @@ function Show-SetupWizard {
     $c.AddTab.Add_Click({
         $kind = if ((Get-WizardKind) -eq 'Station') { 'Station' } else { 'Measure' }
         $c2 = $script:wc
-        Set-WizardBar $c2.PwBar $c2.PwText 'Adding the VL Connector tab to PolyWorks... (a few seconds)' 'Info'
+        Set-WizardBar $c2.PwBar $c2.PwText 'Adding the button to PolyWorks... (a few seconds)' 'Info'
         Update-WizardScreen
         try {
-            $script:lastBackup = Install-VlcPolyWorksTab $kind
+            $script:lastBackup = Install-VlcPolyWorksButton $kind
             $script:tabAdded = $true
-            Set-WizardBar $c2.PwBar $c2.PwText "Done: PolyWorks|Inspector has the tab 'VL Connector' with the $(if ($kind -eq 'Station') { 'VL Station' } else { 'Measure' }) button. The previous layout was saved." 'Success'
+            Set-WizardBar $c2.PwBar $c2.PwText "Done: the $(if ($kind -eq 'Station') { 'VL Station' } else { 'Measure' }) button is in PolyWorks|Inspector, $(Get-VlcButtonPlaceText). The previous layout was saved." 'Success'
             $c2.UndoTab.Visibility = 'Visible'
             $c2.AddTab.Content = 'Add again'
         }

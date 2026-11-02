@@ -315,7 +315,7 @@ Describe 'Start menu and startup shortcuts' {
 Describe 'installation, update and removal on temporary folders (no administrator rights)' {
     $root = Join-Path $TestDrive 'e2e'
     $pkg = Join-Path $root 'package'
-    foreach ($item in 'app', 'VERSION', 'Install.ps1', 'Install.cmd', 'Uninstall.ps1', 'Uninstall.cmd', 'tools\Build-Interop.ps1') {
+    foreach ($item in 'app', 'VERSION', 'setup\Install.ps1', 'Install.cmd', 'setup\Uninstall.ps1', 'Uninstall.cmd', 'tools\Build-Interop.ps1') {
         $to = Join-Path $pkg $item
         New-Item -ItemType Directory -Force -Path (Split-Path $to) | Out-Null
         Copy-Item -LiteralPath (Join-Path $repo $item) -Destination $to -Recurse

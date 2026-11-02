@@ -38,8 +38,8 @@ AI Replay program. Tick each line; note deviations.
 
 ## Scenario A (PolyWorks on the scanner PC)
 
-- [ ] Wizard, step PolyWorks, with PolyWorks|Inspector open: **Add to PolyWorks** - the tab "VL Connector" with
-      the Measure button appears; **Undo** brings the previous ribbon back; add it again.
+- [ ] Wizard, step PolyWorks, with PolyWorks|Inspector open: **Add to PolyWorks** - the Measure button appears at
+      the end of the Home tab (group "VL Connector"); **Undo** brings the previous ribbon back; add it again.
 - [ ] Template has the property `VL program`.
 - [ ] **Measure** in the template: VL starts AI Replay with the right program and mode.
 - [ ] Progress window in PolyWorks shows the VL steps; scanning works as usual.
@@ -64,7 +64,7 @@ AI Replay program. Tick each line; note deviations.
       its role).
 - [ ] Measurement Programs List (`programs.csv`) filled (VL program -> workspace and template on the station);
       the Setup page shows no unused lines.
-- [ ] Station PC: wizard (PolyWorks station) > **Add to PolyWorks** - tab "VL Connector" with **VL Station**;
+- [ ] Station PC: wizard (PolyWorks station) > **Add to PolyWorks** - **VL Station** on the Home tab (group "VL Connector");
       it runs and shows the shared folder.
 - [ ] Scanner PC: agent switched on (*Start with Windows*), icon in the notification area; after a Windows
       logon it starts by itself.

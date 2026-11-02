@@ -47,8 +47,8 @@ is not a PolyWorks plug-in).
    VL Connector** for all users of the PC. IT can install it silently and set the machine settings at the same
    time (see the Notes for IT).
 5. At the end it offers the **setup wizard** (also later: settings window > Setup > *Setup wizard*). The wizard
-   asks for the scenario and the main options, **adds the VL Connector tab with the
-   Measure or Station button to PolyWorks** (open PolyWorks|Inspector first; your PolyWorks layout is saved
+   asks for the scenario and the main options, **adds the Measure or Station button to the Home tab
+   of PolyWorks** (group VL Connector; open PolyWorks|Inspector first; your PolyWorks layout is saved
    before and the wizard can undo it) and, for the network scenario, sets the shared folder and the start with Windows.
 
 **Update:** run Install.cmd of the new version. Settings and the PolyWorks buttons stay; the previous version is
@@ -148,7 +148,7 @@ VL Connector evaluates controls on features and comparison points with a best-fi
 ### Add the button to PolyWorks (once per Windows user)
 
 Automatically: open PolyWorks|Inspector (any project), then press **Add to PolyWorks** in the setup wizard or in
-the settings window, page **PolyWorks**. A ribbon tab **VL Connector** with the **Measure** button appears. Your
+the settings window, page **PolyWorks**. The **Measure** button appears at the end of the **Home** tab, in the group **VL Connector** (move it elsewhere if you like). Your
 PolyWorks visual layout is saved before (in `%LOCALAPPDATA%\VLConnector\polyworks-layout`); the wizard can undo it.
 
 By hand instead:

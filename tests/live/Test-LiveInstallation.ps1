@@ -41,7 +41,10 @@ Out-Info "installed $($kv.INSTALLED) by $($kv.BY), asked by $($kv.REQUESTED_BY),
 
 # the installed copy checks itself: files against its manifest, permissions, interface DLL
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$verify = Invoke-Native $ps @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $InstallDir 'Install.ps1'), '-Verify', '-Quiet', '-InstallDir', $InstallDir)
+# setup\Install.ps1 (up to the first builds of 1.0.0-rc11 Install.ps1 in the program folder itself)
+$setup = Join-Path $InstallDir 'setup\Install.ps1'
+if (-not (Test-Path -LiteralPath $setup)) { $setup = Join-Path $InstallDir 'Install.ps1' }
+$verify = Invoke-Native $ps @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $setup, '-Verify', '-Quiet', '-InstallDir', $InstallDir)
 Out-Check 'Install.cmd -Verify: files, permissions, interface DLL' ($verify.Code -eq 0) "`n$($verify.Output)"
 $parents = @(Get-VlcAclProblems $InstallDir -Parents)
 Out-Check 'the folders above can be changed only by administrators' (-not $parents.Count) ($parents -join '; ')

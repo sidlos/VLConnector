@@ -133,9 +133,9 @@
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock x:Name="TabTitle" Text="VL Connector tab in PolyWorks" Style="{StaticResource BodyText}"/>
+                                <TextBlock x:Name="TabTitle" Text="Button in PolyWorks (Home tab)" Style="{StaticResource BodyText}"/>
                                 <TextBlock x:Name="TabText" Style="{StaticResource CaptionText}" TextWrapping="Wrap"
-                                           Text="Adds a ribbon tab 'VL Connector' with the button to PolyWorks|Inspector. Open PolyWorks|Inspector first (any project). Your current PolyWorks layout is saved before, so this can be undone."/>
+                                           Text="Adds the button to the end of the Home tab of PolyWorks|Inspector (group 'VL Connector'). Open PolyWorks|Inspector first (any project). Your current PolyWorks layout is saved before, so this can be undone."/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button x:Name="UndoTab" Content="Undo" Margin="0,0,8,0" Visibility="Collapsed"/>

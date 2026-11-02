@@ -1,5 +1,6 @@
 <#
-  Install.ps1 - VL Connector for PolyWorks: installs this package on this PC. Start it with Install.cmd.
+  setup\Install.ps1 - VL Connector for PolyWorks: installs this package on this PC. Start it with Install.cmd in
+  the package folder (this script is kept in setup\, so that Install.cmd is the only thing to open there).
     Install.cmd                          install or update in C:\Program Files\VLConnector; Windows asks for
                                          administrator rights
     Install.cmd -InstallDir D:\VLC       another folder (empty, or holding VL Connector)
@@ -40,13 +41,15 @@ param(
 
 # FullLanguage mode is needed (docs\IT-Review); checked before anything else runs
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-    & (Join-Path $PSScriptRoot 'app\lib\LanguageCheck.ps1') -Caller Install -Mode $ExecutionContext.SessionState.LanguageMode
+    & (Join-Path (Split-Path $PSScriptRoot) 'app\lib\LanguageCheck.ps1') -Caller Install -Mode $ExecutionContext.SessionState.LanguageMode
     if (-not $Quiet -and -not $MachinePart) { $null = Read-Host 'Press Enter to close' }
     exit 1
 }
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'app\lib\Install.ps1')
+# the package (or installation) folder: this script is in its setup\ folder
+$root = Split-Path $PSScriptRoot
+. (Join-Path $root 'app\lib\Install.ps1')
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
 # Every line goes to the console and, in the administrator part, to the result file the user part shows.
@@ -63,12 +66,12 @@ function Confirm-Step([string]$Question) {
     return (-not $answer -or $answer -match '^[YyAa]')
 }
 
-$version = if (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'VERSION')) { ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'VERSION'))).Trim() } else { '?' }
+$version = if (Test-Path -LiteralPath (Join-Path $root 'VERSION')) { ([IO.File]::ReadAllText((Join-Path $root 'VERSION'))).Trim() } else { '?' }
 
 # --- administrator part (started by the user part below, elevated, from a local copy of the package) ---------
 if ($MachinePart) {
     $code = 1
-    try { $code = (Install-VlcMachine -Source $PSScriptRoot -Target $InstallDir -Force:$Force -ConfirmStageMotion $ConfirmStageMotion -MachineSettings $MachineSettings -InteropDll $InteropDll -RequestedBy $RequestedBy -Say ${function:Say}).ExitCode }
+    try { $code = (Install-VlcMachine -Source $root -Target $InstallDir -Force:$Force -ConfirmStageMotion $ConfirmStageMotion -MachineSettings $MachineSettings -InteropDll $InteropDll -RequestedBy $RequestedBy -Say ${function:Say}).ExitCode }
     catch { Say "Installation failed: $($_.Exception.Message)" 'Red' }
     Say "$code" 'EXIT'
     exit $code
@@ -118,7 +121,7 @@ $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 if (Test-VlcAdministrator) {
     if (-not (Confirm-Step "Install to $InstallDir ? [Y/n]")) { Say 'Cancelled. Nothing was installed.'; exit 2 }
     $code = 1
-    try { $code = (Install-VlcMachine -Source $PSScriptRoot -Target $InstallDir -Force:$Force -ConfirmStageMotion $ConfirmStageMotion -MachineSettings $MachineSettings -InteropDll $InteropDll -RequestedBy $me -Say ${function:Say}).ExitCode }
+    try { $code = (Install-VlcMachine -Source $root -Target $InstallDir -Force:$Force -ConfirmStageMotion $ConfirmStageMotion -MachineSettings $MachineSettings -InteropDll $InteropDll -RequestedBy $me -Say ${function:Say}).ExitCode }
     catch { Say "Installation failed: $($_.Exception.Message)" 'Red' }
     if ($code -eq 0) {
         Say ''
@@ -132,8 +135,8 @@ if (Test-VlcAdministrator) {
 if ($Quiet) { Say 'Administrator rights are needed: run Install.cmd -Quiet as administrator or as SYSTEM.' 'Red'; exit 740 }
 Say '1/3  Checking the package...'
 try {
-    $manifest = Read-VlcManifest $PSScriptRoot
-    $check = Test-VlcPackageTree $PSScriptRoot $manifest
+    $manifest = Read-VlcManifest $root
+    $check = Test-VlcPackageTree $root $manifest
 }
 catch { Say "$($_.Exception.Message) Download the package again. Nothing was installed." 'Red'; Wait-Key; exit 1 }
 if (-not $check.Ok) {
@@ -157,8 +160,8 @@ $code = 1
 try {
     [void][IO.Directory]::CreateDirectory($temp)
     $copy = Join-Path $temp 'package'
-    Copy-VlcPackage $PSScriptRoot $copy $manifest
-    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', "`"$copy\Install.ps1`"", '-MachinePart',
+    Copy-VlcPackage $root $copy $manifest
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', "`"$copy\setup\Install.ps1`"", '-MachinePart',
         '-InstallDir', "`"$InstallDir`"", '-ResultFile', "`"$result`"", '-RequestedBy', "`"$me`"")
     if ($Force) { $argList += '-Force' }
     if ($ConfirmStageMotion) { $argList += '-ConfirmStageMotion', $ConfirmStageMotion }
