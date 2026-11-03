@@ -51,19 +51,20 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <h2 id="scenario-a-polyworks-on-the-scanner-pc">Scenario A (PolyWorks on the scanner PC)</h2>
 <ul>
 <li class="task">&#9744; Wizard, step PolyWorks, with PolyWorks|Inspector open: <strong>Add to PolyWorks</strong> - the tab &quot;VL Connector&quot; with the Measure button appears; <strong>Undo</strong> brings the previous ribbon back; add it again.</li>
-<li class="task">&#9744; Template has the property <code>VL program</code>.</li>
+<li class="task">&#9744; Template has the property <code>VL program</code>, one data object for the scan, an active measurement sequence without a step that acquires data, and (for the PDF) a formatted report.</li>
+<li class="task">&#9744; A template without a measurement sequence gives the message &quot;has no measurement plan&quot; and changes nothing.</li>
 <li class="task">&#9744; <strong>Measure</strong> in the template: VL starts AI Replay with the right program and mode.</li>
 <li class="task">&#9744; Progress window in PolyWorks shows the VL steps; scanning works as usual.</li>
 <li class="task">&#9744; After the last position: STL exported, PolyWorks comes to the front, evaluation runs.</li>
-<li class="task">&#9744; Verdict message (OK/NOK) and PDF in PolyWorks&#39; standard layout: control table, color map views; CSV next to it opens in Excel with correct characters; its header names the STL and its SHA-256.</li>
-<li class="task">&#9744; Piece <code>&lt;template&gt;_&lt;date&gt;_&lt;time&gt;</code> saved; the template is unchanged.</li>
-<li class="task">&#9744; <strong>Measure</strong> again while the piece is open: starts from the template.</li>
+<li class="task">&#9744; Verdict message (OK/NOK); the PDF is the template&#39;s own report of the new piece; CSV next to it opens in Excel with correct characters; its header names the plan, the STL and its SHA-256.</li>
+<li class="task">&#9744; New piece <code>&lt;template&gt;_&lt;date&gt;_&lt;time&gt;</code> in the template project, saved; it stays open with the Control Reviewer showing its controls; the plan of the template is unchanged.</li>
+<li class="task">&#9744; <strong>Measure</strong> again while that piece is open: the next scan becomes the next piece.</li>
 <li class="task">&#9744; <strong>Cancel</strong> in the progress window during the scan: the run stops with &quot;cancelled&quot;.</li>
 <li class="task">&#9744; Scanner disconnected: clear message &quot;The scanner is not connected&quot;, no hanging.</li>
 <li class="task">&#9744; <strong>Measure</strong> again while VL still shows the previous scan: a new VL window opens and scans; the old window stays as it was.</li>
 <li class="task">&#9744; VL busy (another AI Replay or a message open in VL): clear message, no second VL window.</li>
 <li class="task">&#9744; Optional: <em>VL window after the export</em> = Close / Save and close - VL closes only after the export.</li>
-<li class="task">&#9744; Optional: keep pieces <em>Only NOK</em> - an OK piece is removed, the PDF stays.</li>
+<li class="task">&#9744; Optional: keep pieces <em>Only NOK</em> - an OK piece stays until the next measurement and is removed then; the PDF stays.</li>
 <li class="task">&#9744; A NOK part (or tightened tolerance) gives the verdict NOK; a control without a result gives NOK (<em>not measured</em>), never OK.</li>
 </ul>
 <h2 id="scenario-b-polyworks-on-another-pc">Scenario B (PolyWorks on another PC)</h2>

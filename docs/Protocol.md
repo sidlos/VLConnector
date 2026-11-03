@@ -58,12 +58,22 @@ started by another VL Connector run (the run mutex is taken) is left alone.
 OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE, TIMEOUT_MIN`.
 
 **VLC_Evaluate.pwmacro parameters** (`$1` = file): `PWK, TEMPLATE, STL, RUN, REPORT_DIR, OPERATOR, PROGRAM, UTC,
-KEEP_PIECES, COLOR_SCALE, DEVICE, RESULT, JOBID, APP, STL_SHA256`. The piece is named `<TEMPLATE>_<RUN>`; PDF and
-CSV get the same name in `REPORT_DIR`.
+KEEP_PIECES, COLOR_SCALE, DEVICE, RESULT, JOBID, APP, STL_SHA256` (`COLOR_SCALE` is not used since 2.0: the color
+map belongs to the template's plan). The scan becomes a new piece of the template project (`PIECE NEW`) named
+`<TEMPLATE>_<RUN>`; PDF and CSV get the same name in `REPORT_DIR`.
 
-**Control data** (`VLC-CONTROLS-1`, UTF-16, written by VLC_Evaluate for `Complete-Evaluation.ps1`): the header
-`FORMAT, RUN, JOBID, PIECE, TEMPLATE, PROGRAM, OPERATOR, STL, STL_SHA256, REPORT_DIR, CSV, ALIGN_STATUS,
-ALIGN_ERROR, EXTRACT_STATUS, EXTRACT_ERROR`, then ten lines per control `CONTROL, NAME, NOMINAL, MEASURED,
+**Evaluation by the template's plan:** VLC_Evaluate checks the template first: an active measurement sequence
+with at least one step and no *Data Object* step (the step that acquires data), and exactly one data object. Then:
+`PIECE NEW` (PolyWorks' new-piece questions are answered by setting their options, which are restored at once) ->
+pieces marked `VL remove` by earlier evaluations are deleted -> piece properties (date, serial number, operator,
+device) -> `FILE IMPORT_DATA POLYGONAL_MODEL` replaces the data of the template's data object (its name is kept) ->
+`PIECE PLAY_INSPECTION` plays the plan (alignment, measurement, color map, report items) -> controls -> verdict ->
+`FILE EXPORT_FORMATTED_REPORT PDF` of the template's report (project property `VL report`, otherwise the first
+formatted report; none: no PDF) -> `FILE SAVE_PROJECT`.
+
+**Control data** (`VLC-CONTROLS-2`, UTF-16, written by VLC_Evaluate for `Complete-Evaluation.ps1`): the header
+`FORMAT, RUN, JOBID, PIECE, TEMPLATE, PROGRAM, OPERATOR, STL, STL_SHA256, REPORT_DIR, CSV, PLAN, PLAN_STATUS,
+PLAN_ERROR` (the measurement sequence and the status of `PIECE PLAY_INSPECTION`), then ten lines per control `CONTROL, NAME, NOMINAL, MEASURED,
 DEVIATION, UPPER_TOL, UPPER_WARN, LOWER_WARN, LOWER_TOL, RESULT`, then `END=<number of controls>`. Data that is
 cut off, out of order or miscounted is refused.
 
@@ -74,13 +84,14 @@ values; anything missing or different gives `STATE=ERROR` and the piece is kept 
 **Verdict rules (fail-closed):** a control is OK only with PolyWorks' documented results *Within positive/negative
 safe zone* (OK) or *Within upper/lower warning zone* (OK, warning); *Beyond upper/lower tolerance limit* is NOK;
 an empty result is NOT MEASURED and anything else UNKNOWN - both NOK. No verdict at all (STATE=ERROR) without
-controls, after a failed alignment or measurement, or when the STL is not the one the launcher exported.
+controls, after a failed measurement plan, or when the STL is not the one the launcher exported.
 
 **VLC_Evaluate result** (file `RESULT`, UTF-16, written last): `STATE (OK/ERROR), VERDICT (OK/NOK), SUMMARY, PDF,
-CSV, PIECE, PIECE_KEPT (1/0), MESSAGE`. When `PIECE_KEPT=0` the caller removes the piece after reopening the
-template.
+CSV, PIECE, PIECE_KEPT (1/0), MESSAGE`. `PIECE_KEPT=0`: the piece is marked `VL remove` and removed at the next
+evaluation of the template; the callers delete nothing. VLC_Measure then opens the Control Reviewer (all controls of
+the piece).
 
-**CSV** (UTF-8 with BOM, `;`): header lines with part, program, operator, alignment, version, STL and its
+**CSV** (UTF-8 with BOM, `;`): header lines with part, program, operator, plan, version, STL and its
 SHA-256, then one line per control and the verdict; text cells that a spreadsheet would run as a formula start
 with `'`.
 

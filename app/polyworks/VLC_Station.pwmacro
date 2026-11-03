@@ -34,8 +34,6 @@ DECLARE vJobId ""
 DECLARE vPart ""
 DECLARE vParams ""
 DECLARE vResult ""
-DECLARE vPwk ""
-DECLARE vTemplate ""
 DECLARE vVerdict ""
 DECLARE vSummary ""
 DECLARE vPiece ""
@@ -139,18 +137,8 @@ WHILE $vStop == 0
                 DATA_FILE READ LINE_FIELD ( $vResult, 3, 2, vSummary, "=", "On" )
                 DATA_FILE READ LINE_FIELD ( $vResult, 6, 2, vPiece, "=", "On" )
                 DATA_FILE READ LINE_FIELD ( $vResult, 7, 2, vKept, "=", "On" )
-                # piece not kept (setting "Keep measured pieces"): back to the template, remove the piece
-                IF "$vKept" == "0" AND "$vPiece" != ""
-                    DATA_FILE READ LINE_FIELD ( $vParams, 1, 2, vPwk, "=", "On" )
-                    DATA_FILE READ LINE_FIELD ( $vParams, 2, 2, vTemplate, "=", "On" )
-                    IF "$vPiece" != "$vTemplate"
-                        FILE OPEN_PROJECT_IN_PWK ( $vPwk, $vTemplate )
-                        MACRO GET_ERROR_STATUS ( vSt, vErr )
-                        IF $vSt != "Error"
-                            MACRO EXEC REMOTE_COMMAND ( "EDIT OBJECT DELETE", "Off", $vPwk, $vPiece )
-                        ENDIF
-                    ENDIF
-                ENDIF
+                # a piece that is not kept (setting "Keep measured pieces") stays marked in the template project;
+                # VLC_Evaluate removes it at the next evaluation of that template
                 SET vPubState ""
                 SET vPubMsg ""
                 DATA_FILE CREATE ( $vPub, "Ascii", "Yes" )

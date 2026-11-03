@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.0.0 - 2026-11-03
+
+The part template is the customer's measurement plan; VL Connector only supplies the scan.
+
+**Templates need a change (breaking):** a template now needs exactly one data object for the scan and an active
+measurement sequence (Play Inspection) without a step that acquires data; the PDF is the template's own formatted
+report. Templates of 1.x without a sequence are refused with a message that says what to add (User Guide,
+section 4). The demo template `VL-Polyworks-demo` shows a complete plan.
+
+- **Evaluation by the template's plan:** every scan becomes a new piece of the template project (`PIECE NEW`, named
+  `<template>_<date>_<time>`), the scan replaces the data of the template's data object, and PolyWorks plays the
+  template's measurement sequence (alignment, measurement, color map, report items). VL Connector's own
+  pre-alignment and best-fit, color map and report are gone.
+- **Report:** the PDF is the template's formatted report of the new piece (project property `VL report` picks one
+  when there are several); without a formatted report there is no PDF, the CSV is written anyway. The CSV header
+  names the plan instead of the alignment.
+- **Measure button:** the new piece stays open and the **Control Reviewer** shows its controls; a 1.x copy of a
+  template still leads back to its template.
+- **Keep measured pieces:** a piece that is not kept is marked and removed at the next measurement of the part, so it
+  can be reviewed first; Measure button and station no longer delete projects.
+- **PolyWorks options:** the questions of a new piece, of the data replacement and the Play Inspection interface are
+  answered by setting PolyWorks' options for the moment of the evaluation; the user's values are restored right after.
+- The control data between the macro and `Complete-Evaluation.ps1` is `VLC-CONTROLS-2` (plan status instead of
+  alignment and extraction status). The setting `polyworks.colorScaleMm` and the parameter `COLOR_SCALE` stay for
+  compatibility but are not used any more.
+
 ## 1.0.0 - 2026-11-02
 
 First stable release: the release candidates (below) hardened after an enterprise IT safety audit of 1.0.0-rc10

@@ -40,21 +40,24 @@ AI Replay program. Tick each line; note deviations.
 
 - [ ] Wizard, step PolyWorks, with PolyWorks|Inspector open: **Add to PolyWorks** - the tab "VL Connector" with
       the Measure button appears; **Undo** brings the previous ribbon back; add it again.
-- [ ] Template has the property `VL program`.
+- [ ] Template has the property `VL program`, one data object for the scan, an active measurement sequence without a
+      step that acquires data, and (for the PDF) a formatted report.
+- [ ] A template without a measurement sequence gives the message "has no measurement plan" and changes nothing.
 - [ ] **Measure** in the template: VL starts AI Replay with the right program and mode.
 - [ ] Progress window in PolyWorks shows the VL steps; scanning works as usual.
 - [ ] After the last position: STL exported, PolyWorks comes to the front, evaluation runs.
-- [ ] Verdict message (OK/NOK) and PDF in PolyWorks' standard layout: control table, color map views; CSV next to
-      it opens in Excel with correct characters; its header names the STL and its SHA-256.
-- [ ] Piece `<template>_<date>_<time>` saved; the template is unchanged.
-- [ ] **Measure** again while the piece is open: starts from the template.
+- [ ] Verdict message (OK/NOK); the PDF is the template's own report of the new piece; CSV next to it opens in Excel
+      with correct characters; its header names the plan, the STL and its SHA-256.
+- [ ] New piece `<template>_<date>_<time>` in the template project, saved; it stays open with the Control Reviewer
+      showing its controls; the plan of the template is unchanged.
+- [ ] **Measure** again while that piece is open: the next scan becomes the next piece.
 - [ ] **Cancel** in the progress window during the scan: the run stops with "cancelled".
 - [ ] Scanner disconnected: clear message "The scanner is not connected", no hanging.
 - [ ] **Measure** again while VL still shows the previous scan: a new VL window opens and scans; the old window
       stays as it was.
 - [ ] VL busy (another AI Replay or a message open in VL): clear message, no second VL window.
 - [ ] Optional: *VL window after the export* = Close / Save and close - VL closes only after the export.
-- [ ] Optional: keep pieces *Only NOK* - an OK piece is removed, the PDF stays.
+- [ ] Optional: keep pieces *Only NOK* - an OK piece stays until the next measurement and is removed then; the PDF stays.
 - [ ] A NOK part (or tightened tolerance) gives the verdict NOK; a control without a result gives NOK
       (*not measured*), never OK.
 

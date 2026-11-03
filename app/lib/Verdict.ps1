@@ -14,7 +14,7 @@ $script:VlcToleranceResults = @{
 }
 $script:VlcControlKeys = 'CONTROL', 'NAME', 'NOMINAL', 'MEASURED', 'DEVIATION', 'UPPER_TOL', 'UPPER_WARN', 'LOWER_WARN', 'LOWER_TOL', 'RESULT'
 $script:VlcControlsHeader = 'FORMAT', 'RUN', 'JOBID', 'PIECE', 'TEMPLATE', 'PROGRAM', 'OPERATOR', 'STL', 'STL_SHA256', 'REPORT_DIR', 'CSV',
-    'ALIGN_STATUS', 'ALIGN_ERROR', 'EXTRACT_STATUS', 'EXTRACT_ERROR'
+    'PLAN', 'PLAN_STATUS', 'PLAN_ERROR'
 
 # OK, OK (warning), NOK, NOT MEASURED (no result) or UNKNOWN (a result PolyWorks does not document).
 function Get-VlcControlVerdict([string]$Result) {
@@ -47,7 +47,7 @@ function Read-VlcControlsFile([string]$Path, [int]$MaxBytes = 16MB) {
         $header[$key] = $pairs[$n].Value
         $n++
     }
-    if ($header.FORMAT -ne 'VLC-CONTROLS-1') { throw "The control data has the unknown format '$($header.FORMAT)'." }
+    if ($header.FORMAT -ne 'VLC-CONTROLS-2') { throw "The control data has the unknown format '$($header.FORMAT)'." }
     $controls = [Collections.Generic.List[object]]::new()
     while ($n -lt $pairs.Count -and $pairs[$n].Key -ne 'END') {
         $record = [ordered]@{}
@@ -71,8 +71,7 @@ function Get-VlcEvaluation($Data, [string]$StlHash) {
     $h = $Data.Header
     $count = @($Data.Controls).Count
     $result = [ordered]@{ State = 'ERROR'; Verdict = ''; Summary = ''; Count = $count; Message = ''; Rows = @() }
-    if ($h.ALIGN_STATUS -eq 'Error') { $result.Message = "The alignment to the CAD failed: $($h.ALIGN_ERROR)"; return [pscustomobject]$result }
-    if ($h.EXTRACT_STATUS -eq 'Error') { $result.Message = "The measurement of the features failed: $($h.EXTRACT_ERROR)"; return [pscustomobject]$result }
+    if ($h.PLAN_STATUS -eq 'Error') { $result.Message = "The measurement plan $($h.PLAN) of the template failed: $($h.PLAN_ERROR)"; return [pscustomobject]$result }
     if ($h.STL_SHA256 -and $StlHash -ne $h.STL_SHA256.ToLower()) { $result.Message = "The STL is not the one that was scanned (SHA-256 $StlHash, expected $($h.STL_SHA256))."; return [pscustomobject]$result }
     if (-not $count) { $result.Message = 'The template has no controls, so the piece cannot be judged. Add controls with tolerances to the template.'; return [pscustomobject]$result }
     $rows = foreach ($c in $Data.Controls) { [pscustomobject]@{ Control = $c; Verdict = Get-VlcControlVerdict $c.RESULT } }
@@ -115,7 +114,7 @@ function Write-VlcEvaluationCsv([string]$Path, $Data, $Evaluation, [string]$Vers
     $cell = { param($Text, [switch]$Number) ConvertTo-VlcCsvCell $Text -Number:$Number }
     $lines = New-Object Collections.Generic.List[string]
     $lines.Add((@('Part', $h.PIECE, 'VL program', $h.PROGRAM, 'Operator', $h.OPERATOR) | ForEach-Object { & $cell $_ }) -join ';')
-    $lines.Add((@('Template', $h.TEMPLATE, 'Alignment', 'Best-fit to CAD (automatic pre-alignment)', 'VL Connector', $Version) | ForEach-Object { & $cell $_ }) -join ';')
+    $lines.Add((@('Template', $h.TEMPLATE, 'Plan', "$($h.PLAN) (Play Inspection)", 'VL Connector', $Version) | ForEach-Object { & $cell $_ }) -join ';')
     $lines.Add((@('STL', [IO.Path]::GetFileName($h.STL), 'SHA-256', $StlHash) | ForEach-Object { & $cell $_ }) -join ';')
     $lines.Add('Object;Control;Nominal;Measured;Deviation;Upper tol.;Lower tol.;Result')
     foreach ($r in $Evaluation.Rows) {

@@ -10,9 +10,9 @@ $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
 # Control data as VLC_Evaluate writes it (UTF-16). $Controls: @( @('Plane 1', 'Flatness', 'Within positive safe zone'), ... )
 function New-ControlsFile([string]$Path, [object[]]$Controls, [hashtable]$Header = @{}, [string]$End = '', [switch]$Ascii) {
-    $h = [ordered]@{ FORMAT = 'VLC-CONTROLS-1'; RUN = '20261030_101500'; JOBID = ''; PIECE = 'ABC_20261030_101500'; TEMPLATE = 'ABC'; PROGRAM = 'ABC.vld4'
+    $h = [ordered]@{ FORMAT = 'VLC-CONTROLS-2'; RUN = '20261030_101500'; JOBID = ''; PIECE = 'ABC_20261030_101500'; TEMPLATE = 'ABC'; PROGRAM = 'ABC.vld4'
         OPERATOR = 'Jiří Novák'; STL = ''; STL_SHA256 = ''; REPORT_DIR = (Split-Path $Path); CSV = (Join-Path (Split-Path $Path) 'ABC_20261030_101500.csv')
-        ALIGN_STATUS = ''; ALIGN_ERROR = ''; EXTRACT_STATUS = ''; EXTRACT_ERROR = '' }
+        PLAN = 'Plan'; PLAN_STATUS = ''; PLAN_ERROR = '' }
     foreach ($k in $Header.Keys) { $h[$k] = $Header[$k] }
     $lines = New-Object Collections.Generic.List[string]
     foreach ($k in $h.Keys) { $lines.Add("$k=$($h[$k])") }
@@ -64,7 +64,7 @@ Describe 'control data' {
         { Read-VlcControlsFile (New-ControlsFile (Join-Path $dir 'c.controls') $c -End 3) } | Should Throw "its END line says '3'"
         { Read-VlcControlsFile (New-ControlsFile (Join-Path $dir 'd.controls') $c -Header @{ FORMAT = 'X' }) } | Should Throw 'unknown format'
         { Read-VlcControlsFile (Join-Path $dir 'missing.controls') } | Should Throw 'is missing'
-        [IO.File]::WriteAllText($f, "FORMAT=VLC-CONTROLS-1`r`nJOBID=`r`n", [Text.Encoding]::Unicode)
+        [IO.File]::WriteAllText($f, "FORMAT=VLC-CONTROLS-2`r`nJOBID=`r`n", [Text.Encoding]::Unicode)
         { Read-VlcControlsFile $f } | Should Throw 'no RUN in line 2'
     }
 }
@@ -91,11 +91,10 @@ Describe 'verdict of a piece' {
         $r.Verdict | Should Be 'NOK'
         $r.Summary | Should Match "1 with a result VL Connector does not know \(Cyl 1 Diameter: 'Passed'\)"
     }
-    It 'gives no verdict without controls, after a failed alignment or measurement, or for another STL' {
+    It 'gives no verdict without controls, after a failed measurement plan, or for another STL' {
         foreach ($case in @(
                 @{ C = @(); H = @{}; Why = 'has no controls' }
-                @{ C = @(,$ok); H = @{ ALIGN_STATUS = 'Error'; ALIGN_ERROR = 'not enough overlap' }; Why = 'alignment to the CAD failed: not enough overlap' }
-                @{ C = @(,$ok); H = @{ EXTRACT_STATUS = 'Error'; EXTRACT_ERROR = 'no data' }; Why = 'measurement of the features failed: no data' }
+                @{ C = @(,$ok); H = @{ PLAN_STATUS = 'Error'; PLAN_ERROR = 'The data alignment is not measured' }; Why = 'measurement plan Plan of the template failed: The data alignment is not measured' }
                 @{ C = @(,$ok); H = @{ STL_SHA256 = 'AB12' }; Why = 'STL is not the one that was scanned' })) {
             $r = Get-Result $case.C $case.H 'ff00'
             $r.State | Should Be 'ERROR'
@@ -137,6 +136,7 @@ Describe 'CSV of a piece' {
         ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) | Should Be $true
         $csv = [IO.File]::ReadAllLines($v.CSV)
         $csv[0] | Should Be 'Part;ABC_20261030_101500;VL program;ABC.vld4;Operator;Jiří Novák'
+        $csv[1] | Should Match '^Template;ABC;Plan;Plan \(Play Inspection\);VL Connector;'
         $csv[2] | Should Be "STL;scan.stl;SHA-256;$hash"
         $csv[4] | Should Be "'=cmd|calc;Plošnost;10;10.02;-0.02;0.1;-0.1;OK"
         $csv[-1] | Should Be 'RESULT;OK - all 1 controls within tolerance'

@@ -1,6 +1,6 @@
 version "7.0"
 #==============================================================================
-# VLC_Evaluate - VL Connector for PolyWorks: evaluates one scan (STL) against a part template.
+# VLC_Evaluate - VL Connector for PolyWorks: evaluates one scan (STL) by the plan of the part template.
 # Used by the Measure button (VLC_Measure.pwmacro) and by the PolyWorks station. Shows no dialog.
 #
 #   $1 = parameters file, one KEY=value per line in this order (see docs\Protocol.md):
@@ -9,24 +9,30 @@ version "7.0"
 #         3 STL          scan to evaluate
 #         4 RUN          run name (date_time), used for the piece name and the report file names
 #         5 REPORT_DIR   folder for the PDF and CSV
-#         6 OPERATOR     operator name for the report
+#         6 OPERATOR     operator name (piece property)
 #         7 PROGRAM      VL program file name for the CSV
 #         8 UTC          measurement time (ISO 8601, UTC) for the piece date
 #         9 KEEP_PIECES  All | Nok | None
-#        10 COLOR_SCALE  color map range in mm (e.g. 0.5)
-#        11 DEVICE       device text for the report
+#        10 COLOR_SCALE  not used since 2.0: the color map belongs to the template's plan
+#        11 DEVICE       device text (piece property)
 #        12 RESULT       result file to write
 #        13 JOBID        job id (network scenario) or empty
 #        14 APP          VL Connector app folder (for Complete-Evaluation.ps1)
 #        15 STL_SHA256   SHA-256 of the STL when it was made (empty: not known, e.g. a test STL)
 #   Result file (written last): STATE, VERDICT, SUMMARY, PDF, CSV, PIECE, PIECE_KEPT, MESSAGE.
 #
-# The measured piece is a copy of the template (<template>_<run>), made before anything is changed:
-# PolyWorks writes piece and project properties to the workspace immediately, so they must never be
-# set in the template. The template itself is never saved.
-# This macro only measures and collects: the verdict and the CSV come from Complete-Evaluation.ps1, which
-# is fail-closed (only PolyWorks' documented results inside the tolerance count as OK). Without a verdict
-# (alignment or measurement failed, data inconsistent) the result is STATE=ERROR and the piece is kept.
+# The template is the customer's plan; VL Connector only supplies the scan. The template has
+#   - a measurement sequence (the active one, played by Play Inspection) for the alignment and the
+#     measurement, without a step that acquires data itself,
+#   - exactly one data object, which receives the scan,
+#   - its controls (the verdict) and, optionally, a formatted report (the PDF; project property "VL report"
+#     names it when the template has several).
+# Every scan becomes a new piece of the template project (PIECE NEW), named <template>_<run>; the project is
+# saved. A piece that is not kept (setting "Keep measured pieces") is marked "VL remove" and removed at the
+# next evaluation, so it can still be reviewed in PolyWorks.
+# The verdict and the CSV come from Complete-Evaluation.ps1, which is fail-closed (only PolyWorks' documented
+# results inside the tolerance count as OK). Without a verdict (the plan failed, data inconsistent) the result
+# is STATE=ERROR and the piece is kept.
 #==============================================================================
 MACRO END_ON_ERROR ( "Off" )
 MACRO INTERACTIVITY ( "Off" )
@@ -41,18 +47,39 @@ DECLARE vUser ""
 DECLARE vProgram ""
 DECLARE vUtc ""
 DECLARE vKeep "All"
-DECLARE vScale 0.5
+DECLARE vScale ""
 DECLARE vDevice ""
 DECLARE vResult ""
 DECLARE vJobId ""
+DECLARE vApp ""
+DECLARE vStlHash ""
 DECLARE vProj ""
 DECLARE vPiece ""
+DECLARE vPieceMade 0
+DECLARE vFail ""
 DECLARE vSt
 DECLARE vErr
-DECLARE vData
+DECLARE vPlan ""
+DECLARE vNs 0
+DECLARE vType ""
+DECLARE vNd 0
+DECLARE vData ""
+DECLARE vData2 ""
+DECLARE vOptPlay ""
+DECLARE vOptLink ""
+DECLARE vOptReports ""
+DECLARE vOptConfirm ""
+DECLARE vOptUi ""
+DECLARE vPieces
+DECLARE vOld ""
+DECLARE vRemove ""
+DECLARE vPlanSt ""
+DECLARE vPlanErr ""
 DECLARE vFr ""
+DECLARE vNfr 0
 DECLARE vPdf ""
 DECLARE vCsv ""
+DECLARE vRepErr ""
 DECLARE vN 0
 DECLARE vI 0
 DECLARE vJ 0
@@ -72,19 +99,7 @@ DECLARE vCount 0
 DECLARE vSummary ""
 DECLARE vVerdictAll ""
 DECLARE vDetail ""
-DECLARE vNfr 0
-DECLARE vRepErr ""
-DECLARE vDest ""
 DECLARE vKept 1
-DECLARE vNegScale -0.5
-DECLARE vApp ""
-DECLARE vStlHash ""
-DECLARE vAlignSt ""
-DECLARE vAlignErr ""
-DECLARE vExtractSt ""
-DECLARE vExtractErr ""
-DECLARE vNf 0
-DECLARE vNcp 0
 DECLARE vCtl ""
 DECLARE vVer ""
 DECLARE vCallId
@@ -119,54 +134,137 @@ ENDIF
 SET vPiece "${vTemplate}_${vRun}"
 SET vPdf "${vReportDir}\${vPiece}.pdf"
 SET vCsv "${vReportDir}\${vPiece}.csv"
-SET vNegScale EXPR ( -$vScale )
 SYSTEM COMMAND EXEC SYNC ( "IF", { "NOT", "EXIST", "${_QUOTES}${vReportDir}${_QUOTES}", "MKDIR", "${_QUOTES}${vReportDir}${_QUOTES}" } )
 
-# --- 1) clean template --------------------------------------------------------------
+# --- 1) the template project ------------------------------------------------------------------------
 PROJECT PROPERTIES NAME GET ( vProj )
 IF "$vProj" != "$vTemplate"
     FILE OPEN_PROJECT_IN_PWK ( $vPwk, $vTemplate )
     MACRO GET_ERROR_STATUS ( vSt, vErr )
     IF $vSt == "Error"
-        DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
-        DATA_FILE APPEND LINE ( $vResult, { "STATE=ERROR" } )
-        DATA_FILE APPEND LINE ( $vResult, { "VERDICT=" } )
-        DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=" } )
-        DATA_FILE APPEND LINE ( $vResult, { "PDF=" } )
-        DATA_FILE APPEND LINE ( $vResult, { "CSV=" } )
-        DATA_FILE APPEND LINE ( $vResult, { "PIECE=" } )
-        DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=0" } )
-        DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=The template $vTemplate could not be opened: $vErr" } )
-        MACRO END ( "Error", "Template" )
+        SET vFail "The template $vTemplate could not be opened: $vErr"
     ENDIF
 ENDIF
 
-# --- 2) piece = copy of the template ----------------------------------------------------
-FILE SAVE_PROJECT_AS ( $vPwk, $vPiece )
-MACRO GET_ERROR_STATUS ( vSt, vErr )
-IF $vSt == "Error"
-    DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
-    DATA_FILE APPEND LINE ( $vResult, { "STATE=ERROR" } )
-    DATA_FILE APPEND LINE ( $vResult, { "VERDICT=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PDF=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "CSV=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PIECE=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=0" } )
-    DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=The piece $vPiece could not be created: $vErr" } )
-    MACRO END ( "Error", "Piece" )
+# --- 2) the plan: the active measurement sequence, and the data object it measures ------------------
+IF "$vFail" == ""
+    SEQUENCE ACTIVE GET ( vPlan )
+    SET vNs 0
+    IF "$vPlan" != ""
+        SEQUENCE STEP COUNT GET ( $vPlan, vNs )
+    ENDIF
+    IF $vNs < 1
+        SET vFail "The template $vTemplate has no measurement plan. VL Connector measures with the template's own measurement sequence (Play Inspection): create one in PolyWorks (Sequence Editor, for example from the autogenerated sequence), remove its step that acquires the data object, and save the template."
+    ENDIF
 ENDIF
-# the measured piece remembers its template (the next press of the Measure button opens it)
-PROJECT PROPERTIES CUSTOMIZABLE ( "VL template", $vTemplate )
-MACRO GET_ERROR_STATUS ( vSt, vErr )
-IF $vSt == "Error"
-    PROJECT PROPERTIES CUSTOMIZABLE ADD ( "VL template", $vTemplate )
+IF "$vFail" == ""
+    SET vI 1
+    WHILE $vI <= $vNs
+        SET vType ""
+        SEQUENCE STEP TYPE GET ( $vPlan, $vI, vType )
+        IF "$vType" == "Data Object"
+            SET vFail "The measurement sequence $vPlan of the template $vTemplate acquires data itself (step $vI). VL Connector supplies the scan: remove that step in the Sequence Editor and save the template."
+            SET vI $vNs
+        ENDIF
+        ++ vI
+    ENDWHILE
+ENDIF
+IF "$vFail" == ""
+    TREEVIEW DATA COUNT GET ( vNd )
+    IF $vNd != 1
+        SET vFail "The template $vTemplate must have exactly one data object, which receives the scan; it has $vNd."
+    ELSE
+        TREEVIEW DATA NAME GET ( 1, vData )
+    ENDIF
 ENDIF
 
-# --- 3) data, alignment to CAD, measurement ------------------------------------------------
-FILE IMPORT_DATA POLYGONAL_MODEL ( { $vStl }, "stl" )
-MACRO GET_ERROR_STATUS ( vSt, vErr )
-IF $vSt == "Error"
+# --- 3) the new piece -------------------------------------------------------------------------------
+# PolyWorks asks about these on a new piece unless they are set; the user's choices are restored at once
+IF "$vFail" == ""
+    PIECE NEW OPTIONS LAUNCH_PLAY_INSPECTION GET ( vOptPlay )
+    PIECE NEW OPTIONS LINK_TO_PIECE_TEMPLATE GET ( vOptLink )
+    PIECE NEW OPTIONS NON_UPDATABLE_REPORTS GET ( vOptReports )
+    PIECE NEW OPTIONS LAUNCH_PLAY_INSPECTION ( "No" )
+    PIECE NEW OPTIONS LINK_TO_PIECE_TEMPLATE ( "No" )
+    PIECE NEW OPTIONS NON_UPDATABLE_REPORTS ( "Keep" )
+    PIECE NEW ( $vPiece )
+    MACRO GET_ERROR_STATUS ( vSt, vErr )
+    IF "$vOptPlay" != ""
+        PIECE NEW OPTIONS LAUNCH_PLAY_INSPECTION ( $vOptPlay )
+    ENDIF
+    IF "$vOptLink" != ""
+        PIECE NEW OPTIONS LINK_TO_PIECE_TEMPLATE ( $vOptLink )
+    ENDIF
+    IF "$vOptReports" != ""
+        PIECE NEW OPTIONS NON_UPDATABLE_REPORTS ( $vOptReports )
+    ENDIF
+    IF $vSt == "Error"
+        SET vFail "The piece $vPiece could not be added to $vTemplate: $vErr"
+    ELSE
+        SET vPieceMade 1
+    ENDIF
+ENDIF
+IF "$vFail" == ""
+    # pieces the previous evaluations did not keep
+    PIECE NAME ALL GET ( vPieces )
+    SET vI 1
+    WHILE $vI <= SIZE(vPieces)
+        SET vOld $vPieces[$vI]
+        ++ vI
+        IF "$vOld" != "$vPiece"
+            SET vRemove ""
+            PIECE PROPERTIES CUSTOMIZABLE GET ( $vOld, "VL remove", vRemove )
+            IF "$vRemove" == "1"
+                PIECE DELETE ( { $vOld } )
+            ENDIF
+        ENDIF
+    ENDWHILE
+    # report header: measurement date and time, serial number, operator, device
+    IF "$vUtc" != ""
+        PIECE PROPERTIES DATE_TIME_UTC ( , $vUtc )
+    ENDIF
+    PIECE PROPERTIES CUSTOMIZABLE ( , { "Serial number", "Operator name", "Device" }, { $vPiece, $vUser, $vDevice } )
+ENDIF
+
+# --- 4) the scan replaces the data of the plan's data object ----------------------------------------
+IF "$vFail" == ""
+    DATA REPLACE OPTIONS ALIGNMENT_GROUP CONFIRM_AT_REPLACEMENT GET ( vOptConfirm )
+    DATA REPLACE OPTIONS ALIGNMENT_GROUP CONFIRM_AT_REPLACEMENT ( "Off" )
+    FILE IMPORT_DATA POLYGONAL_MODEL ( { $vStl }, "stl", $vData )
+    MACRO GET_ERROR_STATUS ( vSt, vErr )
+    IF "$vOptConfirm" != ""
+        DATA REPLACE OPTIONS ALIGNMENT_GROUP CONFIRM_AT_REPLACEMENT ( $vOptConfirm )
+    ENDIF
+    IF $vSt == "Error"
+        SET vFail "The STL could not be imported into the data object $vData: $vErr"
+    ELSE
+        # the replaced object takes the name of the file; the plan knows it by its own name
+        TREEVIEW DATA NAME GET ( 1, vData2 )
+        IF "$vData2" != "$vData"
+            TREEVIEW OBJECT PROPERTIES NAME ( $vData, { $vData2 } )
+        ENDIF
+    ENDIF
+ENDIF
+
+# --- 5) the plan: alignment and measurement as the template defines them ----------------------------
+IF "$vFail" == ""
+    PIECE PLAY_INSPECTION OPTIONS DISABLE_INTERFACE GET ( vOptUi )
+    PIECE PLAY_INSPECTION OPTIONS DISABLE_INTERFACE ( "On" )
+    PIECE PLAY_INSPECTION
+    MACRO GET_ERROR_STATUS ( vPlanSt, vPlanErr )
+    IF "$vOptUi" != ""
+        PIECE PLAY_INSPECTION OPTIONS DISABLE_INTERFACE ( $vOptUi )
+    ENDIF
+    TREEVIEW OBJECT SELECT NONE
+ENDIF
+
+# --- no plan or no piece: an error result, no verdict ------------------------------------------------
+IF "$vFail" != ""
+    IF $vPieceMade == 1
+        FILE SAVE_PROJECT
+    ELSE
+        SET vPiece ""
+    ENDIF
     DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
     DATA_FILE APPEND LINE ( $vResult, { "STATE=ERROR" } )
     DATA_FILE APPEND LINE ( $vResult, { "VERDICT=" } )
@@ -174,54 +272,19 @@ IF $vSt == "Error"
     DATA_FILE APPEND LINE ( $vResult, { "PDF=" } )
     DATA_FILE APPEND LINE ( $vResult, { "CSV=" } )
     DATA_FILE APPEND LINE ( $vResult, { "PIECE=$vPiece" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=0" } )
-    DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=The STL could not be imported: $vErr" } )
-    MACRO END ( "Error", "STL import" )
+    DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=$vPieceMade" } )
+    DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=$vFail" } )
+    MACRO END ( "Error", "VLC_Evaluate" )
 ENDIF
-TREEVIEW DATA NAME GET ( 1, vData )
-TREEVIEW OBJECT PROPERTIES NAME ( "Scan", { $vData } )
 
-TREEVIEW OBJECT SELECT NONE
-ALIGN BEST_FIT DATA_TO_REFERENCE CREATE FIT_TO_REFERENCE_OBJECT_SURFACES USING_PRE_ALIGNMENT AUTOMATIC ( "Best-fit to CAD" )
-MACRO GET_ERROR_STATUS ( vAlignSt, vAlignErr )
-# a failed measurement could leave values of the template in place: its error means no verdict
-TREEVIEW FEATURE COUNT GET ( vNf )
-TREEVIEW COMPARISON_POINT COUNT GET ( vNcp )
-IF $vNf > 0
-    TREEVIEW OBJECT SELECT NONE
-    TREEVIEW FEATURE SELECT ALL
-    MEASURE EXTRACT MEASURED
-    MACRO GET_ERROR_STATUS ( vExtractSt, vExtractErr )
-ENDIF
-IF $vNcp > 0
-    TREEVIEW OBJECT SELECT NONE
-    MEASURE COMPARISON_POINT EXTRACT MEASURED ALL
-    MACRO GET_ERROR_STATUS ( vSt, vErr )
-    IF "$vSt" == "Error" AND "$vExtractSt" != "Error"
-        SET vExtractSt $vSt
-        SET vExtractErr $vErr
-    ENDIF
-ENDIF
-TREEVIEW OBJECT SELECT NONE
-COMPARE VIEWING_OPTIONS COLOR_SCALE RANGE_LIMITS ( "Custom", $vNegScale, $vScale )
-COMPARE VIEWING_OPTIONS COLOR_SCALE SYMMETRICAL ( "On" )
-MEASURE DATA_COLOR_MAP REFERENCE_SURFACE CREATE ( "Deviation from CAD" )
-
-# --- 4) report header: piece properties (name, measurement date and time, operator) --
-PIECE PROPERTIES NAME ( , $vRun )
-IF "$vUtc" != ""
-    PIECE PROPERTIES DATE_TIME_UTC ( , $vUtc )
-ENDIF
-PIECE PROPERTIES CUSTOMIZABLE ( , { "Serial number", "Operator name", "Device" }, { $vPiece, $vUser, $vDevice } )
-
-# --- 5) verdict: the raw control data -> Complete-Evaluation.ps1 (verdict and CSV) --------
+# --- 6) verdict: the raw control data -> Complete-Evaluation.ps1 (verdict and CSV) ------------------
 # Windows PowerShell by its full path, never a powershell.exe found first on the search path
 SYSTEM ENVIRONMENT_VARIABLE GET ( "SystemRoot", vSysRoot )
 SET vPs "${vSysRoot}\System32\WindowsPowerShell\v1.0\powershell.exe"
 SET vCtl "${vResult}.controls"
 SET vVer "${vResult}.verdict"
 DATA_FILE CREATE ( $vCtl, "Unicode", "Yes" )
-DATA_FILE APPEND LINE ( $vCtl, { "FORMAT=VLC-CONTROLS-1" } )
+DATA_FILE APPEND LINE ( $vCtl, { "FORMAT=VLC-CONTROLS-2" } )
 DATA_FILE APPEND LINE ( $vCtl, { "RUN=$vRun" } )
 DATA_FILE APPEND LINE ( $vCtl, { "JOBID=$vJobId" } )
 DATA_FILE APPEND LINE ( $vCtl, { "PIECE=$vPiece" } )
@@ -232,11 +295,10 @@ DATA_FILE APPEND LINE ( $vCtl, { "STL=$vStl" } )
 DATA_FILE APPEND LINE ( $vCtl, { "STL_SHA256=$vStlHash" } )
 DATA_FILE APPEND LINE ( $vCtl, { "REPORT_DIR=$vReportDir" } )
 DATA_FILE APPEND LINE ( $vCtl, { "CSV=$vCsv" } )
-DATA_FILE APPEND LINE ( $vCtl, { "ALIGN_STATUS=$vAlignSt" } )
-DATA_FILE APPEND LINE ( $vCtl, { "ALIGN_ERROR=$vAlignErr" } )
-DATA_FILE APPEND LINE ( $vCtl, { "EXTRACT_STATUS=$vExtractSt" } )
-DATA_FILE APPEND LINE ( $vCtl, { "EXTRACT_ERROR=$vExtractErr" } )
-# pass 1 = features, pass 2 = comparison points; objects without controls (e.g. axes for a pitch) are skipped
+DATA_FILE APPEND LINE ( $vCtl, { "PLAN=$vPlan" } )
+DATA_FILE APPEND LINE ( $vCtl, { "PLAN_STATUS=$vPlanSt" } )
+DATA_FILE APPEND LINE ( $vCtl, { "PLAN_ERROR=$vPlanErr" } )
+# pass 1 = features, pass 2 = comparison points; objects without controls (e.g. datums) are skipped
 SET vPass 1
 WHILE $vPass <= 2
   IF $vPass == 1
@@ -327,42 +389,27 @@ IF "$vEState" != "OK"
 ENDIF
 SET vSummary "$vVerdictAll - $vDetail"
 
-# --- 6) PDF report --------------------------------------------------------------
-# PolyWorks' own report layout: control snapshot and table, then top and front views of the color map.
-# New report items go to the tree view temporarily (the default destination "Active Formatted
-# Report" would put them into an automatically created "report 1"); the report is then built from
-# them. Without a selection, CREATE_AUTOMATIC takes all items except the header and footer
-# (SELECT ALL would select only those two).
-REPORT_ITEM OPTIONS DESTINATION GET ( vDest )
-REPORT_ITEM OPTIONS DESTINATION ( "Tree View" )
-MEASURE CONTROL_VIEW CREATE FROM_ALL_CONTROLS ( "Controls", "Dimensions and points with tolerances" )
-MEASURE CONTROL_VIEW REPORT_ITEM CREATE SNAPSHOT_AND_TABLE ( { "Controls" } )
-VIEW POSE Z_POS
-VIEW POSE CENTER
-REPORT_ITEM SNAPSHOT CAPTURE ( "Deviation color map - top" )
-VIEW POSE Y_NEG
-VIEW POSE CENTER
-REPORT_ITEM SNAPSHOT CAPTURE ( "Deviation color map - front" )
-VIEW POSE ISOMETRIC ( "+X-Y+Z", "+Z" )
-VIEW POSE CENTER
-TREEVIEW OBJECT SELECT NONE
-TREEVIEW REPORT_ITEM SELECT NONE
-FORMATTED_REPORT CREATE_AUTOMATIC ( "Report" )
+# --- 7) PDF: the template's own formatted report, updated by the plan -------------------------------
+# VL Connector builds no report of its own; without a formatted report in the template there is no PDF.
+PROJECT PROPERTIES CUSTOMIZABLE GET ( "VL report", vFr )
 TREEVIEW FORMATTED_REPORT COUNT GET ( vNfr )
-TREEVIEW FORMATTED_REPORT NAME GET ( $vNfr, vFr )
-FORMATTED_REPORT PROPERTIES STANDARD ( $vFr, "Title", "Inspection Report - $vTemplate" )
-FORMATTED_REPORT PROPERTIES STANDARD ( $vFr, "Author", $vUser )
-FILE EXPORT_FORMATTED_REPORT PDF ( $vPdf, "Off", $vFr )
-MACRO GET_ERROR_STATUS ( vSt, vErr )
-IF $vSt == "Error"
-    SET vRepErr "PDF export: $vErr"
+IF "$vFr" == "" AND $vNfr > 0
+    TREEVIEW FORMATTED_REPORT NAME GET ( 1, vFr )
 ENDIF
-IF "$vDest" != ""
-    REPORT_ITEM OPTIONS DESTINATION ( $vDest )
+IF "$vFr" != ""
+    FILE EXPORT_FORMATTED_REPORT PDF ( $vPdf, "Off", $vFr )
+    MACRO GET_ERROR_STATUS ( vSt, vErr )
+    IF $vSt == "Error"
+        SET vRepErr "The report $vFr could not be exported to PDF: $vErr"
+        SET vPdf ""
+    ENDIF
+ELSE
+    SET vRepErr "The template has no formatted report, so there is no PDF."
+    SET vPdf ""
 ENDIF
 
-# --- 7) keep the piece ------------------------------------------------------------
-# All: always; Nok: only NOK pieces; None: never (the caller removes the piece project from the workspace)
+# --- 8) keep the piece or mark it for removal at the next evaluation --------------------------------
+# All: always; Nok: only NOK pieces; None: never
 SET vKept 1
 IF "$vKeep" == "None"
     SET vKept 0
@@ -370,11 +417,16 @@ ENDIF
 IF "$vKeep" == "Nok" AND "$vVerdictAll" == "OK"
     SET vKept 0
 ENDIF
-IF $vKept == 1
-    FILE SAVE_PROJECT
+IF $vKept == 0
+    PIECE PROPERTIES CUSTOMIZABLE ADD ( , { "VL remove" }, { "1" } )
+ENDIF
+FILE SAVE_PROJECT
+MACRO GET_ERROR_STATUS ( vSt, vErr )
+IF $vSt == "Error"
+    SET vRepErr "The template project could not be saved: $vErr"
 ENDIF
 
-# --- 8) result for the caller ---------------------------------------------------------
+# --- 9) result for the caller -----------------------------------------------------------------------
 DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
 DATA_FILE APPEND LINE ( $vResult, { "STATE=OK" } )
 DATA_FILE APPEND LINE ( $vResult, { "VERDICT=$vVerdictAll" } )

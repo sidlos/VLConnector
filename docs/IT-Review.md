@@ -255,11 +255,13 @@ Replay finished) and `%LOCALAPPDATA%\KEYENCE\...\RecentUsedTemplateFiles.xml` (t
 | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VL Connector.lnk` | Only if the user switches on *Start with Windows* (page Network; up to the first builds of 1.0.0-rc11 named `VL Connector agent.lnk`, renamed when VL Connector starts) | settings window |
 | PolyWorks visual layout of the user | Only on *Add to PolyWorks*: a ribbon tab with the button macro; the previous layout is saved first (*Undo*) | settings window, wizard |
 | `Documents\VL Connector\` | Scans (STL) and, in scenario B, the received reports (marked as downloaded) | launcher, agent |
-| PolyWorks workspace of the part | Measured pieces (copies of the template), `Reports`/`Scans` folders. Templates are never modified. | macros |
+| PolyWorks workspace of the part | Measured pieces as PolyWorks pieces of the template project (with their scan; the plan of the template is not changed, the project file grows with every kept piece), `Reports`/`Scans` folders | macros |
 | Shared folder (scenario B) | See section 9 and [Protocol](Protocol.md) | agent, station |
 
-Nothing is written into the program folders of VL or PolyWorks; VL Connector installs no PolyWorks plug-in and
-changes no PolyWorks options. There is no internet access and no telemetry.
+Nothing is written into the program folders of VL or PolyWorks; VL Connector installs no PolyWorks plug-in. It changes
+no PolyWorks options for good: while it adds a piece it sets PolyWorks' own question options for new pieces, data
+replacement and the Play Inspection interface, and restores the user's values right after. There is no internet
+access and no telemetry.
 
 ## 9. Shared folder of scenario B: rights
 

@@ -9,13 +9,14 @@ version "7.0"
 #   "VL options"   optional options for this part, e.g. -Mode Standard -AfterExport Minimize
 #   "VL reports"   optional folder for PDF and CSV (otherwise the VL Connector setting or <workspace>\Reports)
 #   "VL test STL"  optional: evaluate this STL instead of scanning (test without the scanner)
-# Every measured piece gets "VL template" (= template name), so the next press opens the template again.
+#   "VL report"    optional: the formatted report exported to PDF when the template has several
+# Measured pieces of VL Connector 1.x are copies of the template with the property "VL template"; pressing
+# Measure in such a copy opens the template again.
 #
-# Flow: opens the template (when a measured piece is open) -> AI Replay in VL (VLReplay.ps1, progress
-#   and Cancel here) -> VLC_Evaluate.pwmacro: piece = copy of the template, alignment to CAD, all
-#   controls of the template, color map, PDF report and CSV -> keeps or removes the piece (setting
-#   "Keep measured pieces") -> opens the PDF (setting) -> shows the verdict.
-#   The template itself is never modified.
+# Flow: opens the template (when a 1.x copy is open) -> AI Replay in VL (VLReplay.ps1, progress and Cancel
+#   here) -> VLC_Evaluate.pwmacro: a new piece of the template project, the scan in its data object, the
+#   template's own plan (Play Inspection: alignment, measurement, report), verdict and CSV from its controls,
+#   PDF of its report -> opens the PDF (setting) -> the piece stays open with the Control Reviewer -> verdict.
 #==============================================================================
 MACRO END_ON_ERROR ( "Off" )
 
@@ -78,6 +79,7 @@ DECLARE vKept "1"
 DECLARE vRMsg ""
 DECLARE vIcon "Information"
 DECLARE vNote ""
+DECLARE vReportLine ""
 
 IF "$vApp" == ""
     MACRO INPUT ERROR_MESSAGE ( "Error", "VL Connector: the Measure button is not set up correctly.", "Import VLC_Measure_Button.pwmacro from the VL Connector folder again.", "See the User Guide, chapter 'Measure button'." )
@@ -285,19 +287,12 @@ IF "$vRState" != "OK"
     MACRO END ( "Error", "Evaluation" )
 ENDIF
 
-# --- 4) measured piece not kept (setting "Keep measured pieces": only NOK / none) -----------------------
-IF "$vKept" == "0" AND "$vPiece" != "" AND "$vPiece" != "$vTemplate"
-    MACRO INTERACTIVITY ( "Off" )
-    FILE OPEN_PROJECT_IN_PWK ( $vPwk, $vTemplate )
-    MACRO GET_ERROR_STATUS ( vSt, vErr )
-    IF $vSt != "Error"
-        MACRO EXEC REMOTE_COMMAND ( "EDIT OBJECT DELETE", "Off", $vPwk, $vPiece )
-        MACRO GET_ERROR_STATUS ( vSt, vErr )
-    ENDIF
-    MACRO INTERACTIVITY ( "On" )
-    IF $vSt == "Error"
-        SET vNote "The piece $vPiece could not be removed from the workspace: $vErr"
-    ENDIF
+# --- 4) the measured piece stays open: the Control Reviewer shows its controls ------------------------
+# a piece that is not kept (setting "Keep measured pieces") is removed at the next measurement of this part
+WINDOW VIEW ( { "Control Reviewer" }, "On" )
+WINDOW CONTROL_REVIEWER SOURCE ( "All Controls" )
+IF "$vKept" == "0"
+    SET vNote "The piece is not kept: it is removed at the next measurement."
 ENDIF
 
 # --- 5) report and verdict -----------------------------------------------------------------------------
@@ -313,5 +308,9 @@ ENDIF
 IF "$vNote" == ""
     SET vNote "Table: $vCsv"
 ENDIF
+SET vReportLine "Report: $vPdf"
+IF "$vPdf" == ""
+    SET vReportLine "Table: $vCsv"
+ENDIF
 MACRO ECHO ( "VL Connector: $vPiece: $vVerdict - $vSummary. Report $vPdf" )
-MACRO INPUT ERROR_MESSAGE ( $vIcon, "Part $vPiece: $vVerdict - $vSummary.", "Report: $vPdf", "$vNote" )
+MACRO INPUT ERROR_MESSAGE ( $vIcon, "Part $vPiece: $vVerdict - $vSummary.", "$vReportLine", "$vNote" )

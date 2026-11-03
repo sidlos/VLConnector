@@ -58,8 +58,10 @@ Describe 'macro file protocol' {
         $block = [regex]::Match($station, '(?s)\$params = \[ordered\]@\{(.*?)\n\s*\}').Groups[1].Value
         $stationKeys = @([regex]::Matches($block, '(?m)(?:^|;)\s*([A-Z][A-Z0-9_]*) =') | ForEach-Object { $_.Groups[1].Value })
         $stationKeys -join ',' | Should Be ($keys -join ',')
-        # the station macro itself reads the workspace and the template back (to remove a piece it does not keep)
-        Assert-Reads (Get-MacroReads $stationMacro 'vParams') $keys @{ vPwk = 'PWK'; vTemplate = 'TEMPLATE' }
+        # pieces live in the template project since 2.0: VLC_Evaluate removes those not kept, no caller deletes projects
+        foreach ($caller in $measure, $stationMacro) { $caller | Should Not Match 'EDIT OBJECT DELETE' }
+        $evaluate | Should Match 'PIECE NEW \( \$vPiece \)'
+        $evaluate | Should Match 'PIECE PLAY_INSPECTION\r?\n'
     }
     It 'VLC_Station reads the Station-Step lines it expects (context, next job, publish)' {
         $keysOf = @{}
@@ -94,7 +96,7 @@ Describe 'macro file protocol' {
         . (Join-Path $repo 'app\lib\Verdict.ps1')
         $keys = Get-MacroWrites $evaluate 'vCtl'
         $keys -join ',' | Should Be ((@($script:VlcControlsHeader) + @($script:VlcControlKeys) + 'END') -join ',')
-        $evaluate | Should Match 'DATA_FILE APPEND LINE \( \$vCtl, \{ "FORMAT=VLC-CONTROLS-1" \} \)'
+        $evaluate | Should Match 'DATA_FILE APPEND LINE \( \$vCtl, \{ "FORMAT=VLC-CONTROLS-2" \} \)'
     }
     It 'VLC_Evaluate reads the verdict lines Complete-Evaluation.ps1 writes, after emptying the file' {
         $script = [IO.File]::ReadAllText((Join-Path $poly 'Complete-Evaluation.ps1'))
