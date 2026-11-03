@@ -62,6 +62,8 @@ Describe 'macro file protocol' {
         foreach ($caller in $measure, $stationMacro) { $caller | Should Not Match 'EDIT OBJECT DELETE' }
         $evaluate | Should Match 'PIECE NEW \( \$vPiece \)'
         $evaluate | Should Match 'PIECE PLAY_INSPECTION\r?\n'
+        # a new piece is made from the current piece with its properties: a removal mark must not come along
+        $evaluate | Should Match '(?s)PIECE NEW \( \$vPiece \).*PIECE PROPERTIES CUSTOMIZABLE REMOVE \( , \{ "VL remove" \} \).*PIECE DELETE'
     }
     It 'VLC_Station reads the Station-Step lines it expects (context, next job, publish)' {
         $keysOf = @{}

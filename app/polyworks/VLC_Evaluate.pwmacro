@@ -73,6 +73,7 @@ DECLARE vOptUi ""
 DECLARE vPieces
 DECLARE vOld ""
 DECLARE vRemove ""
+DECLARE vProps
 DECLARE vPlanSt ""
 DECLARE vPlanErr ""
 DECLARE vFr ""
@@ -205,6 +206,16 @@ IF "$vFail" == ""
     ENDIF
 ENDIF
 IF "$vFail" == ""
+    # a new piece takes over the customizable properties of the piece it is made from, also the mark of a
+    # piece that is not kept: the new piece starts without it
+    PIECE PROPERTIES CUSTOMIZABLE NAME ALL GET ( , vProps )
+    SET vI 1
+    WHILE $vI <= SIZE(vProps)
+        IF "$vProps[$vI]" == "VL remove"
+            PIECE PROPERTIES CUSTOMIZABLE REMOVE ( , { "VL remove" } )
+        ENDIF
+        ++ vI
+    ENDWHILE
     # pieces the previous evaluations did not keep
     PIECE NAME ALL GET ( vPieces )
     SET vI 1
