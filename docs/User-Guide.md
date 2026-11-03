@@ -133,7 +133,7 @@ only supplies the scan and adds no alignment, measurement or report of its own. 
   is then made from it, whichever piece is open.
 
 A template without a measurement sequence, or with a step that acquires data, is refused with a message that
-says what to change. The demo template `VL-Polyworks-demo` shows a complete plan.
+says what to change.
 
 Add these **project properties** to the template (File > Project > Properties > Add):
 

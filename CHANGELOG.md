@@ -7,8 +7,7 @@ The part template is the customer's measurement plan; VL Connector only supplies
 **Templates need a change (breaking):** a template now needs exactly one data object for the scan and an active
 measurement sequence (Play Inspection) without a step that acquires data (removed or ignored); the PDF is the
 template's own formatted report; a piece template is recommended. Templates of 1.x without a sequence are refused
-with a message that says what to add (User Guide, section 4). The demo template `VL-Polyworks-demo` shows a complete
-plan.
+with a message that says what to add (User Guide, section 4).
 
 - **Evaluation by the template's plan:** every scan becomes a new piece of the template project (`PIECE NEW`, named
   `<template>_<date>_<time>`), the scan replaces the data of the template's data object, and PolyWorks plays the
