@@ -5,14 +5,24 @@
 The part template is the customer's measurement plan; VL Connector only supplies the scan.
 
 **Templates need a change (breaking):** a template now needs exactly one data object for the scan and an active
-measurement sequence (Play Inspection) without a step that acquires data; the PDF is the template's own formatted
-report. Templates of 1.x without a sequence are refused with a message that says what to add (User Guide,
-section 4). The demo template `VL-Polyworks-demo` shows a complete plan.
+measurement sequence (Play Inspection) without a step that acquires data (removed or ignored); the PDF is the
+template's own formatted report; a piece template is recommended. Templates of 1.x without a sequence are refused
+with a message that says what to add (User Guide, section 4). The demo template `VL-Polyworks-demo` shows a complete
+plan.
 
 - **Evaluation by the template's plan:** every scan becomes a new piece of the template project (`PIECE NEW`, named
   `<template>_<date>_<time>`), the scan replaces the data of the template's data object, and PolyWorks plays the
   template's measurement sequence (alignment, measurement, color map, report items). VL Connector's own
   pre-alignment and best-fit, color map and report are gone.
+- **New pieces as PolyWorks recommends:** made from the template's piece template (project property
+  `VL piece template` when there are several) and linked to it, so that PolyWorks can propagate later corrections of
+  the plan to measured pieces; without a piece template from the open piece. The plan is checked in the new piece;
+  a new piece without a usable plan is removed again.
+- **Unsaved changes:** when the open piece has unsaved changes, the Measure button asks before the scan (*Save and
+  measure* or *Cancel*); PolyWorks would save them silently when the new piece is added.
+- A *Data Object* step of the sequence may also be ignored (Sequence Editor, Edit > Ignore) instead of removed.
+- The automatic project update, which Play Inspection and linking need and which each piece keeps as its own
+  setting, is switched on for the new piece during its plan and switched off again if it was off.
 - **Report:** the PDF is the template's formatted report of the new piece (project property `VL report` picks one
   when there are several); without a formatted report there is no PDF, the CSV is written anyway. The CSV header
   names the plan instead of the alignment.
@@ -21,7 +31,8 @@ section 4). The demo template `VL-Polyworks-demo` shows a complete plan.
 - **Keep measured pieces:** a piece that is not kept is marked and removed at the next measurement of the part, so it
   can be reviewed first; Measure button and station no longer delete projects.
 - **PolyWorks options:** the questions of a new piece, of the data replacement and the Play Inspection interface are
-  answered by setting PolyWorks' options for the moment of the evaluation; the user's values are restored right after.
+  answered by setting PolyWorks' options for the moment of the evaluation; the user's values are restored right after
+  (also the option *Nonupdatable reports*, which linking a piece changes).
 - The control data between the macro and `Complete-Evaluation.ps1` is `VLC-CONTROLS-2` (plan status instead of
   alignment and extraction status). The setting `polyworks.colorScaleMm` and the parameter `COLOR_SCALE` stay for
   compatibility but are not used any more.

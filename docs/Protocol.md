@@ -55,21 +55,32 @@ started by another VL Connector run (the run mutex is taken) is left alone.
 ## 2. PolyWorks macros
 
 **Get-MacroContext.ps1 output** (for VLC_Measure): `STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, KEEP_PIECES,
-OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE, TIMEOUT_MIN`.
+OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE, TIMEOUT_MIN, UNSAVED`. `UNSAVED` is `1` when the project named by
+`-Project` has unsaved changes, `0` when not, empty when it cannot be told: no macro command tells it, so the
+script reads the window title of the PolyWorks|Inspector that started it (PolyWorks marks unsaved changes with `*`
+after the project name).
 
 **VLC_Evaluate.pwmacro parameters** (`$1` = file): `PWK, TEMPLATE, STL, RUN, REPORT_DIR, OPERATOR, PROGRAM, UTC,
 KEEP_PIECES, COLOR_SCALE, DEVICE, RESULT, JOBID, APP, STL_SHA256` (`COLOR_SCALE` is not used since 2.0: the color
 map belongs to the template's plan). The scan becomes a new piece of the template project (`PIECE NEW`) named
 `<TEMPLATE>_<RUN>`; PDF and CSV get the same name in `REPORT_DIR`.
 
-**Evaluation by the template's plan:** VLC_Evaluate checks the template first: an active measurement sequence
-with at least one step and no *Data Object* step (the step that acquires data), and exactly one data object. Then:
-`PIECE NEW` (PolyWorks' new-piece questions are answered by setting their options, which are restored at once) ->
-pieces marked `VL remove` by earlier evaluations are deleted -> piece properties (date, serial number, operator,
-device) -> `FILE IMPORT_DATA POLYGONAL_MODEL` replaces the data of the template's data object (its name is kept) ->
-`PIECE PLAY_INSPECTION` plays the plan (alignment, measurement, color map, report items) -> controls -> verdict ->
-`FILE EXPORT_FORMATTED_REPORT PDF` of the template's report (project property `VL report`, otherwise the first
-formatted report; none: no PDF) -> `FILE SAVE_PROJECT`.
+**Evaluation by the template's plan:** the source of the new piece is the template's piece template (project
+property `VL piece template`, otherwise the first one; a named one that does not exist is an error), or, without a
+piece template, the open piece. Then: `PIECE NEW` (PolyWorks' new-piece questions are answered by setting their
+options, which are restored at once; PolyWorks saves unsaved changes of the open piece first) -> the plan of the
+new piece is checked: an active measurement sequence with at least one step, no *Data Object* step (the step that
+acquires data) unless it is ignored, and exactly one data object; otherwise the new piece is deleted again and the
+source of the plan is opened -> the automatic project update of the new piece is switched on if it is off ->
+`PIECE LINK` to the piece template (not when the PolyWorks option *Link to the piece template* is *No*; linking
+changes the option *Nonupdatable reports*, which is set and restored around it; a failed link is a note in
+`MESSAGE`) -> pieces marked `VL remove` by earlier evaluations are deleted, and an inherited mark is removed from the
+new piece -> piece properties (date, serial number, operator, device) -> `FILE IMPORT_DATA POLYGONAL_MODEL` replaces
+the data of the template's data object (its name is kept) -> `PIECE PLAY_INSPECTION` plays the plan (alignment,
+measurement, color map, report items) -> the automatic project update is switched off again if it was off ->
+controls -> verdict -> `FILE EXPORT_FORMATTED_REPORT PDF` of the template's report (project property `VL report`,
+otherwise the first formatted report; none: no PDF) -> `FILE SAVE_PROJECT`. Messages of PolyWorks are written on one
+line.
 
 **Control data** (`VLC-CONTROLS-2`, UTF-16, written by VLC_Evaluate for `Complete-Evaluation.ps1`): the header
 `FORMAT, RUN, JOBID, PIECE, TEMPLATE, PROGRAM, OPERATOR, STL, STL_SHA256, REPORT_DIR, CSV, PLAN, PLAN_STATUS,

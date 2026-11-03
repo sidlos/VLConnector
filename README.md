@@ -16,10 +16,10 @@ press one button, scan the part in VL as usual, and get a clear OK/NOK verdict w
 | Report | PDF and CSV, opened automatically | the PDF comes back and opens only on the PC that scanned the part |
 
 For each part, a PolyWorks template is the measurement plan: the CAD, one data object for the scan, the controls, a
-measurement sequence (alignment and measurement) and, optionally, the report. VL Connector adds every scan as a new
-piece of the template, puts the scan into its data object and lets PolyWorks play the plan (Play Inspection); the
-verdict comes from the template's controls and the PDF is the template's own report. VL Connector adds no
-alignment, measurement or report of its own.
+measurement sequence (alignment and measurement), optionally the report and, as PolyWorks recommends, a piece
+template. VL Connector adds every scan as a new piece of the template (from the piece template), puts the scan into
+its data object and lets PolyWorks play the plan (Play Inspection); the verdict comes from the template's controls
+and the PDF is the template's own report. VL Connector adds no alignment, measurement or report of its own.
 
 ## Requirements
 

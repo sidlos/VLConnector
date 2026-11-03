@@ -37,11 +37,14 @@ Describe 'macro file protocol' {
             $out = Join-Path $tmp 'context.txt'
             & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $poly 'Get-MacroContext.ps1') -Out $out -Pwk (Join-Path $tmp 'parts.pwk')
             $keys = @([IO.File]::ReadAllLines($out) | ForEach-Object { ($_ -split '=', 2)[0] })
-            $keys -join ',' | Should Be 'STATE,RUN,USER,UTC,REPORTS_DIR,SCANS_DIR,KEEP_PIECES,OPEN_PDF,COLOR_SCALE,DEVICE,VERSION,MESSAGE,TIMEOUT_MIN'
+            $keys -join ',' | Should Be 'STATE,RUN,USER,UTC,REPORTS_DIR,SCANS_DIR,KEEP_PIECES,OPEN_PDF,COLOR_SCALE,DEVICE,VERSION,MESSAGE,TIMEOUT_MIN,UNSAVED'
             $keyOf = @{ vCtxState = 'STATE'; vRun = 'RUN'; vUser = 'USER'; vUtc = 'UTC'; vReportDir = 'REPORTS_DIR'; vScanDir = 'SCANS_DIR'
-                vKeep = 'KEEP_PIECES'; vOpenPdf = 'OPEN_PDF'; vScale = 'COLOR_SCALE'; vDevice = 'DEVICE'; vMsg = 'MESSAGE'; vTimeoutMin = 'TIMEOUT_MIN' }
+                vKeep = 'KEEP_PIECES'; vOpenPdf = 'OPEN_PDF'; vScale = 'COLOR_SCALE'; vDevice = 'DEVICE'; vMsg = 'MESSAGE'; vTimeoutMin = 'TIMEOUT_MIN'
+                vUnsaved = 'UNSAVED' }
             $reads = Get-MacroReads $measure 'vCtx'
-            $reads.Count | Should Be 12
+            $reads.Count | Should Be 13
+            # outside PolyWorks (no PolyWorks|Inspector started the script) unsaved changes cannot be told
+            ([IO.File]::ReadAllLines($out))[13] | Should Be 'UNSAVED='
             Assert-Reads $reads $keys $keyOf
         }
         finally { Remove-Item -LiteralPath $tmp -Recurse -Force }
@@ -64,6 +67,30 @@ Describe 'macro file protocol' {
         $evaluate | Should Match 'PIECE PLAY_INSPECTION\r?\n'
         # a new piece is made from the current piece with its properties: a removal mark must not come along
         $evaluate | Should Match '(?s)PIECE NEW \( \$vPiece \).*PIECE PROPERTIES CUSTOMIZABLE REMOVE \( , \{ "VL remove" \} \).*PIECE DELETE'
+    }
+    It 'VLC_Evaluate makes the piece from the piece template, checks the plan of the new piece, and restores what it changes' {
+        # PolyWorks' recommended source: the piece template, linked (the PolyWorks option alone does not link a
+        # piece made by a macro)
+        $evaluate | Should Match '(?s)PIECE TEMPLATE NAME ALL GET \( vTpls \).*"VL piece template".*PIECE NEW \( \$vPiece, \$vSrcTpl \)'
+        $evaluate | Should Match '(?s)PIECE NEW \( \$vPiece, \$vSrcTpl \).*PIECE LINK \( \{ \$vPiece \}, \$vSrcTpl \)'
+        # PIECE LINK changes the user's option for reports that cannot be updated: restored right after it
+        $evaluate | Should Match '(?s)PIECE LINK \( \{ \$vPiece \}, \$vSrcTpl \)\r?\n[^\n]*\r?\n[^\n]*\r?\n\s*PIECE NEW OPTIONS NON_UPDATABLE_REPORTS \( \$vOptReports \)'
+        # the plan is checked in the new piece (its copy of the plan), and a piece without a usable plan is removed
+        $evaluate | Should Match '(?s)PIECE NEW \( \$vPiece \).*SEQUENCE ACTIVE GET \( vPlan \).*PIECE DELETE \( \{ \$vPiece \} \)'
+        # a step that acquires data may be ignored instead of removed
+        $evaluate | Should Match 'SEQUENCE STEP IGNORE GET \( \$vPlan, \$vI, vIgn \)'
+        # the automatic project update is switched on for the plan and off again afterwards
+        $evaluate | Should Match '(?s)PROJECT UPDATE AUTO_UPDATE \( "On" \).*PIECE PLAY_INSPECTION\r?\n.*PROJECT UPDATE AUTO_UPDATE \( "Off" \)'
+        # every PolyWorks option that is set is restored from the value read before
+        foreach ($opt in 'LAUNCH_PLAY_INSPECTION', 'LINK_TO_PIECE_TEMPLATE', 'NON_UPDATABLE_REPORTS') {
+            $evaluate | Should Match ('PIECE NEW OPTIONS ' + $opt + ' GET \( (v\w+) \)')
+        }
+        $evaluate | Should Match 'PIECE PLAY_INSPECTION OPTIONS DISABLE_INTERFACE \( \$vOptUi \)'
+        $evaluate | Should Match 'DATA REPLACE OPTIONS ALIGNMENT_GROUP CONFIRM_AT_REPLACEMENT \( \$vOptConfirm \)'
+    }
+    It 'VLC_Measure asks about unsaved changes before the scan starts' {
+        $measure | Should Match '(?s)DATA_FILE READ LINE_FIELD \( \$vCtx, 14, 2, vUnsaved.*IF "\$vUnsaved" == "1".*MACRO INPUT CONFIRM.*FILE SAVE_PROJECT.*VLReplay\.ps1'
+        $measure | Should Match '"-Project", "\$\{_QUOTES\}\$\{vProj\}\$\{_QUOTES\}"'
     }
     It 'VLC_Station reads the Station-Step lines it expects (context, next job, publish)' {
         $keysOf = @{}

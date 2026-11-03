@@ -17,18 +17,41 @@
     11 VERSION      VL Connector version
     12 MESSAGE      error text when STATE=ERROR
     13 TIMEOUT_MIN  time limit of a scan in minutes (the macro waits a bit longer than VLReplay.ps1)
+    14 UNSAVED      1 when the open project has unsaved changes, 0 when not, empty when it cannot be told
   Usage (from the macro): powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File Get-MacroContext.ps1
-                          -Out <file> -Pwk <workspace file>
+                          -Out <file> -Pwk <workspace file> -Project <project name>
 #>
 param(
     [Parameter(Mandatory = $true)] [string]$Out,
-    [string]$Pwk = ''
+    [string]$Pwk = '',
+    [string]$Project = ''
 )
 
 # FullLanguage mode is needed (docs\IT-Review); checked before anything is loaded
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-    & (Join-Path (Split-Path $PSScriptRoot) 'lib\LanguageCheck.ps1') -Caller MacroContext -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $Out -Keys STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, KEEP_PIECES, OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE, TIMEOUT_MIN
+    & (Join-Path (Split-Path $PSScriptRoot) 'lib\LanguageCheck.ps1') -Caller MacroContext -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $Out -Keys STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, KEEP_PIECES, OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE, TIMEOUT_MIN, UNSAVED
     exit 1
+}
+
+# PolyWorks marks unsaved changes of a project with "*" after its name in the window title (moving the camera
+# or using the Control Reviewer does not count); no macro command tells it. The PolyWorks|Inspector is the one
+# that started this script.
+function Get-VlcUnsavedState([string]$Project) {
+    if (-not $Project) { return '' }
+    try {
+        $id = $PID
+        for ($i = 0; $i -lt 4; $i++) {
+            $id = (Get-CimInstance Win32_Process -Filter "ProcessId=$id" -ErrorAction Stop).ParentProcessId
+            $p = Get-Process -Id $id -ErrorAction Stop
+            if ($p.ProcessName -eq 'iminspect') {
+                if ($p.MainWindowTitle.StartsWith("$Project* (", [StringComparison]::Ordinal)) { return '1' }
+                if ($p.MainWindowTitle.StartsWith("$Project (", [StringComparison]::Ordinal)) { return '0' }
+                return ''
+            }
+        }
+    }
+    catch { }
+    return ''
 }
 
 $ErrorActionPreference = 'Stop'
@@ -41,7 +64,7 @@ $ctx = [ordered]@{
     STATE = 'OK'; RUN = $now.ToString('yyyyMMdd_HHmmss'); USER = $env:USERNAME
     UTC = $now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
     REPORTS_DIR = ''; SCANS_DIR = ''; KEEP_PIECES = 'All'; OPEN_PDF = '1'; COLOR_SCALE = '0.5'
-    DEVICE = ''; VERSION = (Get-VlcVersion); MESSAGE = ''; TIMEOUT_MIN = '45'
+    DEVICE = ''; VERSION = (Get-VlcVersion); MESSAGE = ''; TIMEOUT_MIN = '45'; UNSAVED = (Get-VlcUnsavedState $Project)
 }
 try {
     $cfg = Read-VlcSettings
