@@ -22,7 +22,7 @@ PolyWorks plug-in; no internet access, no telemetry.
 | `app\Agent.ps1` | scenario B, scanner PC: at logon (Startup shortcut "VL Connector", only if the user switched it on) or *Start now* in the settings window; started again while it runs, it opens the settings window | Notification-area agent: starts the launcher in watch mode, sends STL files to the shared folder, opens the user's reports. Its network work runs in `app\lib\AgentCycle.ps1`. |
 | `app\VLReplay.ps1` | started by the PolyWorks Measure macro or by the agent (`-Watch`) | Drives AI Replay in the VL Application (or follows a replay the operator started) and exports the STL. |
 | `app\polyworks\*.pwmacro` | inside PolyWorks, when the user presses the button | Evaluation, report, network station loop. |
-| `app\polyworks\*.ps1` | started by the macros | Settings for the macros (`Get-MacroContext`), the verdict and CSV (`Complete-Evaluation`), the station's file work (`Station-Step`). |
+| `app\polyworks\*.ps1` | started by the macros | Settings for the macros (`Get-MacroContext`), the SHA-256 check of a scan before its import (`Test-ScanFile`), the station's file work (`Station-Step`). VL Connector computes no verdict: PolyWorks judges the parts. |
 | `app\interop\*.cs` | compiled once by the installer | Windows and PolyWorks interface declarations, see section 7. |
 | `bin\VLConnector.Interop.dll` | loaded by the scripts | Built by the installer from `app\interop\*.cs`; carries the SHA-256 of its source in its file properties. |
 | `app\lib\*.ps1` | loaded by the scripts above | Shared code, e.g. `Install.ps1` (installation), `Settings.ps1` (settings layers), `StageWarning*.ps1` (warning window). |
@@ -115,7 +115,7 @@ Example `machine.json`:
 ```json
 {
   "policy":   { "vl": { "confirmStageMotion": false }, "network": { "share": "\\\\fileserver\\metrology\\VLConnector" } },
-  "defaults": { "polyworks": { "keepPieces": "Nok" } }
+  "defaults": { "polyworks": { "openPdf": false } }
 }
 ```
 
@@ -211,7 +211,7 @@ compare the rest with the manifest.
 
 | Started by | Process | When |
 |---|---|---|
-| PolyWorks `iminspect.exe` | `powershell.exe ... app\polyworks\Get-MacroContext.ps1`, `Complete-Evaluation.ps1`, `Station-Step.ps1` | every Measure / evaluation / station poll |
+| PolyWorks `iminspect.exe` | `powershell.exe ... app\polyworks\Get-MacroContext.ps1`, `Test-ScanFile.ps1`, `Station-Step.ps1` | every Measure / measurement / station poll |
 | PolyWorks `iminspect.exe` | `powershell.exe -STA ... app\VLReplay.ps1 -LaunchFile ... -MarkerFile ...` | Measure button |
 | PolyWorks `iminspect.exe` | `cmd.exe /c DEL`, `MKDIR`, `start "" <pdf>` | macro file work, opening the PDF |
 | `explorer.exe` (Startup shortcut) | `powershell.exe -STA ... app\Agent.ps1` | logon, if the user switched it on |
@@ -286,7 +286,7 @@ other's files as untrusted input (section 3 of the [Protocol](Protocol.md)).
 
 In the source repository: `tests\Run-Tests.ps1 -Static -Unit` checks syntax, encodings, forbidden content and
 the rules above (language check first, no compiler outside the interop loader, full PowerShell path) and runs
-the unit tests: settings layers and lock, stage safety, verdict, file protocols, network, installation.
+the unit tests: settings layers and lock, stage safety, scan check, file protocols, network, installation.
 `-Launcher` runs the launcher against a simulated VL Application (`tests\FakeVL`), including a safety matrix
 (the policy off must never confirm, whatever users, templates or files say). GitHub Actions runs all of them and
 a real installation as administrator (Program Files, ACL, a standard user trying to write, event log, a signed

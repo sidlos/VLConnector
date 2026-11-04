@@ -6,9 +6,10 @@
        program plus date and time; a finished scan is noted in the local inbox at once,
     2. sends the STL to the shared folder for the PolyWorks station (lib\AgentCycle.ps1 in the background:
        inbox -> outbox job -> shared folder; the outbox keeps it while the folder is not reachable),
-    3. opens the PDF report when the station has evaluated the scan (only scans made on this PC).
-  A NOK result keeps the tray icon red until it is looked at. Problems that last (the watcher keeps failing,
-  the settings cannot be read) show an orange icon and the reason in the menu.
+    3. opens the PDF report when the station has measured the scan - if the template has a formatted report
+       (only scans made on this PC). PolyWorks judges the part; the agent gives no verdict.
+  A measurement that failed is announced and keeps the tray icon red until it is looked at. Problems that last
+  (the watcher keeps failing, the settings cannot be read) show an orange icon and the reason in the menu.
   Users see it as "VL Connector" in the notification area. Start: at Windows logon (the Startup shortcut
   "VL Connector"; settings window, page Network), or Start now on that page.
   Only one agent runs per user: started again while it runs (e.g. from a shortcut), it opens the settings window.
@@ -67,11 +68,11 @@ $script:cfg = $null
 $script:cfgReadAt = [datetime]::MinValue
 $script:settingsError = ''
 $script:watcherError = ''
-$script:nokPending = $false
+$script:errorPending = $false
 
 # --- tray icon --------------------------------------------------------------------------------------
 
-# The icon of VL Connector with a colored dot in the corner (red: a NOK result not seen yet; orange: a problem).
+# The icon of VL Connector with a colored dot in the corner (red: a failed measurement not seen yet; orange: a problem).
 function New-BadgeIcon([System.Drawing.Icon]$Base, [System.Drawing.Color]$Color) {
     $bmp = New-Object System.Drawing.Bitmap 32, 32
     $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -86,7 +87,7 @@ function New-BadgeIcon([System.Drawing.Icon]$Base, [System.Drawing.Color]$Color)
 }
 
 $script:iconNormal = New-Object System.Drawing.Icon (Join-Path $PSScriptRoot 'assets\VLC_icon.ico')
-$script:iconNok = New-BadgeIcon $script:iconNormal ([System.Drawing.Color]::FromArgb(200, 30, 30))
+$script:iconError = New-BadgeIcon $script:iconNormal ([System.Drawing.Color]::FromArgb(200, 30, 30))
 $script:iconProblem = New-BadgeIcon $script:iconNormal ([System.Drawing.Color]::FromArgb(230, 130, 0))
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray.Icon = $script:iconNormal
@@ -100,7 +101,7 @@ $itemProblem.Visible = $false
 [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
 $itemLast = $menu.Items.Add('Open the last report')
 $itemLast.Enabled = $false
-$itemSeen = $menu.Items.Add('Mark the NOK result as seen')
+$itemSeen = $menu.Items.Add('Mark the failed measurement as seen')
 $itemSeen.Visible = $false
 $itemFolder = $menu.Items.Add('Reports folder')
 $itemSettings = $menu.Items.Add('Settings')
@@ -117,9 +118,9 @@ function Update-Tray {
     $problem = (@($script:settingsError, $script:watcherError) | Where-Object { $_ }) -join ' '
     $itemProblem.Text = $problem
     $itemProblem.Visible = [bool]$problem
-    $itemSeen.Visible = $script:nokPending
-    $tray.Icon = if ($script:nokPending) { $script:iconNok } elseif ($problem) { $script:iconProblem } else { $script:iconNormal }
-    $text = if ($script:nokPending) { 'VL Connector: a NOK result' } elseif ($problem) { 'VL Connector: needs attention' } else { "VL Connector: $state" }
+    $itemSeen.Visible = $script:errorPending
+    $tray.Icon = if ($script:errorPending) { $script:iconError } elseif ($problem) { $script:iconProblem } else { $script:iconNormal }
+    $text = if ($script:errorPending) { 'VL Connector: a measurement failed' } elseif ($problem) { 'VL Connector: needs attention' } else { "VL Connector: $state" }
     if ($text.Length -gt 63) { $text = $text.Substring(0, 63) }
     $tray.Text = $text
 }
@@ -132,7 +133,7 @@ function Show-Note([string]$Title, [string]$Text, [string]$Icon = 'Info', [strin
     $tray.ShowBalloonTip(8000, $Title, $Text, [System.Windows.Forms.ToolTipIcon]$Icon)
 }
 
-function Confirm-NokSeen { if ($script:nokPending) { $script:nokPending = $false; Update-Tray } }
+function Confirm-ErrorSeen { if ($script:errorPending) { $script:errorPending = $false; Update-Tray } }
 
 # --- settings: read every 5 s; the last good ones stay when they cannot be read -----------------------
 
@@ -209,7 +210,7 @@ function Complete-Watcher {
                 $id = New-VlcJobId $program
                 Add-VlcInboxScan $id $program $m.STL $m.PROGRAM
                 Write-VlcLog "Scan $program ($($m.STL)) -> job $id."
-                Show-Note 'Scan saved' "$program - it goes to the PolyWorks station for evaluation."
+                Show-Note 'Scan saved' "$program - it goes to the PolyWorks station to be measured."
                 $script:cycleDue = Get-Date
             }
             catch { Write-VlcLog "Job for $($m.STL): $($_.Exception.Message)"; Show-Note 'Scan not sent' $_.Exception.Message 'Warning' }
@@ -256,19 +257,19 @@ function Complete-Cycle([bool]$AutoOpen, [int]$JobTimeoutMin) {
     $c.PS.Dispose()
     if (-not $r) { return }
     foreach ($f in @($r.Failed)) { Show-Note 'Scan not sent' "$($f.JobId): $($f.Message)" 'Warning' }
-    # one note for all results of this cycle; the newest PDF opens (setting "open reports")
+    # PolyWorks judges the part (its report, the Control Reviewer): a measured scan opens the newest PDF
+    # (setting "open reports"); only measurements that failed are announced, in one note per cycle
     $done = @($r.Done)
     if ($done.Count) {
-        foreach ($d in $done) { Write-VlcLog "Report $($d.JobId): $($d.State) $($d.Verdict) $($d.Summary) $($d.Message) $($d.Pdf)".Trim() }
-        $nok = @($done | Where-Object { $_.State -ne 'OK' -or $_.Verdict -ne 'OK' })
+        foreach ($d in $done) { Write-VlcLog "Report $($d.JobId): $($d.State) $($d.Message) $($d.Pdf)".Trim() }
         $withPdf = @($done | Where-Object { $_.Pdf })
         if ($withPdf.Count) { $script:lastPdf = $withPdf[-1].Pdf; $itemLast.Enabled = $true }
-        if ($nok.Count) { $script:nokPending = $true }
-        $lines = @($done | ForEach-Object {
-            if ($_.State -eq 'OK') { "$($_.Part): $($_.Verdict) - $($_.Summary)" } else { "$($_.Part): not evaluated - $($_.Message)" } })
-        $title = if ($done.Count -eq 1) { $lines[0] -replace ' - .*$', '' } else { "$($done.Count) results, $($nok.Count) not OK" }
-        $icon = if (@($done | Where-Object { $_.State -ne 'OK' }).Count) { 'Error' } elseif ($nok.Count) { 'Warning' } else { 'Info' }
-        Show-Note $title ($lines -join "`n") $icon $(if ($withPdf.Count) { $withPdf[-1].Pdf } else { '' })
+        $failed = @($done | Where-Object { $_.State -ne 'OK' })
+        if ($failed.Count) {
+            $script:errorPending = $true
+            $title = if ($failed.Count -eq 1) { "$($failed[0].Part): the measurement failed" } else { "$($failed.Count) measurements failed" }
+            Show-Note $title (($failed | ForEach-Object { "$($_.Part): $($_.Message)" }) -join "`n") 'Error'
+        }
         if ($withPdf.Count -and $AutoOpen) { try { Start-Process -FilePath $withPdf[-1].Pdf } catch { } }
     }
     $script:outboxCount = [int]$r.Outbox
@@ -279,11 +280,11 @@ function Complete-Cycle([bool]$AutoOpen, [int]$JobTimeoutMin) {
 
 # --- events and main loop --------------------------------------------------------------------------
 
-$openLast = { Confirm-NokSeen; if ($script:lastPdf -and (Test-Path -LiteralPath $script:lastPdf)) { Start-Process -FilePath $script:lastPdf } }
+$openLast = { Confirm-ErrorSeen; if ($script:lastPdf -and (Test-Path -LiteralPath $script:lastPdf)) { Start-Process -FilePath $script:lastPdf } }
 $itemLast.Add_Click($openLast)
 $tray.Add_DoubleClick($openLast)
-$tray.Add_BalloonTipClicked({ Confirm-NokSeen; if ($script:balloonPdf -and (Test-Path -LiteralPath $script:balloonPdf)) { Start-Process -FilePath $script:balloonPdf } })
-$itemSeen.Add_Click({ Confirm-NokSeen })
+$tray.Add_BalloonTipClicked({ Confirm-ErrorSeen; if ($script:balloonPdf -and (Test-Path -LiteralPath $script:balloonPdf)) { Start-Process -FilePath $script:balloonPdf } })
+$itemSeen.Add_Click({ Confirm-ErrorSeen })
 $itemFolder.Add_Click({
     New-Item -ItemType Directory -Force -Path $script:reports | Out-Null
     Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$($script:reports)`""

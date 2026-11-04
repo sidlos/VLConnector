@@ -33,14 +33,14 @@ Describe 'settings layers' {
     }
     It 'applies product defaults, machine defaults, the user file and the policy in this order' {
         Reset-Files
-        Write-Json $machineFile '{ "defaults": { "vl": { "mode": "Standard", "timeoutMin": 30 }, "polyworks": { "keepPieces": "Nok" } }, "policy": { "polyworks": { "keepPieces": "None" } } }'
-        Write-Json $userFile '{ "vl": { "mode": "Ask" }, "polyworks": { "keepPieces": "All" } }'
+        Write-Json $machineFile '{ "defaults": { "vl": { "mode": "Standard", "timeoutMin": 30 }, "polyworks": { "deviceText": "Line" } }, "policy": { "polyworks": { "deviceText": "Line 4" } } }'
+        Write-Json $userFile '{ "vl": { "mode": "Ask" }, "polyworks": { "deviceText": "Mine" } }'
         $s = Get-VlcSettingsState
         $s.Settings.vl.mode | Should Be 'Ask'
         $s.Settings.vl.timeoutMin | Should Be 30
         $s.Settings.vl.settleSec | Should Be 2
-        $s.Settings.polyworks.keepPieces | Should Be 'None'
-        $s.Locked -join ',' | Should Be 'polyworks.keepPieces'
+        $s.Settings.polyworks.deviceText | Should Be 'Line 4'
+        $s.Locked -join ',' | Should Be 'polyworks.deviceText'
         $s.Sources['vl.mode'] | Should Be 'user settings'
         $s.Inherited['vl.mode'] | Should Be 'Standard'
         $s.Warnings.Count | Should Be 0
@@ -60,18 +60,18 @@ Describe 'settings layers' {
     }
     It 'checks every value: JSON types are taken literally, ranges and names are enforced' {
         Reset-Files
-        Write-Json $machineFile '{ "policy": { "vl": { "confirmStageMotion": "true" } } }'
-        Write-Json $userFile '{ "vl": { "timeoutMin": "5", "settleSec": 99, "mode": "standard", "returnFocus": 1, "afterExport": "", "programFolders": "C:\\x" }, "network": { "pollSec": 2.5 }, "polyworks": { "colorScaleMm": 0.25 }, "extra": 1 }'
+        Write-Json $machineFile '{ "defaults": { "vl": { "settleSec": 0.25 } }, "policy": { "vl": { "confirmStageMotion": "true" } } }'
+        Write-Json $userFile '{ "vl": { "timeoutMin": "5", "settleSec": 99, "mode": "standard", "returnFocus": 1, "afterExport": "", "programFolders": "C:\\x" }, "network": { "pollSec": 2.5 }, "polyworks": { "colorScaleMm": 0.25, "keepPieces": "Nok" }, "extra": 1 }'
         $s = Get-VlcSettingsState
         $s.Settings.vl.confirmStageMotion | Should Be $false
         $s.Settings.vl.timeoutMin | Should Be 45
-        $s.Settings.vl.settleSec | Should Be 2
+        $s.Settings.vl.settleSec | Should Be 0.25
         $s.Settings.vl.mode | Should Be 'Standard'
         $s.Settings.vl.returnFocus | Should Be $true
         $s.Settings.vl.afterExport | Should Be 'None'
         @($s.Settings.vl.programFolders).Count | Should Be 0
         $s.Settings.network.pollSec | Should Be 3
-        $s.Settings.polyworks.colorScaleMm | Should Be 0.25
+        $s.Settings.polyworks.PSObject.Properties['colorScaleMm'] | Should BeNullOrEmpty
         $text = $s.Warnings -join "`n"
         $text | Should Match "'vl.confirmStageMotion' in the machine policy must be true or false"
         $text | Should Match "'vl.timeoutMin' in the user settings must be a whole number"
@@ -79,6 +79,8 @@ Describe 'settings layers' {
         $text | Should Match "'vl.afterExport' in the user settings must be one of"
         $text | Should Match "'network.pollSec' in the user settings must be a whole number"
         $text | Should Match "Unknown setting 'extra' in the user settings"
+        # settings that earlier versions used are ignored without a warning
+        $text | Should Not Match 'colorScaleMm|keepPieces'
     }
     It 'keeps working when a file is not valid JSON' {
         Reset-Files
@@ -132,11 +134,12 @@ Describe 'saving user settings' {
         $removed = Repair-VlcUserSettings
         ($removed -join ',') | Should Match 'vl.confirmStageMotion \(only the administrator'
         ($removed -join ',') | Should Match 'vl.afterExport \(invalid value\)'
+        ($removed -join ',') | Should Match 'polyworks.keepPieces .no longer used.'
         ($removed -join ',') | Should Match 'polyworks.reportLayout \(unknown\)'
         ($removed -join ',') | Should Match 'scenario \(same as the default\)'
         $u = Read-JsonFile $userFile
         $u.vl.mode | Should Be 'Standard'
-        $u.polyworks.keepPieces | Should Be 'Nok'
+        $u.PSObject.Properties['polyworks'] | Should BeNullOrEmpty
         @($u.vl.PSObject.Properties).Count | Should Be 1
         @(Repair-VlcUserSettings).Count | Should Be 0
         (Get-VlcSettingsState).Warnings.Count | Should Be 0

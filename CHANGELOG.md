@@ -1,5 +1,40 @@
 # Changelog
 
+## 3.0.0 - 2026-11-04
+
+PolyWorks judges the part; VL Connector gives no verdict. Everything that decides the result is set up in the
+PolyWorks template, and VL Connector does as little as it can: scan, check the STL, measure by the template's plan,
+export the template's report - and say so when something fails.
+
+**Behaviour changes (breaking):**
+
+- **No verdict, no CSV:** VL Connector reads no control and computes no OK/NOK. The result is what the template's
+  formatted report (the PDF) and the Control Reviewer show, so controls that are only informative or apply to one
+  variant no longer make a part NOK. `lib\Verdict.ps1` and `polyworks\Complete-Evaluation.ps1` are removed.
+- **Measure button:** after the measurement the new piece stays open as the template leaves it - the Control
+  Reviewer is no longer forced open, and there is no result message. The template's report opens as PDF (setting
+  *Open the PDF report after the measurement*). A message appears only when something fails (scan, STL check,
+  template, measurement plan, PDF export), with the reason.
+- **Every piece is kept:** the setting *Keep measured pieces* (`polyworks.keepPieces`) and the removal of pieces at
+  the next measurement are gone; delete pieces you no longer need in PolyWorks. The settings `polyworks.keepPieces`
+  and `polyworks.colorScaleMm` are ignored without a warning and removed from the user's settings file.
+- **Scanner PC (scenario B):** the PDF opens when the station has measured a scan; the agent announces only
+  measurements that failed (the icon stays red until it is looked at: *Mark the failed measurement as seen*), no
+  OK/NOK notes.
+- **Network protocol 2:** jobs and results carry `PROTOCOL=2`; results have no `VERDICT`, `SUMMARY` or `CSV`. A
+  station refuses jobs of another protocol with the reason: update the scanner PCs and the stations together.
+
+**Other changes:**
+
+- The check of the STL (its SHA-256 recorded at the export, C26) moves to `polyworks\Test-ScanFile.ps1`, which
+  VLC_Evaluate runs before it changes anything; a replaced STL makes no piece.
+- A template without a formatted report is measured without a PDF and without an error; in scenario B its result
+  arrives at once. The station publishes a PDF only when there is one; a PDF that is not complete makes the result
+  ERROR.
+- VLC_Evaluate's parameters lose `PROGRAM`, `KEEP_PIECES` and `COLOR_SCALE`, and its result is `STATE, PDF, PIECE,
+  MESSAGE`; Get-MacroContext loses `KEEP_PIECES` and `COLOR_SCALE` (docs\Protocol.md).
+- The settings schema lists settings of earlier versions as `retired`.
+
 ## 2.0.0 - 2026-11-03
 
 The part template is the customer's measurement plan; VL Connector only supplies the scan.

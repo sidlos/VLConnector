@@ -46,12 +46,14 @@ AI Replay program. Tick each line; note deviations.
 - [ ] A template without a measurement sequence gives the message "has no measurement plan" and leaves no new piece.
 - [ ] **Measure** in the template: VL starts AI Replay with the right program and mode.
 - [ ] Progress window in PolyWorks shows the VL steps; scanning works as usual.
-- [ ] After the last position: STL exported, PolyWorks comes to the front, evaluation runs.
-- [ ] Verdict message (OK/NOK); the PDF is the template's own report of the new piece; CSV next to it opens in Excel
-      with correct characters; its header names the plan, the STL and its SHA-256.
-- [ ] New piece `<template>_<date>_<time>` in the template project, saved; it stays open with the Control Reviewer
-      showing its controls; with a piece template it is made from it and linked to it (Project Browser: *Source
-      Piece Template*, *Linked Piece Template*); the PolyWorks options for new pieces are unchanged afterwards.
+- [ ] After the last position: STL exported, PolyWorks comes to the front, the template's plan runs.
+- [ ] No message of VL Connector when all went well; the PDF that opens is the template's own report of the new
+      piece; the result (pass/fail) is what the template's report and the Control Reviewer show - VL Connector
+      gives no verdict and writes no CSV.
+- [ ] New piece `<template>_<date>_<time>` in the template project, saved; it stays open as the template leaves it;
+      with a piece template it is made from it and linked to it (Project Browser: *Source Piece Template*, *Linked
+      Piece Template*); the PolyWorks options for new pieces are unchanged afterwards.
+- [ ] A template without a formatted report: the piece is measured, no PDF, no message.
 - [ ] **Measure** again while that piece is open: the next scan becomes the next piece.
 - [ ] A change in the open piece that is not saved: **Measure** asks before the scan; *Cancel* scans nothing and
       leaves the change unsaved, *Save and measure* saves it and measures.
@@ -61,9 +63,11 @@ AI Replay program. Tick each line; note deviations.
       stays as it was.
 - [ ] VL busy (another AI Replay or a message open in VL): clear message, no second VL window.
 - [ ] Optional: *VL window after the export* = Close / Save and close - VL closes only after the export.
-- [ ] Optional: keep pieces *Only NOK* - an OK piece stays until the next measurement and is removed then; the PDF stays.
-- [ ] A NOK part (or tightened tolerance) gives the verdict NOK; a control without a result gives NOK
-      (*not measured*), never OK.
+- [ ] Every measured piece stays in the template project (also after further measurements).
+- [ ] A part out of tolerance (or a tightened tolerance): the template's report and the Control Reviewer show it;
+      VL Connector shows no message for it.
+- [ ] A failure is reported: e.g. a test STL that does not fit the plan (the plan fails, the message names the
+      reason and the kept piece), or a replaced STL (the SHA-256 check refuses it, no piece is made).
 
 ## Scenario B (PolyWorks on another PC)
 
@@ -78,14 +82,16 @@ AI Replay program. Tick each line; note deviations.
 - [ ] Agent menu shows *station online*.
 - [ ] AI Replay started **in VL** with a program from the list: after the last position the STL is exported
       (`Documents\VL Connector\Scans\<program>_<date>_<time>.stl`) and a notification says it was sent.
-- [ ] The station evaluates it with the right template; the notification shows OK/NOK and the PDF opens; after a
-      NOK the icon stays red until *Mark the NOK result as seen*.
+- [ ] The station measures it with the right template; the PDF opens (without a notification); a measurement that
+      fails gives a notification with the reason, and the icon stays red until *Mark the failed measurement as seen*.
+- [ ] Scanner PC and station of different versions (protocol 1 and 2): the station refuses the job with *Protocol
+      ... is not supported by this station*.
 - [ ] A second scanner PC (if any) does **not** open the reports of the first one.
 - [ ] Shared folder unreachable during a scan: the STL waits in the outbox and is sent later.
-- [ ] Station stopped: agent menu shows *station offline*; the scan is evaluated after the station starts.
+- [ ] Station stopped: agent menu shows *station offline*; the scan is measured after the station starts.
 - [ ] `programs.csv` without its header line: the station shows *Paused*, the agent *station paused*; after the
       correction it continues.
-- [ ] VL program missing in the Measurement Programs List: a notification "not evaluated" with the reason.
+- [ ] VL program missing in the Measurement Programs List: a notification "the measurement failed" with the reason.
 
 ## Result
 

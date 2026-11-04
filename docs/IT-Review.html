@@ -37,7 +37,7 @@ footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; te
 <tr><td><code>app\Agent.ps1</code></td><td>scenario B, scanner PC: at logon (Startup shortcut &quot;VL Connector&quot;, only if the user switched it on) or <em>Start now</em> in the settings window; started again while it runs, it opens the settings window</td><td>Notification-area agent: starts the launcher in watch mode, sends STL files to the shared folder, opens the user&#39;s reports. Its network work runs in <code>app\lib\AgentCycle.ps1</code>.</td></tr>
 <tr><td><code>app\VLReplay.ps1</code></td><td>started by the PolyWorks Measure macro or by the agent (<code>-Watch</code>)</td><td>Drives AI Replay in the VL Application (or follows a replay the operator started) and exports the STL.</td></tr>
 <tr><td><code>app\polyworks\*.pwmacro</code></td><td>inside PolyWorks, when the user presses the button</td><td>Evaluation, report, network station loop.</td></tr>
-<tr><td><code>app\polyworks\*.ps1</code></td><td>started by the macros</td><td>Settings for the macros (<code>Get-MacroContext</code>), the verdict and CSV (<code>Complete-Evaluation</code>), the station&#39;s file work (<code>Station-Step</code>).</td></tr>
+<tr><td><code>app\polyworks\*.ps1</code></td><td>started by the macros</td><td>Settings for the macros (<code>Get-MacroContext</code>), the SHA-256 check of a scan before its import (<code>Test-ScanFile</code>), the station&#39;s file work (<code>Station-Step</code>). VL Connector computes no verdict: PolyWorks judges the parts.</td></tr>
 <tr><td><code>app\interop\*.cs</code></td><td>compiled once by the installer</td><td>Windows and PolyWorks interface declarations, see section 7.</td></tr>
 <tr><td><code>bin\VLConnector.Interop.dll</code></td><td>loaded by the scripts</td><td>Built by the installer from <code>app\interop\*.cs</code>; carries the SHA-256 of its source in its file properties.</td></tr>
 <tr><td><code>app\lib\*.ps1</code></td><td>loaded by the scripts above</td><td>Shared code, e.g. <code>Install.ps1</code> (installation), <code>Settings.ps1</code> (settings layers), <code>StageWarning*.ps1</code> (warning window).</td></tr>
@@ -78,7 +78,7 @@ Install.cmd -Quiet [-ConfirmStageMotion On|Off] [-MachineSettings &lt;file&gt;] 
 <p>Example <code>machine.json</code>:</p>
 <pre><code>{
   &quot;policy&quot;:   { &quot;vl&quot;: { &quot;confirmStageMotion&quot;: false }, &quot;network&quot;: { &quot;share&quot;: &quot;\\\\fileserver\\metrology\\VLConnector&quot; } },
-  &quot;defaults&quot;: { &quot;polyworks&quot;: { &quot;keepPieces&quot;: &quot;Nok&quot; } }
+  &quot;defaults&quot;: { &quot;polyworks&quot;: { &quot;openPdf&quot;: false } }
 }</code></pre>
 <p>Every settings change is logged (<code>%LOCALAPPDATA%\VLConnector\logs\Settings_&lt;date&gt;.log</code>); a change of the machine settings also goes to the Event Log (event 1000), with the administrator and the user who asked for it.</p>
 <h2 id="4-stage-rotation-safety">4. Stage rotation safety</h2>
@@ -121,7 +121,7 @@ Install.cmd -Quiet -InteropDll &lt;folder&gt;\VLConnector.Interop.dll</code></pr
 <p><strong>Processes</strong> (all <code>powershell.exe</code> from System32, <code>-NoProfile</code>, <code>-File</code> with a full path; never <code>-EncodedCommand</code>, never downloaded code):</p>
 <table>
 <tr><th>Started by</th><th>Process</th><th>When</th></tr>
-<tr><td>PolyWorks <code>iminspect.exe</code></td><td><code>powershell.exe ... app\polyworks\Get-MacroContext.ps1</code>, <code>Complete-Evaluation.ps1</code>, <code>Station-Step.ps1</code></td><td>every Measure / evaluation / station poll</td></tr>
+<tr><td>PolyWorks <code>iminspect.exe</code></td><td><code>powershell.exe ... app\polyworks\Get-MacroContext.ps1</code>, <code>Test-ScanFile.ps1</code>, <code>Station-Step.ps1</code></td><td>every Measure / measurement / station poll</td></tr>
 <tr><td>PolyWorks <code>iminspect.exe</code></td><td><code>powershell.exe -STA ... app\VLReplay.ps1 -LaunchFile ... -MarkerFile ...</code></td><td>Measure button</td></tr>
 <tr><td>PolyWorks <code>iminspect.exe</code></td><td><code>cmd.exe /c DEL</code>, <code>MKDIR</code>, <code>start &quot;&quot; &lt;pdf&gt;</code></td><td>macro file work, opening the PDF</td></tr>
 <tr><td><code>explorer.exe</code> (Startup shortcut)</td><td><code>powershell.exe -STA ... app\Agent.ps1</code></td><td>logon, if the user switched it on</td></tr>
@@ -167,7 +167,7 @@ Install.cmd -Quiet -InteropDll &lt;folder&gt;\VLConnector.Interop.dll</code></pr
 </table>
 <p>Create the subfolders once (or let a station create them on its first test). Workspaces on network paths in <code>programs.csv</code> are refused unless the policy allows them (<code>network.allowUncWorkspaces</code>). Both sides treat each other&#39;s files as untrusted input (section 3 of the <a href="Protocol.html">Protocol</a>).</p>
 <h2 id="10-tests">10. Tests</h2>
-<p>In the source repository: <code>tests\Run-Tests.ps1 -Static -Unit</code> checks syntax, encodings, forbidden content and the rules above (language check first, no compiler outside the interop loader, full PowerShell path) and runs the unit tests: settings layers and lock, stage safety, verdict, file protocols, network, installation. <code>-Launcher</code> runs the launcher against a simulated VL Application (<code>tests\FakeVL</code>), including a safety matrix (the policy off must never confirm, whatever users, templates or files say). GitHub Actions runs all of them and a real installation as administrator (Program Files, ACL, a standard user trying to write, event log, a signed package, update, removal) for every change (<code>.github\workflows\ci.yml</code>). The <a href="Acceptance-Checklist.html">acceptance checklist</a> covers the live tests at the scanner.</p>
+<p>In the source repository: <code>tests\Run-Tests.ps1 -Static -Unit</code> checks syntax, encodings, forbidden content and the rules above (language check first, no compiler outside the interop loader, full PowerShell path) and runs the unit tests: settings layers and lock, stage safety, scan check, file protocols, network, installation. <code>-Launcher</code> runs the launcher against a simulated VL Application (<code>tests\FakeVL</code>), including a safety matrix (the policy off must never confirm, whatever users, templates or files say). GitHub Actions runs all of them and a real installation as administrator (Program Files, ACL, a standard user trying to write, event log, a signed package, update, removal) for every change (<code>.github\workflows\ci.yml</code>). The <a href="Acceptance-Checklist.html">acceptance checklist</a> covers the live tests at the scanner.</p>
 </main>
 <footer>VL Connector for PolyWorks - unofficial tool, not an official KEYENCE or InnovMetric product.</footer>
 </body>

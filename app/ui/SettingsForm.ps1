@@ -12,7 +12,7 @@ $script:SettingControls = [ordered]@{
     'scenario' = 'ScenarioLocal', 'ScenarioNetwork'; 'role' = 'RoleScanner', 'RoleStation'
     'vl.mode' = 'ModeHighSpeed', 'ModeStandard', 'ModeAsk'; 'vl.exportImmediately' = 'ExportImmediately'
     'vl.afterExport' = 'AfterExport'; 'vl.vldFolder' = 'VldFolder', 'VldFolderBrowse'; 'vl.returnFocus' = 'ReturnFocus'
-    'vl.programFolders' = 'ProgramFolder', 'ProgramFolderBrowse'; 'polyworks.keepPieces' = 'KeepPieces'; 'polyworks.openPdf' = 'OpenPdf'
+    'vl.programFolders' = 'ProgramFolder', 'ProgramFolderBrowse'; 'polyworks.openPdf' = 'OpenPdf'
     'network.share' = 'SharePath', 'ShareBrowse'; 'network.autoOpenReports' = 'AutoOpenReports'
 }
 
@@ -170,7 +170,6 @@ function Show-SettingsWindow {
     $c.VldFolder.Text = [string]$cfg.vl.vldFolder
     $c.ReturnFocus.IsChecked = [bool]$cfg.vl.returnFocus
     $c.ProgramFolder.Text = (@($cfg.vl.programFolders) | Where-Object { $_ }) -join '; '
-    Select-ComboTag $c.KeepPieces ([string]$cfg.polyworks.keepPieces)
     $c.OpenPdf.IsChecked = [bool]$cfg.polyworks.openPdf
     $c.SharePath.Text = [string]$cfg.network.share
     $c.AutoOpenReports.IsChecked = [bool]$cfg.network.autoOpenReports
@@ -219,7 +218,6 @@ function Show-SettingsWindow {
     })
 
     # --- PolyWorks ------------------------------------------------------------------------------
-    $c.KeepPieces.Add_SelectionChanged({ Save-SettingValue 'polyworks.keepPieces' ([string]$this.SelectedItem.Tag) })
     $c.OpenPdf.Add_Checked({ Save-SettingValue 'polyworks.openPdf' $true }); $c.OpenPdf.Add_Unchecked({ Save-SettingValue 'polyworks.openPdf' $false })
     $c.CopyMacroPath.Add_Click({
         try {

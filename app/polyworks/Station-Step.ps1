@@ -9,7 +9,7 @@
                                       ERROR without a claimed job pauses the station (e.g. an unusable
                                       Measurement Programs List); a job that fails after it was claimed is
                                       reported as failed to its scanner PC.
-    -Action Publish -JobId id -Result f -Out f   publishes the result of VLC_Evaluate (PDF, CSV, verdict) to the
+    -Action Publish -JobId id -Result f -Out f   publishes the result of VLC_Evaluate (state and PDF) to the
                                       shared folder and moves the job to processed\ or failed\: 1 STATE 2 MESSAGE
   See docs\Protocol.md.
 #>
@@ -78,9 +78,7 @@ try {
                 $run = ($id -split '_', 3)[2]   # yyyyMMdd-HHmmss_hhhh: unique piece name per job
                 $params = [ordered]@{
                     PWK = $next.Map.Workspace; TEMPLATE = $next.Map.Template; STL = $next.Stl; RUN = $run; REPORT_DIR = $reports
-                    OPERATOR = "$($next.Job.USER) ($($next.Job.COMPUTER))"
-                    PROGRAM = $next.Job.PROGRAM; UTC = $next.Job.CREATED_UTC; KEEP_PIECES = [string]$cfg.polyworks.keepPieces
-                    COLOR_SCALE = ([double]$cfg.polyworks.colorScaleMm).ToString([Globalization.CultureInfo]::InvariantCulture)
+                    OPERATOR = "$($next.Job.USER) ($($next.Job.COMPUTER))"; UTC = $next.Job.CREATED_UTC
                     DEVICE = [string]$cfg.polyworks.deviceText; RESULT = $resultFile; JOBID = $id
                     APP = $app; STL_SHA256 = [string]$next.Job.STL_SHA256
                 }
@@ -102,22 +100,25 @@ try {
             try { $params = Read-KeyValueFile (Join-Path $work "$JobId.params") } catch { }
             $map = if ($params) { [pscustomobject]@{ Workspace = $params.PWK; Template = $params.TEMPLATE } } else { $null }
             if (-not $r -or -not $r.STATE) {
-                $res = [ordered]@{ STATE = 'ERROR'; VERDICT = ''; SUMMARY = ''; MESSAGE = 'The evaluation in PolyWorks did not finish (no result).' }
-                $published = Complete-VlcJob $share $JobId $res '' '' $map $station
+                $res = [ordered]@{ STATE = 'ERROR'; MESSAGE = 'The measurement in PolyWorks did not finish (no result).' }
+                $published = Complete-VlcJob $share $JobId $res '' $map $station
             }
             else {
-                $res = [ordered]@{ STATE = $r.STATE; VERDICT = $r.VERDICT; SUMMARY = $r.SUMMARY; MESSAGE = $r.MESSAGE }
-                $pdf = if ($r.STATE -eq 'OK' -and $r.PDF -and (Test-Path -LiteralPath $r.PDF) -and (Test-PdfFile $r.PDF)) { $r.PDF } else { '' }
-                $csv = if ($r.CSV -and (Test-Path -LiteralPath $r.CSV)) { $r.CSV } else { '' }
-                if ($r.STATE -eq 'OK' -and -not $pdf) { $res.MESSAGE = (('The PDF report could not be created. ' + $res.MESSAGE).Trim()) }
-                $published = Complete-VlcJob $share $JobId $res $pdf $csv $map $station
-                foreach ($f in $pdf, $csv) { if ($f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } }
+                $res = [ordered]@{ STATE = $r.STATE; MESSAGE = $r.MESSAGE }
+                # a template without a formatted report has no PDF; a PDF that is there must be complete
+                $pdf = ''
+                if ($r.STATE -eq 'OK' -and $r.PDF) {
+                    if ((Test-Path -LiteralPath $r.PDF) -and (Test-PdfFile $r.PDF)) { $pdf = $r.PDF }
+                    else { $res.STATE = 'ERROR'; $res.MESSAGE = (('The PDF report could not be created. ' + $res.MESSAGE).Trim()) }
+                }
+                $published = Complete-VlcJob $share $JobId $res $pdf $map $station
+                if ($pdf) { Remove-Item -LiteralPath $pdf -Force -ErrorAction SilentlyContinue }
             }
             foreach ($f in (Join-Path $work "$JobId.params"), $Result) { if ($f -and (Test-Path -LiteralPath $f)) { Remove-Item -LiteralPath $f -Force } }
             Write-VlcStationStatus $share 'Idle' '' $station
             if (-not $published) { $o.MESSAGE = "Job $JobId has an OK result already (from another run); it was left as it is." }
             $o.STATE = 'OK'
-            Write-VlcLog "Job $JobId published: $($res.STATE) $($res.VERDICT) $($res.SUMMARY) $($res.MESSAGE) $($o.MESSAGE)".Trim()
+            Write-VlcLog "Job $JobId published: $($res.STATE) $($res.MESSAGE) $($o.MESSAGE)".Trim()
         }
     }
 }
@@ -128,7 +129,7 @@ catch {
     if ($Action -eq 'Next' -and $share) {
         # a job claimed in this call is never left in work\: its scanner PC gets the reason
         if ($next) {
-            try { [void](Complete-VlcJob $share $next.JobId ([ordered]@{ STATE = 'ERROR'; VERDICT = ''; SUMMARY = ''; MESSAGE = $o.MESSAGE }) '' '' $next.Map $station) } catch { }
+            try { [void](Complete-VlcJob $share $next.JobId ([ordered]@{ STATE = 'ERROR'; MESSAGE = $o.MESSAGE }) '' $next.Map $station) } catch { }
             $o.JOBID = ''; $o.PART = ''; $o.PARAMS = ''; $o.RESULT = ''
         }
         # the macro waits a poll and tries again; the scanner PCs see the station alive, but paused

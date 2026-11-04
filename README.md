@@ -1,7 +1,8 @@
 # VL Connector for PolyWorks
 
-VL Connector links **KEYENCE VL-800 AI Replay** scans with **PolyWorks|Inspector** evaluation and reports:
-press one button, scan the part in VL as usual, and get a clear OK/NOK verdict with a PDF report.
+VL Connector links **KEYENCE VL-800 AI Replay** scans with **PolyWorks|Inspector**: press one button, scan the
+part in VL as usual, and PolyWorks measures the scan by the part's template - its report (PDF) and its Control
+Reviewer show the result. VL Connector gives no verdict of its own; it only tells you when something fails.
 
 > **Unofficial tool.** It is not an official KEYENCE or InnovMetric product and is not covered by their
 > warranty or support. KEYENCE, VL-800 and PolyWorks are trademarks of their respective owners.
@@ -12,14 +13,15 @@ press one button, scan the part in VL as usual, and get a clear OK/NOK verdict w
 |---|---|---|
 | Start | **Measure** button in PolyWorks (the template knows its VL program) | AI Replay in VL as usual - **VL Connector** waits in the notification area |
 | Scan | AI Replay in VL, STL exported automatically | the same; the STL is named after the .vld4 program plus date and time |
-| Evaluation | in the same PolyWorks | a PolyWorks **station** takes the STL from a shared network folder and picks the template by the VL program |
-| Report | PDF and CSV, opened automatically | the PDF comes back and opens only on the PC that scanned the part |
+| Measurement | in the same PolyWorks | a PolyWorks **station** takes the STL from a shared network folder and picks the template by the VL program |
+| Result | the template's report as PDF, opened automatically; the piece stays open in PolyWorks | the PDF comes back and opens only on the PC that scanned the part |
 
 For each part, a PolyWorks template is the measurement plan: the CAD, one data object for the scan, the controls, a
 measurement sequence (alignment and measurement), optionally the report and, as PolyWorks recommends, a piece
 template. VL Connector adds every scan as a new piece of the template (from the piece template), puts the scan into
-its data object and lets PolyWorks play the plan (Play Inspection); the verdict comes from the template's controls
-and the PDF is the template's own report. VL Connector adds no alignment, measurement or report of its own.
+its data object and lets PolyWorks play the plan (Play Inspection). PolyWorks judges the part, as the template is
+designed (its report, the Control Reviewer); the PDF is the template's own report. VL Connector adds no alignment,
+measurement, report or verdict of its own.
 
 ## Requirements
 

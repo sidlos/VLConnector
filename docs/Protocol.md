@@ -31,7 +31,7 @@ parameters; an option that only the administrator may set (`-ConfirmStageMotion`
 | 9 | JOBID | `-JobId` or empty |
 | 10 | VERSION | VL Connector version |
 | 11 | START_UTC | Start time, UTC |
-| 12 | STL_SHA256 | SHA-256 of the exported STL (the evaluation checks it: a replaced STL is refused) |
+| 12 | STL_SHA256 | SHA-256 of the exported STL (Test-ScanFile.ps1 checks it before the import: a replaced STL is refused) |
 
 **Status** `<marker>.status`, written at once and then at least every 5 s: `STEP`, `TEXT` (progress text shown
 to the operator), `VLMESSAGE` (text of a VL dialog), `UPDATED`, `BEAT` (a counter). The Measure macro reports
@@ -54,18 +54,21 @@ started by another VL Connector run (the run mutex is taken) is left alone.
 
 ## 2. PolyWorks macros
 
-**Get-MacroContext.ps1 output** (for VLC_Measure): `STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, KEEP_PIECES,
-OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE, TIMEOUT_MIN, UNSAVED`. `UNSAVED` is `1` when the project named by
+**Get-MacroContext.ps1 output** (for VLC_Measure): `STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, OPEN_PDF,
+DEVICE, VERSION, MESSAGE, TIMEOUT_MIN, UNSAVED`. `UNSAVED` is `1` when the project named by
 `-Project` has unsaved changes, `0` when not, empty when it cannot be told: no macro command tells it, so the
 script reads the window title of the PolyWorks|Inspector that started it (PolyWorks marks unsaved changes with `*`
 after the project name).
 
-**VLC_Evaluate.pwmacro parameters** (`$1` = file): `PWK, TEMPLATE, STL, RUN, REPORT_DIR, OPERATOR, PROGRAM, UTC,
-KEEP_PIECES, COLOR_SCALE, DEVICE, RESULT, JOBID, APP, STL_SHA256` (`COLOR_SCALE` is not used since 2.0: the color
-map belongs to the template's plan). The scan becomes a new piece of the template project (`PIECE NEW`) named
-`<TEMPLATE>_<RUN>`; PDF and CSV get the same name in `REPORT_DIR`.
+**VLC_Evaluate.pwmacro parameters** (`$1` = file): `PWK, TEMPLATE, STL, RUN, REPORT_DIR, OPERATOR, UTC, DEVICE,
+RESULT, JOBID, APP, STL_SHA256`. The scan becomes a new piece of the template project (`PIECE NEW`) named
+`<TEMPLATE>_<RUN>`; the PDF gets the same name in `REPORT_DIR`.
 
-**Evaluation by the template's plan:** the source of the new piece is the template's piece template (project
+**Scan check** (when `STL_SHA256` is given): before anything is changed, VLC_Evaluate empties its check file and
+runs `Test-ScanFile.ps1`, which writes `STATE (OK/ERROR), MESSAGE`. The scan is measured only when the STL has the
+SHA-256 the launcher (marker) or the scanner PC (job) recorded; otherwise the result is ERROR and no piece is made.
+
+**Measurement by the template's plan:** the source of the new piece is the template's piece template (project
 property `VL piece template`, otherwise the first one; a named one that does not exist is an error), or, without a
 piece template, the open piece. Then: `PIECE NEW` (PolyWorks' new-piece questions are answered by setting their
 options, which are restored at once; PolyWorks saves unsaved changes of the open piece first) -> the plan of the
@@ -74,37 +77,23 @@ acquires data) unless it is ignored, and exactly one data object; otherwise the 
 source of the plan is opened -> the automatic project update of the new piece is switched on if it is off ->
 `PIECE LINK` to the piece template (not when the PolyWorks option *Link to the piece template* is *No*; linking
 changes the option *Nonupdatable reports*, which is set and restored around it; a failed link is a note in
-`MESSAGE`) -> pieces marked `VL remove` by earlier evaluations are deleted, and an inherited mark is removed from the
-new piece -> piece properties (date, serial number, operator, device) -> `FILE IMPORT_DATA POLYGONAL_MODEL` replaces
+`MESSAGE`) -> piece properties (date, serial number, operator, device) -> `FILE IMPORT_DATA POLYGONAL_MODEL` replaces
 the data of the template's data object (its name is kept) -> `PIECE PLAY_INSPECTION` plays the plan (alignment,
-measurement, color map, report items) -> the automatic project update is switched off again if it was off ->
-controls -> verdict -> `FILE EXPORT_FORMATTED_REPORT PDF` of the template's report (project property `VL report`,
-otherwise the first formatted report; none: no PDF) -> `FILE SAVE_PROJECT`. Messages of PolyWorks are written on one
-line.
+measurement, color map, report items; an error of PolyWorks is an ERROR) -> the automatic project update is switched
+off again if it was off -> `FILE EXPORT_FORMATTED_REPORT PDF` of the template's report (project property `VL report`,
+otherwise the first formatted report; none: no PDF, no error) -> `FILE SAVE_PROJECT`. Every piece is kept; VL
+Connector deletes only a new piece whose plan cannot run (see above). Messages of PolyWorks are written on one line.
 
-**Control data** (`VLC-CONTROLS-2`, UTF-16, written by VLC_Evaluate for `Complete-Evaluation.ps1`): the header
-`FORMAT, RUN, JOBID, PIECE, TEMPLATE, PROGRAM, OPERATOR, STL, STL_SHA256, REPORT_DIR, CSV, PLAN, PLAN_STATUS,
-PLAN_ERROR` (the measurement sequence and the status of `PIECE PLAY_INSPECTION`), then ten lines per control `CONTROL, NAME, NOMINAL, MEASURED,
-DEVIATION, UPPER_TOL, UPPER_WARN, LOWER_WARN, LOWER_TOL, RESULT`, then `END=<number of controls>`. Data that is
-cut off, out of order or miscounted is refused.
+**No verdict of VL Connector.** VLC_Evaluate reads no control, and VL Connector writes no verdict and no CSV:
+PolyWorks judges the part, as the template is designed - in its formatted report (the PDF) and in the Control
+Reviewer. What the operator sees after the measurement belongs to the template.
 
-**Verdict file** (written by `Complete-Evaluation.ps1`, emptied by the macro before): `STATE (OK/ERROR), VERDICT
-(OK/NOK), SUMMARY, COUNT, RUN, JOBID, CSV, MESSAGE`. The macro compares `COUNT`, `RUN` and `JOBID` with its own
-values; anything missing or different gives `STATE=ERROR` and the piece is kept for checking.
-
-**Verdict rules (fail-closed):** a control is OK only with PolyWorks' documented results *Within positive/negative
-safe zone* (OK) or *Within upper/lower warning zone* (OK, warning); *Beyond upper/lower tolerance limit* is NOK;
-an empty result is NOT MEASURED and anything else UNKNOWN - both NOK. No verdict at all (STATE=ERROR) without
-controls, after a failed measurement plan, or when the STL is not the one the launcher exported.
-
-**VLC_Evaluate result** (file `RESULT`, UTF-16, written last): `STATE (OK/ERROR), VERDICT (OK/NOK), SUMMARY, PDF,
-CSV, PIECE, PIECE_KEPT (1/0), MESSAGE`. `PIECE_KEPT=0`: the piece is marked `VL remove` and removed at the next
-evaluation of the template; the callers delete nothing. VLC_Measure then opens the Control Reviewer (all controls of
-the piece).
-
-**CSV** (UTF-8 with BOM, `;`): header lines with part, program, operator, plan, version, STL and its
-SHA-256, then one line per control and the verdict; text cells that a spreadsheet would run as a formula start
-with `'`.
+**VLC_Evaluate result** (file `RESULT`, UTF-16, written last, one block for every way out): `STATE, PDF, PIECE,
+MESSAGE`. `STATE=OK`: the plan was played and the PDF exported if the template has a formatted report; `ERROR`: the
+reason is in `MESSAGE`. `PDF` is empty without a formatted report. `PIECE` names the new piece (empty when the template
+could not be measured and the new piece was removed again). With `STATE=OK`, `MESSAGE` is a note (e.g. the piece
+could not be linked to the piece template). VLC_Measure shows a message only for `ERROR` and opens the PDF when
+`OPEN_PDF` is 1; it shows nothing else.
 
 ## 3. Network scenario
 
@@ -113,7 +102,11 @@ with `'`.
 
 **JobId:** `<COMPUTER>_<PROGRAM>_<yyyyMMdd-HHmmss>_<4 hex>`, characters `A-Z a-z 0-9 -` and `_` as separator only
 (other characters in computer and program names become `-`). Files: `<JobId>.job`, `.stl`, `.claim`, `.pdf`,
-`.csv`, `.result`.
+`.result`.
+
+**Protocol version** (`PROTOCOL` in jobs and results): `2` since 3.0 (the result has no verdict; 1.x and 2.0 used
+`1`). A station takes only jobs of its own protocol and answers others with the reason (*Protocol 1 is not supported
+by this station*): update the scanner PCs and the stations together.
 
 **Scanner PC:**
 
@@ -126,19 +119,20 @@ with `'`.
   (`<JobId>.tries`); after five attempts, or without its STL, the job is set aside in `outbox\failed\` with a
   `.reason` and a notification.
 - Results are read only for the pending JobIds. A PDF is copied when it starts with `%PDF-` and ends with
-  `%%EOF`; a result whose PDF has not arrived stays pending up to 10 minutes after the station finished. Copied
-  PDF and CSV files are marked as downloaded from another computer.
+  `%%EOF`; a result whose PDF has not arrived stays pending up to 10 minutes after the station finished. A result
+  without a PDF (the template has no formatted report) is done at once. Copied PDFs are marked as downloaded from
+  another computer.
 
-**Job** `jobs\<JobId>.job` (written after the STL): `PROTOCOL (1), JOBID, PART (program name), PROGRAM (.vld4 file
+**Job** `jobs\<JobId>.job` (written after the STL): `PROTOCOL (2), JOBID, PART (program name), PROGRAM (.vld4 file
 name), COMPUTER, USER, CREATED_UTC, STL, STL_SIZE, STL_SHA256, VERSION`.
 
 **Station:** claims the oldest job (by the time in its JobId) by moving `<JobId>.job` to `work\` (a station that
 loses the race skips it) and writing `work\<JobId>.claim` (`STATION, COMPUTER, CLAIMED_UTC`); files in `jobs\`
 that are no jobs go to `jobs\rejected\`. It moves the STL and checks protocol, JobId, STL size (at most 2 GB),
 SHA-256 and binary STL format, and that the VL program is in the Measurement Programs List with an existing
-workspace. It evaluates with VLC_Evaluate and publishes `reports\<JobId>.pdf` and `.csv`, then
-**`reports\<JobId>.result` last**: `PROTOCOL, JOBID, STATE, VERDICT, SUMMARY, PDF, CSV, STATION, FINISHED_UTC,
-MESSAGE, WORKSPACE, TEMPLATE`. The job and STL move to `processed\` (STATE=OK) or `failed\` (STATE=ERROR with the
+workspace. It measures with VLC_Evaluate and publishes `reports\<JobId>.pdf` (when the template has a formatted
+report; a PDF that is not complete makes the result ERROR), then **`reports\<JobId>.result` last**: `PROTOCOL, JOBID,
+STATE, PDF, STATION, FINISHED_UTC, MESSAGE, WORKSPACE, TEMPLATE`. The job and STL move to `processed\` (STATE=OK) or `failed\` (STATE=ERROR with the
 reason). An OK result is never overwritten. A job that fails after its claim is completed as ERROR, so its
 scanner PC learns why. Jobs left in `work\` - by this station when it starts, or by any station longer than
 `network.jobTimeoutMin` (default 15 min) - are completed as ERROR.

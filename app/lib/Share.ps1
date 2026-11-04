@@ -4,7 +4,7 @@
 # Layout of the shared folder (the path in the settings points to it, e.g. \\fileserver\metrology\VLConnector):
 #   jobs\        new jobs from the scanner PCs (<JobId>.job + <JobId>.stl); jobs\rejected\ files that are no jobs
 #   work\        jobs a station is evaluating (<JobId>.job, .stl and .claim: which station, since when)
-#   reports\     results for the scanner PCs (<JobId>.pdf, .csv, .result)
+#   reports\     results for the scanner PCs (<JobId>.pdf, .result)
 #   processed\   finished jobs        failed\   jobs that could not be evaluated
 #   status\      station heartbeats   programs.csv   VL program -> PolyWorks workspace and template
 # Rights a role needs (docs\IT-Review, access matrix): a scanner PC writes jobs\ and reads reports\, status\ and

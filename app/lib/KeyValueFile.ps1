@@ -42,7 +42,7 @@ function Read-KeyValueFile([string]$Path, [int]$MaxBytes = 65536) {
         if ($key -notmatch '^[A-Za-z0-9_]{1,40}$') { continue }
         $result[$key] = $line.Substring($i + 1)
     }
-    # PSBase: $result.Count would give the value of a COUNT key (the verdict file has one)
+    # PSBase: $result.Count would give the value of a COUNT key (a file may have one)
     if (-not $result.PSBase.Count) { return $null }
     return $result
 }

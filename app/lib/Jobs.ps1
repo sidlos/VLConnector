@@ -8,12 +8,14 @@
 #   .part and renamed) and fetches the reports of its pending jobs. A job that cannot be sent five times, or has
 #   lost its STL, is set aside in outbox\failed.
 # Station: claims the oldest job (by the time in its JobId) by moving <JobId>.job to work\ and writing
-#   <JobId>.claim, checks it, evaluates it and publishes reports\<JobId>.pdf/.csv/.result (the .result last),
+#   <JobId>.claim, checks it, measures it and publishes reports\<JobId>.pdf/.result (the .result last),
 #   then moves the job to processed\ or failed\. A job left in work\ longer than network.jobTimeoutMin, or one of
 #   a station that was stopped while evaluating, is completed as failed. An OK result is never overwritten.
 
 $script:JobIdPattern = '^[A-Za-z0-9-]{1,40}_[A-Za-z0-9-]{1,40}_\d{8}-\d{6}_[0-9a-f]{4}$'
-$script:ProtocolVersion = '1'
+# 2 since 3.0: the result has no verdict. A station takes only jobs of its own protocol, so scanner PCs and
+# stations of different versions fail with a clear reason instead of misreading each other's results.
+$script:ProtocolVersion = '2'
 $script:MaxStlBytes = 2GB
 $script:MaxSendAttempts = 5
 
@@ -265,12 +267,6 @@ function Receive-VlcReports([string]$Share, [string]$LocalReports, [int]$PdfWait
                         $pdfLocal = Join-Path $LocalReports "$($p.JobId).pdf"
                         Copy-Item -LiteralPath $pdfShare -Destination $pdfLocal -Force -ErrorAction Stop
                         if (Test-PdfFile $pdfLocal) { Set-VlcDownloadedMark $pdfLocal } else { Remove-Item -LiteralPath $pdfLocal -Force; $pdfLocal = '' }
-                        $csvShare = Join-Path $reports "$($p.JobId).csv"
-                        if (Test-Path -LiteralPath $csvShare) {
-                            $csvLocal = Join-Path $LocalReports "$($p.JobId).csv"
-                            Copy-Item -LiteralPath $csvShare -Destination $csvLocal -Force -ErrorAction Stop
-                            Set-VlcDownloadedMark $csvLocal
-                        }
                     }
                 }
                 catch { $pdfLocal = '' }   # copied again in the next cycle
@@ -282,7 +278,7 @@ function Receive-VlcReports([string]$Share, [string]$LocalReports, [int]$PdfWait
                     $message = ("The PDF report did not arrive from the station. $message").Trim()
                 }
             }
-            $done.Add([pscustomobject]@{ JobId = $p.JobId; Part = $p.Part; State = $r.STATE; Verdict = $r.VERDICT; Summary = $r.SUMMARY; Message = $message; Pdf = $pdfLocal; Station = $r.STATION })
+            $done.Add([pscustomobject]@{ JobId = $p.JobId; Part = $p.Part; State = $r.STATE; Message = $message; Pdf = $pdfLocal; Station = $r.STATION })
         }
         if ($done.Count) { Set-VlcPendingJobs $left.ToArray() }
     }
@@ -371,27 +367,26 @@ function Get-VlcNextJob([string]$Share, [string]$Station = $env:COMPUTERNAME, [b
             return [pscustomobject]@{ JobId = $id; Job = $j; Map = $map; Stl = $stlWork; JobFile = $claimed }
         }
         catch {
-            [void](Complete-VlcJob $Share $id ([ordered]@{ STATE = 'ERROR'; VERDICT = ''; SUMMARY = ''; MESSAGE = $_.Exception.Message }) '' '' $map $Station)
+            [void](Complete-VlcJob $Share $id ([ordered]@{ STATE = 'ERROR'; MESSAGE = $_.Exception.Message }) '' $map $Station)
         }
     }
     return $null
 }
 
 # Publishes the result of a job and moves it to processed\ (STATE=OK) or failed\.
-# $Result: STATE, VERDICT, SUMMARY, MESSAGE; $Pdf/$Csv: local files of the station (may be empty); $Map: the line of
+# $Result: STATE, MESSAGE; $Pdf: local file of the station (may be empty); $Map: the line of
 # the Measurement Programs List (workspace and template go into the result). An OK result that is already there
 # is never overwritten (a job completed twice, e.g. after a time-out): then nothing is published ($false).
-function Complete-VlcJob([string]$Share, [string]$JobId, $Result, [string]$Pdf, [string]$Csv, $Map = $null, [string]$Station = $env:COMPUTERNAME) {
+function Complete-VlcJob([string]$Share, [string]$JobId, $Result, [string]$Pdf, $Map = $null, [string]$Station = $env:COMPUTERNAME) {
     $reports = Join-Path $Share 'reports'
     $resultFile = Join-Path $reports "$JobId.result"
     $existing = $null
     try { $existing = Read-KeyValueFile $resultFile } catch { }
     if ($existing -and $existing.STATE -eq 'OK') { return $false }
     if ($Pdf -and (Test-Path -LiteralPath $Pdf)) { Copy-FileAtomic $Pdf (Join-Path $reports "$JobId.pdf") }
-    if ($Csv -and (Test-Path -LiteralPath $Csv)) { Copy-FileAtomic $Csv (Join-Path $reports "$JobId.csv") }
     $out = [ordered]@{
-        PROTOCOL = $script:ProtocolVersion; JOBID = $JobId; STATE = $Result.STATE; VERDICT = $Result.VERDICT; SUMMARY = $Result.SUMMARY
-        PDF = $(if ($Pdf) { "$JobId.pdf" } else { '' }); CSV = $(if ($Csv) { "$JobId.csv" } else { '' })
+        PROTOCOL = $script:ProtocolVersion; JOBID = $JobId; STATE = $Result.STATE
+        PDF = $(if ($Pdf) { "$JobId.pdf" } else { '' })
         STATION = $Station; FINISHED_UTC = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); MESSAGE = $Result.MESSAGE
         WORKSPACE = $(if ($Map) { $Map.Workspace } else { '' }); TEMPLATE = $(if ($Map) { $Map.Template } else { '' })
     }
@@ -426,7 +421,7 @@ function Resolve-VlcStaleJobs([string]$Share, [int]$TimeoutMin, [switch]$OwnOnly
         elseif (([datetime]::UtcNow - $since).TotalMinutes -ge $TimeoutMin) {
             $message = "The station $by did not finish the evaluation within $TimeoutMin min. Scan the part again."
         }
-        if ($message -and (Complete-VlcJob $Share $id ([ordered]@{ STATE = 'ERROR'; VERDICT = ''; SUMMARY = ''; MESSAGE = $message }) '' '' $null $Station)) { $resolved.Add($id) }
+        if ($message -and (Complete-VlcJob $Share $id ([ordered]@{ STATE = 'ERROR'; MESSAGE = $message }) '' $null $Station)) { $resolved.Add($id) }
     }
     return $resolved.ToArray()
 }

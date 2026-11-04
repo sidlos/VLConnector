@@ -46,7 +46,7 @@ $outside = Join-Path $work 'outside'
 [void][IO.Directory]::CreateDirectory((Join-Path $legacy 'app\polyworks'))
 [IO.File]::WriteAllText((Join-Path $legacy 'VERSION'), '1.0.0-rc10')
 [IO.File]::WriteAllText((Join-Path $legacy 'app\VLReplay.ps1'), '# 1.0.0-rc10')
-[IO.File]::WriteAllText((Join-Path $legacy 'machine.json'), '{ "polyworks": { "keepPieces": "Nok" }, "vl": { "confirmStageMotion": true } }')
+[IO.File]::WriteAllText((Join-Path $legacy 'machine.json'), '{ "polyworks": { "openPdf": false }, "vl": { "confirmStageMotion": true } }')
 [void](cmd.exe /c mklink /J "$legacy\app\link" "$outside")
 
 # --- installation as administrator, stage confirmation off ------------------------------------------------------
@@ -68,7 +68,7 @@ Test-Step 'rc10 folder holds only forwarders' ((Get-VlcFolderKind $legacy).Kind 
 Test-Step 'the link in the rc10 folder was not followed' (Test-Path -LiteralPath (Join-Path $outside 'keep.txt'))
 $fwAcl = @(Get-VlcAclProblems $legacy -Recurse)
 Test-Step 'only administrators can change the forwarders' (-not $fwAcl.Count) ($fwAcl -join '; ')
-Test-Step 'machine defaults taken over from rc10, not its stage setting' (([IO.File]::ReadAllText((Join-Path $target 'machine.json')) | ConvertFrom-Json).defaults.polyworks.keepPieces -eq 'Nok')
+Test-Step 'machine defaults taken over from rc10, not its stage setting' (([IO.File]::ReadAllText((Join-Path $target 'machine.json')) | ConvertFrom-Json).defaults.polyworks.openPdf -eq $false)
 
 # --- a standard user cannot change it --------------------------------------------------------------------------
 $name = 'vlcci' + (Get-Random -Minimum 1000 -Maximum 9999)

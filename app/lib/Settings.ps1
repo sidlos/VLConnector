@@ -9,9 +9,11 @@
 # comes from an environment variable. Every value is checked against app\config\settings-schema.json: a value of
 # the wrong type or out of range, an unknown key, or a machine-only key outside defaults.json and the policy is
 # ignored with a warning (the layer below then applies). The warnings appear on the Setup page and in the logs.
+# Settings of earlier versions that are no longer used (the schema's "retired" list) are ignored without a warning.
 
 $script:VlcAppDir = Split-Path $PSScriptRoot
 $script:VlcSchema = $null
+$script:VlcRetired = $null
 
 function Get-VlcPaths {
     $data = Join-Path $env:LOCALAPPDATA 'VLConnector'
@@ -58,10 +60,14 @@ function Get-VlcSettingsSchema {
         if (-not $raw) { throw "The settings schema is missing: $((Get-VlcPaths).Schema)" }
         $schema = [ordered]@{}
         foreach ($p in $raw.settings.PSObject.Properties) { $schema[$p.Name] = $p.Value }
+        $script:VlcRetired = [string[]]@($raw.retired | Where-Object { $_ })
         $script:VlcSchema = $schema
     }
     return $script:VlcSchema
 }
+
+# Keys of earlier versions that are no longer used (e.g. polyworks.keepPieces up to 2.0: pieces are always kept).
+function Get-VlcRetiredSettings { [void](Get-VlcSettingsSchema); return $script:VlcRetired }
 
 # Checks one value against its definition. Returns Ok, the value in its canonical form (Value) or the reason (Error).
 # JSON types are taken literally: "true" in quotes is text, not a switch, and 5 in quotes is not a number.
@@ -137,18 +143,21 @@ function Test-VlcSettingValue($Definition, $Value) {
 function ConvertTo-VlcFlatSettings($Object, $Schema) {
     $values = [ordered]@{}
     $unknown = New-Object Collections.Generic.List[string]
+    $retired = New-Object Collections.Generic.List[string]
+    $old = @(Get-VlcRetiredSettings)
     $walk = {
         param($Node, [string]$Prefix)
         foreach ($p in $Node.PSObject.Properties) {
             $key = if ($Prefix) { "$Prefix.$($p.Name)" } else { $p.Name }
             $known = @($Schema.Keys | Where-Object { $_ -eq $key })
             if ($known.Count) { $values[$known[0]] = $p.Value }
+            elseif (@($old | Where-Object { $_ -eq $key }).Count) { $retired.Add($key) }
             elseif ($p.Value -is [System.Management.Automation.PSCustomObject]) { & $walk $p.Value $key }
             else { $unknown.Add($key) }
         }
     }
     if ($Object -is [System.Management.Automation.PSCustomObject]) { & $walk $Object '' }
-    return [pscustomobject]@{ Values = $values; Unknown = $unknown.ToArray() }
+    return [pscustomobject]@{ Values = $values; Unknown = $unknown.ToArray(); Retired = $retired.ToArray() }
 }
 
 function ConvertFrom-VlcFlatSettings($Flat) {
@@ -316,8 +325,8 @@ function Set-VlcUserSettings([hashtable]$Set = @{}, [string[]]$Remove = @()) {
 }
 
 # One-time cleanup of a user file of VL Connector up to 1.0.0-rc10, which stored every effective value, including
-# machine-only keys such as vl.confirmStageMotion. Removed: unknown keys, machine-only keys, invalid values, keys
-# locked by the policy and values equal to the inherited ones. A file that is not valid JSON is kept as
+# machine-only keys such as vl.confirmStageMotion. Removed: unknown keys, settings no longer used, machine-only keys,
+# invalid values, keys locked by the policy and values equal to the inherited ones. A file that is not valid JSON is kept as
 # settings.json.bad. Returns what was removed.
 function Repair-VlcUserSettings {
     $paths = Get-VlcPaths
@@ -335,6 +344,7 @@ function Repair-VlcUserSettings {
         $state = Get-VlcSettingsState
         $flat = ConvertTo-VlcFlatSettings $user $schema
         foreach ($key in $flat.Unknown) { Remove-VlcJsonValue $user $key; $removed.Add("$key (unknown)") }
+        foreach ($key in $flat.Retired) { Remove-VlcJsonValue $user $key; $removed.Add("$key (no longer used)") }
         foreach ($key in @($flat.Values.Keys)) {
             $value = $flat.Values[$key]
             $reason = if ($schema[$key].machineOnly) { 'only the administrator can set it' }

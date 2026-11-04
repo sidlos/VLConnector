@@ -5,8 +5,9 @@ version "7.0"
 #
 # Run it with the "VL Station" button in a PolyWorks|Inspector that is used only for the station (open it
 # from the Workspace Manager as usual). It takes the jobs from the shared folder one by one, evaluates each
-# with VLC_Evaluate.pwmacro (template from the parts list), publishes the PDF, CSV and verdict for the
-# scanner PC and waits for the next job - until you press Stop in the station window.
+# with VLC_Evaluate.pwmacro (template from the parts list), publishes the result and the PDF of the
+# template's report for the scanner PC and waits for the next job - until you press Stop in the station window.
+# PolyWorks judges the part (the report, the Control Reviewer); VL Connector gives no verdict.
 # All file work (claiming, checking, publishing) is done by Station-Step.ps1.
 #==============================================================================
 MACRO END_ON_ERROR ( "Off" )
@@ -34,10 +35,9 @@ DECLARE vJobId ""
 DECLARE vPart ""
 DECLARE vParams ""
 DECLARE vResult ""
-DECLARE vVerdict ""
-DECLARE vSummary ""
+DECLARE vRState ""
+DECLARE vRMsg ""
 DECLARE vPiece ""
-DECLARE vKept "1"
 DECLARE vLast "No job yet."
 DECLARE vComputer ""
 DECLARE vUtc ""
@@ -129,16 +129,12 @@ WHILE $vStop == 0
                 MACRO PROGRESS HIDE
                 MACRO EXEC ( "${vApp}\polyworks\VLC_Evaluate.pwmacro", $vParams )
                 MACRO INTERACTIVITY ( "Off" )
-                SET vVerdict ""
-                SET vSummary ""
+                SET vRState ""
+                SET vRMsg ""
                 SET vPiece ""
-                SET vKept "1"
-                DATA_FILE READ LINE_FIELD ( $vResult, 2, 2, vVerdict, "=", "On" )
-                DATA_FILE READ LINE_FIELD ( $vResult, 3, 2, vSummary, "=", "On" )
-                DATA_FILE READ LINE_FIELD ( $vResult, 6, 2, vPiece, "=", "On" )
-                DATA_FILE READ LINE_FIELD ( $vResult, 7, 2, vKept, "=", "On" )
-                # a piece that is not kept (setting "Keep measured pieces") stays marked in the template project;
-                # VLC_Evaluate removes it at the next evaluation of that template
+                DATA_FILE READ LINE_FIELD ( $vResult, 1, 2, vRState, "=", "On" )
+                DATA_FILE READ LINE_FIELD ( $vResult, 3, 2, vPiece, "=", "On" )
+                DATA_FILE READ LINE_FIELD ( $vResult, 4, 2, vRMsg, "=", "On" )
                 SET vPubState ""
                 SET vPubMsg ""
                 DATA_FILE CREATE ( $vPub, "Ascii", "Yes" )
@@ -146,15 +142,15 @@ WHILE $vStop == 0
                 DATA_FILE READ LINE_FIELD ( $vPub, 1, 2, vPubState, "=", "On" )
                 DATA_FILE READ LINE_FIELD ( $vPub, 2, 2, vPubMsg, "=", "On" )
                 ++ vCount
-                IF "$vVerdict" == ""
-                    SET vLast "Last job: $vPart - error. Jobs done: $vCount."
+                IF "$vRState" == "OK"
+                    SET vLast "Last job: $vPart - measured ($vPiece). Jobs done: $vCount."
                 ELSE
-                    SET vLast "Last job: $vPart - $vVerdict ($vSummary). Jobs done: $vCount."
+                    SET vLast "Last job: $vPart - error: $vRMsg Jobs done: $vCount."
                 ENDIF
                 IF "$vPubState" != "OK"
                     SET vLast "Last job: $vPart - the result could not be published: $vPubMsg Jobs done: $vCount."
                 ENDIF
-                MACRO ECHO ( "VL Connector station: $vJobId $vPart $vVerdict $vSummary" )
+                MACRO ECHO ( "VL Connector station: $vJobId $vPart $vRState $vPiece $vRMsg" )
                 MACRO PROGRESS SHOW ( "VL Connector station", "Shared folder: $vShare", 0, 100, "Stop" )
                 MACRO PROGRESS STATUS MESSAGE ( "Waiting for scans. $vLast" )
             ENDIF

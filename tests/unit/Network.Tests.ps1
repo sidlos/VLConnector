@@ -133,9 +133,9 @@ Describe 'reports for the scanner PC (C28)' {
     $t = Enter-TestRoot
     [void](Test-VlcShare $t.Share 'Station')
     $utcNow = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-    function Write-TestResult([string]$JobId, [switch]$Csv) {
-        Write-KeyValueFile (Join-Path $t.Share "reports\$JobId.result") ([ordered]@{ PROTOCOL = '1'; JOBID = $JobId; STATE = 'OK'; VERDICT = 'NOK'
-            SUMMARY = '1 of 3 controls out of tolerance'; PDF = "$JobId.pdf"; CSV = $(if ($Csv) { "$JobId.csv" } else { '' }); STATION = 'Line 1'
+    function Write-TestResult([string]$JobId, [switch]$NoPdf) {
+        Write-KeyValueFile (Join-Path $t.Share "reports\$JobId.result") ([ordered]@{ PROTOCOL = '2'; JOBID = $JobId; STATE = 'OK'
+            PDF = $(if ($NoPdf) { '' } else { "$JobId.pdf" }); STATION = 'Line 1'
             FINISHED_UTC = $utcNow; MESSAGE = '' })
     }
     It 'keeps a job pending while its PDF has not arrived' {
@@ -152,17 +152,26 @@ Describe 'reports for the scanner PC (C28)' {
         $done[0].Message | Should Match 'did not arrive'
         @(Get-VlcPendingJobs).Count | Should Be 0
     }
-    It 'copies a complete PDF and the CSV and marks both as downloaded' {
+    It 'copies a complete PDF and marks it as downloaded' {
         $id = New-VlcJobId 'H'
         Add-VlcPendingJob $id 'H'
         New-TestPdf (Join-Path $t.Share "reports\$id.pdf")
-        [IO.File]::WriteAllText((Join-Path $t.Share "reports\$id.csv"), "a;b`r`n")
-        Write-TestResult $id -Csv
+        Write-TestResult $id
         $done = @(Receive-VlcReports $t.Share $t.Local)
         $done[0].Pdf | Should Be (Join-Path $t.Local "$id.pdf")
-        $done[0].Verdict | Should Be 'NOK'
+        $done[0].State | Should Be 'OK'
         $done[0].Station | Should Be 'Line 1'
-        foreach ($f in "$id.pdf", "$id.csv") { (Get-Content -LiteralPath (Join-Path $t.Local $f) -Stream 'Zone.Identifier') -join ' ' | Should Match 'ZoneId=3' }
+        foreach ($f in "$id.pdf") { (Get-Content -LiteralPath (Join-Path $t.Local $f) -Stream 'Zone.Identifier') -join ' ' | Should Match 'ZoneId=3' }
+    }
+    It 'reports a measurement without a PDF at once: the template has no formatted report' {
+        $id = New-VlcJobId 'J'
+        Add-VlcPendingJob $id 'J'
+        Write-TestResult $id -NoPdf
+        $done = @(Receive-VlcReports $t.Share $t.Local)
+        $done.Count | Should Be 1
+        $done[0].State | Should Be 'OK'
+        $done[0].Pdf | Should Be ''
+        $done[0].Message | Should Be ''
     }
     Exit-TestRoot $t
 }
@@ -178,7 +187,7 @@ Describe 'station queue and claims (C34, C36)' {
         [void](Send-VlcOutbox $t.Share)
         return $id
     }
-    $okResult = [ordered]@{ STATE = 'OK'; VERDICT = 'OK'; SUMMARY = 'all 3 controls within tolerance'; MESSAGE = '' }
+    $okResult = [ordered]@{ STATE = 'OK'; MESSAGE = '' }
     It 'takes the oldest job first, by the time in its job id, and notes who claimed it' {
         $newer = Send-TestJob 'AAA'
         $older = Send-TestJob 'ZZZ' (Get-Date).AddMinutes(-3)
@@ -187,10 +196,10 @@ Describe 'station queue and claims (C34, C36)' {
         $claim = Read-KeyValueFile (Join-Path $t.Share "work\$older.claim")
         $claim.STATION | Should Be 'Line 1'
         $claim.COMPUTER | Should Be $env:COMPUTERNAME
-        Complete-VlcJob $t.Share $older $okResult '' '' $next.Map 'Line 1' | Should Be $true
+        Complete-VlcJob $t.Share $older $okResult '' $next.Map 'Line 1' | Should Be $true
         $next = Get-VlcNextJob $t.Share 'Line 1'
         $next.JobId | Should Be $newer
-        Complete-VlcJob $t.Share $newer $okResult '' '' $next.Map 'Line 1' | Should Be $true
+        Complete-VlcJob $t.Share $newer $okResult '' $next.Map 'Line 1' | Should Be $true
     }
     It 'sets a file that is no job aside in jobs\rejected' {
         [IO.File]::WriteAllText((Join-Path $t.Share 'jobs\not a job.job'), 'x')
@@ -206,8 +215,8 @@ Describe 'station queue and claims (C34, C36)' {
     It 'never overwrites an OK result, and names the workspace and the template in it' {
         $id = Send-TestJob
         $next = Get-VlcNextJob $t.Share 'Line 1'
-        Complete-VlcJob $t.Share $id $okResult '' '' $next.Map 'Line 1' | Should Be $true
-        Complete-VlcJob $t.Share $id ([ordered]@{ STATE = 'ERROR'; VERDICT = ''; SUMMARY = ''; MESSAGE = 'late' }) '' '' $null 'Line 2' | Should Be $false
+        Complete-VlcJob $t.Share $id $okResult '' $next.Map 'Line 1' | Should Be $true
+        Complete-VlcJob $t.Share $id ([ordered]@{ STATE = 'ERROR'; MESSAGE = 'late' }) '' $null 'Line 2' | Should Be $false
         $r = Read-KeyValueFile (Join-Path $t.Share "reports\$id.result")
         $r.STATE | Should Be 'OK'
         $r.STATION | Should Be 'Line 1'
@@ -372,25 +381,23 @@ Describe 'station steps of the PolyWorks macro (Station-Step.ps1)' {
         (Read-KeyValueFile $statusFile).STATE | Should Be 'Busy'
         (Read-KeyValueFile (Join-Path $t.Share "work\$id.claim")).STATION | Should Be 'Line 2'
     }
-    It 'publishes PDF, CSV and verdict with the workspace and the template; the station is idle again' {
+    It 'publishes the result and the PDF with the workspace and the template; the station is idle again' {
         $reports = Join-Path $stationDir 'reports'
         $pdf = Join-Path $reports 'piece.pdf'
         New-TestPdf $pdf
-        $csv = Join-Path $reports 'piece.csv'
-        [IO.File]::WriteAllText($csv, "a;b`r`n")
         $result = Join-Path $stationDir "$id.result"
-        Write-KeyValueFile $result ([ordered]@{ STATE = 'OK'; VERDICT = 'NOK'; SUMMARY = '1 of 3 controls out of tolerance'; PDF = $pdf; CSV = $csv; PIECE = 'p'; PIECE_KEPT = '1'; MESSAGE = '' })
+        Write-KeyValueFile $result ([ordered]@{ STATE = 'OK'; PDF = $pdf; PIECE = 'p'; MESSAGE = '' })
         $o = Invoke-Step 'Publish' @('-JobId', $id, '-Result', $result)
         @($o.Keys) -join ',' | Should Be 'STATE,MESSAGE'
         $o.STATE | Should Be 'OK'
         $o.MESSAGE | Should Be ''
         $r = Read-KeyValueFile (Join-Path $t.Share "reports\$id.result")
-        $r.VERDICT | Should Be 'NOK'
+        $r.STATE | Should Be 'OK'
+        $r.PDF | Should Be "$id.pdf"
         $r.WORKSPACE | Should Be $t.Workspace
         $r.TEMPLATE | Should Be 'ABC template'
         $r.STATION | Should Be 'Line 2'
         Test-PdfFile (Join-Path $t.Share "reports\$id.pdf") | Should Be $true
-        Test-Path -LiteralPath (Join-Path $t.Share "reports\$id.csv") | Should Be $true
         Test-Path -LiteralPath (Join-Path $t.Share "processed\$id.job") | Should Be $true
         @(Get-ChildItem -LiteralPath (Join-Path $t.Share 'work')).Count | Should Be 0
         Test-Path -LiteralPath (Join-Path $stationDir "$id.params") | Should Be $false
@@ -400,7 +407,29 @@ Describe 'station steps of the PolyWorks macro (Station-Step.ps1)' {
         $o = Invoke-Step 'Publish' @('-JobId', $id, '-Result', (Join-Path $stationDir "$id.result"))
         $o.STATE | Should Be 'OK'
         $o.MESSAGE | Should Match 'OK result already'
-        (Read-KeyValueFile (Join-Path $t.Share "reports\$id.result")).VERDICT | Should Be 'NOK'
+        (Read-KeyValueFile (Join-Path $t.Share "reports\$id.result")).STATE | Should Be 'OK'
+    }
+    It 'publishes a measurement without a PDF (no formatted report), and a PDF that is not complete as an error' {
+        $id4 = Send-TestJob
+        (Invoke-Step 'Next').JOBID | Should Be $id4
+        $result = Join-Path $stationDir "$id4.result"
+        Write-KeyValueFile $result ([ordered]@{ STATE = 'OK'; PDF = ''; PIECE = 'p4'; MESSAGE = '' })
+        (Invoke-Step 'Publish' @('-JobId', $id4, '-Result', $result)).STATE | Should Be 'OK'
+        $r = Read-KeyValueFile (Join-Path $t.Share "reports\$id4.result")
+        $r.STATE | Should Be 'OK'
+        $r.PDF | Should Be ''
+        Test-Path -LiteralPath (Join-Path $t.Share "processed\$id4.job") | Should Be $true
+        $id5 = Send-TestJob
+        (Invoke-Step 'Next').JOBID | Should Be $id5
+        $broken = Join-Path $stationDir 'broken.pdf'
+        [IO.File]::WriteAllText($broken, 'not a pdf')
+        $result = Join-Path $stationDir "$id5.result"
+        Write-KeyValueFile $result ([ordered]@{ STATE = 'OK'; PDF = $broken; PIECE = 'p5'; MESSAGE = '' })
+        (Invoke-Step 'Publish' @('-JobId', $id5, '-Result', $result)).STATE | Should Be 'OK'
+        $r = Read-KeyValueFile (Join-Path $t.Share "reports\$id5.result")
+        $r.STATE | Should Be 'ERROR'
+        $r.MESSAGE | Should Match 'PDF report could not be created'
+        Test-Path -LiteralPath (Join-Path $t.Share "failed\$id5.job") | Should Be $true
     }
     It 'reports a job that fails after its claim to the scanner PC, and pauses' {
         $id2 = Send-TestJob
@@ -446,7 +475,7 @@ Describe 'one network cycle of the agent (AgentCycle.ps1)' {
         $next = Get-VlcNextJob $t.Share 'Line 1'
         $pdf = Join-Path $t.Root 'station\report.pdf'
         New-TestPdf $pdf
-        [void](Complete-VlcJob $t.Share $id ([ordered]@{ STATE = 'OK'; VERDICT = 'OK'; SUMMARY = 'all 3 controls within tolerance'; MESSAGE = '' }) $pdf '' $next.Map 'Line 1')
+        [void](Complete-VlcJob $t.Share $id ([ordered]@{ STATE = 'OK'; MESSAGE = '' }) $pdf $next.Map 'Line 1')
         $r = & $cycle -Share $t.Share -Reports $t.Local
         $r.Done[0].JobId | Should Be $id
         Test-Path -LiteralPath $r.Done[0].Pdf | Should Be $true

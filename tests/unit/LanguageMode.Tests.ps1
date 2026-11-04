@@ -46,26 +46,26 @@ Describe 'entry scripts in ConstrainedLanguage mode' {
         Get-Keys $marker | Should Be (Get-Keys $normal)
         Get-Content -LiteralPath (Join-Path $logDir "VLReplay_$today.log") -Raw | Should Match $message
     }
-    It 'Get-MacroContext.ps1 writes STATE=ERROR on line 1 and the message on line 12' {
+    It 'Get-MacroContext.ps1 writes STATE=ERROR on line 1 and the message on line 10' {
         $ctx = Join-Path $TestDrive 'context.txt'
         $r = Invoke-Entry (Join-Path $app 'polyworks\Get-MacroContext.ps1') "-Out '$ctx' -Pwk '$TestDrive\w.pwk'" -Constrained
         $r.ExitCode | Should Be 1
         $lines = Get-Lines $ctx
         $lines[0] | Should Be 'STATE=ERROR'
-        $lines[11] | Should Match "^MESSAGE=$message"
+        $lines[9] | Should Match "^MESSAGE=$message"
         $normal = Join-Path $TestDrive 'context_normal.txt'
         (Invoke-Entry (Join-Path $app 'polyworks\Get-MacroContext.ps1') "-Out '$normal' -Pwk '$TestDrive\w.pwk'").ExitCode | Should Be 0
         Get-Keys $ctx | Should Be (Get-Keys $normal)
     }
-    It 'Complete-Evaluation.ps1 writes STATE=ERROR on line 1 and the message on line 8 of the verdict file' {
-        $out = Join-Path $TestDrive 'clm.verdict'
-        $r = Invoke-Entry (Join-Path $app 'polyworks\Complete-Evaluation.ps1') "-Controls '$TestDrive\none.controls' -Out '$out'" -Constrained
+    It 'Test-ScanFile.ps1 writes STATE=ERROR on line 1 and the message on line 2' {
+        $out = Join-Path $TestDrive 'clm.check'
+        $r = Invoke-Entry (Join-Path $app 'polyworks\Test-ScanFile.ps1') "-Stl '$TestDrive\none.stl' -Sha256 00 -Out '$out'" -Constrained
         $r.ExitCode | Should Be 1
         $lines = Get-Lines $out
         $lines[0] | Should Be 'STATE=ERROR'
-        $lines[7] | Should Match "^MESSAGE=$message"
-        $normal = Join-Path $TestDrive 'normal.verdict'
-        [void](Invoke-Entry (Join-Path $app 'polyworks\Complete-Evaluation.ps1') "-Controls '$TestDrive\none.controls' -Out '$normal'")
+        $lines[1] | Should Match "^MESSAGE=$message"
+        $normal = Join-Path $TestDrive 'normal.check'
+        [void](Invoke-Entry (Join-Path $app 'polyworks\Test-ScanFile.ps1') "-Stl '$TestDrive\none.stl' -Sha256 00 -Out '$normal'")
         Get-Keys $out | Should Be (Get-Keys $normal)
     }
     It 'Station-Step.ps1 writes the Context, Next and Publish files in the order the Station macro reads' {

@@ -21,7 +21,6 @@ $c.AfterExport.SelectedIndex = 2
 $c.VldFolderCard.Visibility = 'Collapsed'
 $c.ReturnFocus.IsChecked = $true
 $c.ProgramFolder.Text = 'C:\Users\Operator\Documents\VL programs'
-$c.KeepPieces.SelectedIndex = 0
 $c.OpenPdf.IsChecked = $true
 $c.SharePath.Text = '\\fileserver\metrology\VLConnector'
 $c.ShareStatus.Text = 'Connected - jobs, reports and status folders are writable.'

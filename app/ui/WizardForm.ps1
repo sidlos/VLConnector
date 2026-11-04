@@ -1,4 +1,4 @@
-# VL Connector setup wizard: scenario -> scanning options -> PolyWorks (ribbon tab, measured pieces) or network
+# VL Connector setup wizard: scenario -> scanning options -> PolyWorks (ribbon tab) or network
 # (shared folder, agent, Measurement Programs List) -> summary. Every step saves the settings you changed when
 # you go on; settings the administrator locked for this PC are shown read-only and left alone.
 # Dot-source this file (it needs the libraries loaded by VLConnector.ps1) and call Show-SetupWizard.
@@ -9,7 +9,7 @@ $script:WizardTitles = @{ Scenario = 'Scenario'; Scanning = 'Scanning'; PolyWork
 $script:WizardControls = [ordered]@{
     'scenario' = 'ChooseLocal', 'ChooseScanner', 'ChooseStation'; 'role' = 'ChooseScanner', 'ChooseStation'
     'vl.mode' = 'ModeHighSpeed', 'ModeStandard', 'ModeAsk'; 'vl.exportImmediately' = 'ExportImmediately'; 'vl.afterExport' = 'AfterExport'
-    'polyworks.keepPieces' = 'KeepPieces'; 'network.share' = 'SharePath', 'ShareBrowse'; 'network.autoOpenReports' = 'AutoOpenReports'
+    'network.share' = 'SharePath', 'ShareBrowse'; 'network.autoOpenReports' = 'AutoOpenReports'
 }
 
 # Saves the values of a wizard page that differ from the current settings; locked keys are skipped.
@@ -138,7 +138,6 @@ function Save-WizardPage {
             if ($c.AfterExport.SelectedItem) { $values['vl.afterExport'] = [string]$c.AfterExport.SelectedItem.Tag }
             Save-WizardValues $values
         }
-        'PolyWorks' { if ($c.KeepPieces.SelectedItem) { Save-WizardValues @{ 'polyworks.keepPieces' = [string]$c.KeepPieces.SelectedItem.Tag } } }
         'Network' {
             $share = $c.SharePath.Text.Trim()
             if (-not $share) { $c.ShareStatus.Text = 'Enter the shared folder.'; $c.ShareStatus.Foreground = Get-Brush 'ErrorBrush'; return $false }
@@ -175,7 +174,6 @@ function Show-SetupWizard {
     $c.ModeAsk.IsChecked = $cfg.vl.mode -eq 'Ask'
     $c.ExportImmediately.IsChecked = [bool]$cfg.vl.exportImmediately
     foreach ($item in $c.AfterExport.Items) { if ([string]$item.Tag -eq [string]$cfg.vl.afterExport) { $c.AfterExport.SelectedItem = $item } }
-    foreach ($item in $c.KeepPieces.Items) { if ([string]$item.Tag -eq [string]$cfg.polyworks.keepPieces) { $c.KeepPieces.SelectedItem = $item } }
     $c.SharePath.Text = [string]$cfg.network.share
     $c.AutoOpenReports.IsChecked = [bool]$cfg.network.autoOpenReports
     # the start with Windows is the user's choice: shown as it is now, never switched on in advance

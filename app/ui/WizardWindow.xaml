@@ -34,7 +34,7 @@
                         <StackPanel Margin="0,0,26,0">
                             <TextBlock Text="PolyWorks on this PC" FontSize="15" FontWeight="SemiBold"/>
                             <TextBlock Style="{StaticResource CaptionText}" FontSize="13" Margin="0,4,0,0"
-                                       Text="VL and PolyWorks run on this computer. The Measure button in PolyWorks starts AI Replay in VL, evaluates the scan and creates the report."/>
+                                       Text="VL and PolyWorks run on this computer. The Measure button in PolyWorks starts AI Replay in VL and measures the scan with the template's measurement plan."/>
                         </StackPanel>
                     </RadioButton>
                     <RadioButton x:Name="ChooseScanner" GroupName="Scenario" Style="{StaticResource ChoiceCard}" Margin="0,0,0,8">
@@ -48,7 +48,7 @@
                         <StackPanel Margin="0,0,26,0">
                             <TextBlock Text="PolyWorks station for the scanner PCs" FontSize="15" FontWeight="SemiBold"/>
                             <TextBlock Style="{StaticResource CaptionText}" FontSize="13" Margin="0,4,0,0"
-                                       Text="This PC has PolyWorks. It takes the scans from the shared folder, evaluates them with the template of each VL program and sends the reports back."/>
+                                       Text="This PC has PolyWorks. It takes the scans from the shared folder, measures them with the template of each VL program and sends the reports back."/>
                         </StackPanel>
                     </RadioButton>
                 </StackPanel>
@@ -143,23 +143,9 @@
                             </StackPanel>
                         </Grid>
                     </Border>
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Keep measured pieces" Style="{StaticResource BodyText}"/>
-                                <TextBlock Text="The PDF and CSV are always kept." Style="{StaticResource CaptionText}"/>
-                            </StackPanel>
-                            <ComboBox x:Name="KeepPieces" Grid.Column="1" Width="230" VerticalAlignment="Center">
-                                <ComboBoxItem Content="Every piece" Tag="All"/>
-                                <ComboBoxItem Content="Only NOK pieces" Tag="Nok"/>
-                                <ComboBoxItem Content="None (PDF and CSV only)" Tag="None"/>
-                            </ComboBox>
-                        </Grid>
-                    </Border>
                     <Border x:Name="PropertyHint" Style="{StaticResource InfoBar}">
                         <TextBlock Style="{StaticResource BodyText}" FontSize="13" TextWrapping="Wrap"
-                                   Text="Each part template needs the project property 'VL program' with the path to its .vld4 (File > Project > Properties > Add)."/>
+                                   Text="Each part template needs the project property 'VL program' with the path to its .vld4 (File > Project > Properties > Add). The template decides the rest: its measurement plan, its report, its Control Reviewer. PolyWorks judges the part; VL Connector shows a message only when something fails."/>
                     </Border>
                 </StackPanel>
 

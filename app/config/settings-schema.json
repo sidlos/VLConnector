@@ -1,5 +1,6 @@
 {
-    "about": "Allowed values of every VL Connector setting (lib\\Settings.ps1 checks each layer against it). machineOnly: only defaults.json and the administrator's policy in machine.json may set it; a user file or the machine defaults cannot.",
+    "about": "Allowed values of every VL Connector setting (lib\\Settings.ps1 checks each layer against it). machineOnly: only defaults.json and the administrator's policy in machine.json may set it; a user file or the machine defaults cannot. retired: settings of earlier versions that are no longer used; every layer ignores them without a warning and the cleanup removes them from the user file.",
+    "retired": [ "polyworks.keepPieces", "polyworks.colorScaleMm" ],
     "settings": {
         "schema":                  { "type": "int", "min": 1, "max": 1 },
         "scenario":                { "type": "enum", "values": [ "Local", "Network" ] },
@@ -20,9 +21,7 @@
         "vl.menuSaveAs":           { "type": "menu", "machineOnly": true, "about": "VL menu path of Save As (English VL user interface)." },
         "vl.dialogRules":          { "type": "dialogRules", "machineOnly": true, "actions": [ "ScannerNotConnected" ], "about": "VL messages that end the run. No rule can confirm anything: only VL's two stage questions are ever confirmed, and only when vl.confirmStageMotion allows it." },
         "vl.testedVersions":       { "type": "stringList", "machineOnly": true, "about": "VL versions whose stage questions VL Connector knows." },
-        "polyworks.keepPieces":    { "type": "enum", "values": [ "All", "Nok", "None" ] },
         "polyworks.openPdf":       { "type": "bool" },
-        "polyworks.colorScaleMm":  { "type": "number", "min": 0.001, "max": 100 },
         "polyworks.reportsFolder": { "type": "path" },
         "polyworks.scansFolder":   { "type": "path" },
         "polyworks.deviceText":    { "type": "string", "maxLength": 200 },

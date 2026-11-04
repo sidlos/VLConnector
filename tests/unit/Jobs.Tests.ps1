@@ -31,8 +31,8 @@ Describe 'key=value files' {
     }
     It 'reads UTF-16 files written by PolyWorks' {
         $f = Join-Path $dir 'b.txt'
-        [IO.File]::WriteAllText($f, "STATE=OK`r`nVERDICT=NOK`r`n", [Text.Encoding]::Unicode)
-        (Read-KeyValueFile $f).VERDICT | Should Be 'NOK'
+        [IO.File]::WriteAllText($f, "STATE=OK`r`nPIECE=ABC_1`r`n", [Text.Encoding]::Unicode)
+        (Read-KeyValueFile $f).PIECE | Should Be 'ABC_1'
     }
     It 'ignores lines that are not KEY=value' {
         $f = Join-Path $dir 'c.txt'
@@ -106,15 +106,15 @@ Describe 'network job protocol' {
     }
     It 'publishes the result and the scanner PC receives only its own complete PDF' {
         $pdf = Join-Path $root 'station\report.pdf'; New-TestPdf $pdf
-        Complete-VlcJob $share $id ([ordered]@{ STATE = 'OK'; VERDICT = 'NOK'; SUMMARY = '2 of 13 out'; MESSAGE = '' }) $pdf ''
+        Complete-VlcJob $share $id ([ordered]@{ STATE = 'OK'; MESSAGE = '' }) $pdf
         Test-Path (Join-Path $share "processed\$id.job") | Should Be $true
         # a report of another PC is never fetched
         $foreign = 'OTHERPC_ABC_20260101-120000_abcd'
         Copy-Item $pdf (Join-Path $share "reports\$foreign.pdf")
-        Write-KeyValueFile (Join-Path $share "reports\$foreign.result") ([ordered]@{ JOBID = $foreign; STATE = 'OK'; VERDICT = 'OK' })
+        Write-KeyValueFile (Join-Path $share "reports\$foreign.result") ([ordered]@{ JOBID = $foreign; STATE = 'OK' })
         $done = @(Receive-VlcReports $share (Join-Path $root 'reports'))
         $done.Count | Should Be 1
-        $done[0].Verdict | Should Be 'NOK'
+        $done[0].State | Should Be 'OK'
         Test-Path $done[0].Pdf | Should Be $true
         Test-Path (Join-Path $root "reports\$foreign.pdf") | Should Be $false
         @(Get-VlcPendingJobs).Count | Should Be 0
@@ -127,6 +127,20 @@ Describe 'network job protocol' {
         Get-VlcNextJob $share | Should Be $null
         Test-Path (Join-Path $share "failed\$id3.job") | Should Be $true
         (Read-KeyValueFile (Join-Path $share "reports\$id3.result")).MESSAGE | Should Match 'differs'
+    }
+    It 'refuses a job of another protocol (a scanner PC of another version) with the reason' {
+        $id5 = New-VlcJobId 'ABC'
+        [void](New-VlcOutboxJob $id5 'ABC' $stl 'abc.vld4'); [void](Send-VlcOutbox $share)
+        $job = Join-Path $share "jobs\$id5.job"
+        $j = Read-KeyValueFile $job
+        $j.PROTOCOL | Should Be '2'
+        $j.PROTOCOL = '1'
+        Write-KeyValueFile $job $j
+        Get-VlcNextJob $share | Should Be $null
+        Test-Path (Join-Path $share "failed\$id5.job") | Should Be $true
+        $r = Read-KeyValueFile (Join-Path $share "reports\$id5.result")
+        $r.STATE | Should Be 'ERROR'
+        $r.MESSAGE | Should Match 'Protocol 1 is not supported by this station'
     }
     It 'sends a job of an unknown VL program to failed' {
         $id4 = New-VlcJobId 'XYZ'

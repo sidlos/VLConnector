@@ -8,16 +8,14 @@
      2 RUN          time stamp of this run, yyyyMMdd_HHmmss (part of the piece name)
      3 USER         operator name for the report
      4 UTC          start time, UTC (piece date in the report)
-     5 REPORTS_DIR  folder for PDF and CSV (setting, otherwise <workspace folder>\Reports)
+     5 REPORTS_DIR  folder for the PDF (setting, otherwise <workspace folder>\Reports)
      6 SCANS_DIR    folder for the STL files (setting, otherwise <workspace folder>\Scans)
-     7 KEEP_PIECES  All, Nok or None
-     8 OPEN_PDF     1 or 0
-     9 COLOR_SCALE  color map range in mm
-    10 DEVICE       device text for the report
-    11 VERSION      VL Connector version
-    12 MESSAGE      error text when STATE=ERROR
-    13 TIMEOUT_MIN  time limit of a scan in minutes (the macro waits a bit longer than VLReplay.ps1)
-    14 UNSAVED      1 when the open project has unsaved changes, 0 when not, empty when it cannot be told
+     7 OPEN_PDF     1 or 0
+     8 DEVICE       device text for the report
+     9 VERSION      VL Connector version
+    10 MESSAGE      error text when STATE=ERROR
+    11 TIMEOUT_MIN  time limit of a scan in minutes (the macro waits a bit longer than VLReplay.ps1)
+    12 UNSAVED      1 when the open project has unsaved changes, 0 when not, empty when it cannot be told
   Usage (from the macro): powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File Get-MacroContext.ps1
                           -Out <file> -Pwk <workspace file> -Project <project name>
 #>
@@ -29,7 +27,7 @@ param(
 
 # FullLanguage mode is needed (docs\IT-Review); checked before anything is loaded
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-    & (Join-Path (Split-Path $PSScriptRoot) 'lib\LanguageCheck.ps1') -Caller MacroContext -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $Out -Keys STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, KEEP_PIECES, OPEN_PDF, COLOR_SCALE, DEVICE, VERSION, MESSAGE, TIMEOUT_MIN, UNSAVED
+    & (Join-Path (Split-Path $PSScriptRoot) 'lib\LanguageCheck.ps1') -Caller MacroContext -Mode $ExecutionContext.SessionState.LanguageMode -OutFile $Out -Keys STATE, RUN, USER, UTC, REPORTS_DIR, SCANS_DIR, OPEN_PDF, DEVICE, VERSION, MESSAGE, TIMEOUT_MIN, UNSAVED
     exit 1
 }
 
@@ -63,7 +61,7 @@ $now = Get-Date
 $ctx = [ordered]@{
     STATE = 'OK'; RUN = $now.ToString('yyyyMMdd_HHmmss'); USER = $env:USERNAME
     UTC = $now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
-    REPORTS_DIR = ''; SCANS_DIR = ''; KEEP_PIECES = 'All'; OPEN_PDF = '1'; COLOR_SCALE = '0.5'
+    REPORTS_DIR = ''; SCANS_DIR = ''; OPEN_PDF = '1'
     DEVICE = ''; VERSION = (Get-VlcVersion); MESSAGE = ''; TIMEOUT_MIN = '45'; UNSAVED = (Get-VlcUnsavedState $Project)
 }
 try {
@@ -73,13 +71,7 @@ try {
     $base = if ($Pwk) { Split-Path $Pwk } else { Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'VL Connector' }
     $ctx.REPORTS_DIR = if ($pw.reportsFolder) { [string]$pw.reportsFolder } else { Join-Path $base 'Reports' }
     $ctx.SCANS_DIR = if ($pw.scansFolder) { [string]$pw.scansFolder } else { Join-Path $base 'Scans' }
-    $keep = [string]$pw.keepPieces
-    if ('All', 'Nok', 'None' -notcontains $keep) { throw "polyworks.keepPieces '$keep' is not valid (use All, Nok, None)." }
-    $ctx.KEEP_PIECES = (Get-Culture).TextInfo.ToTitleCase($keep.ToLower())
     $ctx.OPEN_PDF = if ($pw.openPdf) { '1' } else { '0' }
-    $scale = [double]$pw.colorScaleMm
-    if ($scale -le 0 -or $scale -gt 100) { throw "polyworks.colorScaleMm $scale is not valid." }
-    $ctx.COLOR_SCALE = $scale.ToString([Globalization.CultureInfo]::InvariantCulture)
     $ctx.DEVICE = [string]$pw.deviceText
     if ($pw.operatorName) { $ctx.USER = [string]$pw.operatorName }
     foreach ($dir in $ctx.REPORTS_DIR, $ctx.SCANS_DIR) {

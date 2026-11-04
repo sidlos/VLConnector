@@ -1,9 +1,10 @@
 # VL Connector for PolyWorks - User Guide
 
-VL Connector starts **AI Replay** in the KEYENCE VL Application, exports the scan as an STL file and has
-**PolyWorks|Inspector** evaluate it by the plan of the part template: the scan becomes a new piece of the template,
-PolyWorks plays the template's measurement sequence (alignment, measurement, color map, report), and VL Connector
-gives the **OK** or **NOK** verdict from the template's controls, the template's report as PDF and a CSV table.
+VL Connector starts **AI Replay** in the KEYENCE VL Application, exports the scan as an STL file and hands it to
+**PolyWorks|Inspector**: the scan becomes a new piece of the part template, and PolyWorks plays the template's
+measurement sequence (alignment, measurement, color map, report). **PolyWorks judges the part**, as the template is
+designed - in its formatted report (exported as PDF) and in the Control Reviewer. VL Connector gives no verdict of
+its own and reads no control; it speaks up only when something fails.
 
 > Unofficial tool - not an official KEYENCE or InnovMetric product and not covered by their warranty or
 > support. KEYENCE, VL-800 and PolyWorks are trademarks of their respective owners.
@@ -24,11 +25,12 @@ gives the **OK** or **NOK** verdict from the template's controls, the template's
 
 **A - PolyWorks on the scanner PC.** The operator opens the part template in PolyWorks|Inspector and presses
 **Measure**. VL starts AI Replay for the part; the operator scans as usual. After the last position the STL
-goes straight to PolyWorks, which evaluates it and shows the verdict and the report.
+goes straight to PolyWorks, which measures it by the template's plan; the template's report and the Control
+Reviewer show the result.
 
 **B - PolyWorks on another PC.** The scanner PC has only VL and VL Connector. The operator scans with AI
 Replay in VL as usual; **VL Connector** waits in the notification area, exports the STL and sends it to a shared
-network folder. A **PolyWorks station** evaluates it with the template of the VL program, and the PDF report
+network folder. A **PolyWorks station** measures it with the template of the VL program, and the PDF report
 comes back and opens on the scanner PC - only the reports of scans made on that PC.
 
 ## 2. Installation
@@ -118,7 +120,8 @@ be shown. **Make sure nothing blocks the stage and nobody reaches into the scann
 Each part needs a **template project** in a PolyWorks workspace. The template is your measurement plan; VL Connector
 only supplies the scan and adds no alignment, measurement or report of its own. The template has:
 
-- the **CAD model**, the features and comparison points with their tolerances (the **controls**: the verdict);
+- the **CAD model**, the features and comparison points with their tolerances (the **controls**: PolyWorks judges
+  the part by them, as you set them up - also controls that are only informative or apply to one variant);
 - **exactly one data object** for the scan (e.g. a first scan of the part, named `Scan`); VL Connector puts every
   new scan into it;
 - a **measurement sequence** (Play Inspection) that aligns the data and measures the objects, e.g. automatic
@@ -126,8 +129,9 @@ only supplies the scan and adds no alignment, measurement or report of its own. 
   sequence, and **remove or ignore its step that acquires the data object** (VL Connector supplies the data; that
   step would ask for a file; Edit > Ignore keeps it in the sequence without running it). The active sequence is
   played;
-- optionally a **formatted report** (control views with snapshots and tables, color map views): it is updated for
-  every piece and exported as the PDF. Without a formatted report there is no PDF, only the CSV;
+- optionally a **formatted report** (control views with snapshots and tables, color map views, a pass/fail
+  summary if you want one): it is updated for every piece and exported as the PDF. Without a formatted report
+  there is no PDF; the result is then in PolyWorks only (the new piece, the Control Reviewer);
 - recommended: a **piece template** (Home > Piece > New Template), made from the first piece once its inspection
   and report are complete - the way PolyWorks recommends repeating an inspection on many pieces. Every new piece
   is then made from it, whichever piece is open.
@@ -141,14 +145,15 @@ Add these **project properties** to the template (File > Project > Properties > 
 |---|---|---|
 | `VL program` | yes (scenario A) | Path to the AI Replay program of the part (`.vld4`). |
 | `VL options` | no | Options for this part, e.g. `-Mode Standard` - see [Options per part](#7-options-per-part). |
-| `VL reports` | no | Folder for PDF and CSV of this part (otherwise the workspace folder `Reports`). |
-| `VL test STL` | no | Path to an STL: the Measure button evaluates it without scanning (to try a template). |
+| `VL reports` | no | Folder for the PDF of this part (otherwise the workspace folder `Reports`). |
+| `VL test STL` | no | Path to an STL: the Measure button measures it without scanning (to try a template). |
 | `VL report` | no | Name of the formatted report to export as PDF, when the template has several (otherwise the first). |
 | `VL piece template` | no | Name of the piece template new pieces are made from, when the template has several (otherwise the first). |
 
 Save the template afterwards. Every scan becomes a **new piece of the template project** (PolyWorks pieces, Home >
 Piece > New Piece), named `<template>_<date>_<time>`. PolyWorks keeps the pieces of a part together (for
-statistics across pieces); the project grows with every kept piece, as it holds its scan.
+statistics across pieces). VL Connector keeps every piece - it deletes none - so the project grows with every
+piece, as it holds its scan; delete pieces you no longer need in PolyWorks.
 
 **How a new piece is made.** In PolyWorks every piece holds its own copy of the plan (objects, controls and
 tolerances, sequence, control views, report); only the CAD is shared. A new piece is a copy of its source, with no
@@ -162,23 +167,22 @@ data and no measurements, and it takes over the source's piece properties.
   plan must then be made in the piece that is open when you press Measure, and measuring while an older piece is
   open takes the plan of that piece.
 
-PolyWorks options the evaluation needs in a certain state (*Launch Play Inspection*, *Link to the piece template*
+PolyWorks options the measurement needs in a certain state (*Launch Play Inspection*, *Link to the piece template*
 and *Nonupdatable reports*, which would ask questions, *Disable the user interface* of Play Inspection, the
-confirmation of a data replacement) are set for the moment of the evaluation and restored right after; PolyWorks
+confirmation of a data replacement) are set for the moment of the measurement and restored right after; PolyWorks
 saves them with the project. The automatic project update, which each piece keeps
 as its own setting, is switched on for the new piece during the plan and switched off again if it was off.
 
-**Report:** the PDF is the template's own formatted report of the new piece, as you designed it. The CSV (opens in
-Excel) has one line per control with nominal, measured, deviation, tolerances and result, and the verdict in its
-last line; its header names the plan, the STL and its SHA-256. PolyWorks shows the verdict and the Control Reviewer
-after the evaluation (scenario A), VL Connector its notification (scenario B).
+**Result:** PolyWorks judges the part, by the template alone. The PDF is the template's own formatted report of
+the new piece, as you designed it (with pass/fail information if the report shows it); the new piece stays open
+in PolyWorks with everything the template shows, e.g. the Control Reviewer (scenario A). What the operator sees
+after a measurement is set up in PolyWorks, not in VL Connector.
 
-**Verdict rules.** The verdict is **OK** only when every control has one of PolyWorks' results inside the
-tolerance (*Within ... safe zone*, or *Within ... warning zone*, shown as OK with a warning). It is **NOK** when a
-control is beyond its tolerance, was not measured, or has a result VL Connector does not know (named in the
-summary). There is **no verdict** (an error, the piece is kept for checking) when the template has no controls,
-when the measurement plan failed in PolyWorks, or when the STL is not the one VL Connector exported.
-VL Connector evaluates the controls on features and comparison points, aligned and measured by the template's plan.
+**When something fails** VL Connector says what and why: the scan in VL, the check of the STL (it must be the
+one VL Connector exported), the template (no measurement sequence, a step that acquires data, not exactly one
+data object), the measurement plan in PolyWorks, or the PDF export. A new piece whose plan was played is kept
+for checking; a new piece whose template cannot be measured at all is removed again. When all went well there
+is no message of VL Connector.
 
 ## 5. Scenario A: the Measure button
 
@@ -213,19 +217,18 @@ The button only calls the installed macro, so updates of VL Connector need no ne
    AI Replay in VL is not stopped by it: finish or close it in VL.
 3. Scan the part in VL as usual (place the part, press Measure in VL for each position).
 4. After the last position the STL is exported and PolyWorks measures it as a new piece by the template's plan
-   (about 15-30 s). The new piece stays open with the **Control Reviewer** showing its controls, and the verdict
-   is shown. The PDF opens if this is switched on.
+   (about 15-30 s). The new piece stays open, and the template's report opens as PDF if the template has one and
+   *Open the PDF report after the measurement* is on (page PolyWorks). The result is PolyWorks': its report, its
+   Control Reviewer. VL Connector shows a message only when something failed.
 
-**Keep measured pieces** (page PolyWorks): *Every piece*, *Only NOK pieces* or *None* - the PDF and CSV are
-always kept. A piece that is not kept stays until the next measurement of the part, so you can still review it,
-and is removed then.
+Every measured piece stays in the template project; VL Connector deletes none.
 
 ## 6. Scenario B: network folder and station
 
 The operator on the scanner PC works **in VL as usual**: AI Replay, choose the program (.vld4) in VL, scan.
 **VL Connector** waits in the notification area and does the rest: after the last position it exports the
 STL (named `<program>_<date>_<time>.stl`), sends it to a shared folder, and opens the PDF report when the
-PolyWorks station has evaluated it.
+PolyWorks station has measured it.
 
 ### Shared folder
 
@@ -273,9 +276,11 @@ Then scan as usual. After each AI Replay VL Connector:
 2. saves it in `Documents\VL Connector\Scans` and sends it to the shared folder - if the folder is not
    reachable, it waits in a local outbox and is sent automatically later; a scan that cannot be sent five times
    is set aside with a notification (`%LOCALAPPDATA%\VLConnector\outbox\failed`, with the reason),
-3. shows a notification when the station has evaluated it (**OK** / **NOK**; several results in one note) and
-   opens the PDF (setting *Open my PDF reports automatically*). Reports are saved in `Documents\VL
-   Connector\Reports`. After a **NOK** the icon stays red until you open the report or choose *Mark the NOK result as seen*.
+3. opens the PDF report when the station has measured the scan (setting *Open my PDF reports automatically*;
+   only when the template has a formatted report). Reports are saved in `Documents\VL Connector\Reports`. PolyWorks
+   judges the part in the report; VL Connector shows no result of its own. When a measurement **fails**, a
+   notification says why (several in one note), and the icon stays red until you click the notification, open
+   the last report or choose *Mark the failed measurement as seen*.
 
 Only reports of scans made on this PC are opened. An AI Replay started by the Measure button of scenario A is
 never exported twice.
@@ -289,12 +294,12 @@ with the **VL Station** button (by hand: import `VLC_Station_Button.pwmacro` lik
 To run the station, open a PolyWorks|Inspector **used only for the station** (from the Workspace Manager as
 usual) and press **VL Station**. A small window shows the shared folder, the last job and a **Stop** button.
 The station takes the scans one by one (oldest first), opens the template of the VL program from the
-Measurement Programs List, measures the scan as a new piece by the template's plan and sends the report back; it
-uses the PolyWorks settings of the station PC (keep pieces). Keep the station PC logged on (a locked screen is
-fine) while scanning.
+Measurement Programs List, measures the scan as a new piece by the template's plan and sends the report back.
+Every measured piece stays in the template project on the station. Keep the station PC logged on (a locked
+screen is fine) while scanning.
 When a problem stops it - for example an unusable Measurement Programs List - its window shows *Paused* with the
 reason and the scanner PCs show *station paused*; it continues by itself once the problem is solved. A scan that
-cannot be evaluated is reported to its scanner PC with the reason; none stays unanswered (after
+cannot be measured is reported to its scanner PC with the reason; none stays unanswered (after
 `network.jobTimeoutMin`, 15 minutes by default, a scan a station did not finish is reported as failed).
 
 ## 7. Options per part
@@ -336,13 +341,15 @@ clear message. The stage confirmation is not an option per part (only the admini
 | Note *The piece ... is not linked to the piece template ...* | The piece is measured, but PolyWorks could not link it (e.g. the automatic project update of the piece template is off). Switch the automatic project update of the piece template on (status bar) and save it. |
 | *... has unsaved changes* before the scan | The open piece was changed and not saved. **Save and measure**, or **Cancel** and save or undo the changes yourself. |
 | *... must have exactly one data object* | Keep one data object (a scan of the part) in the template; VL Connector puts every new scan into it. |
-| No PDF, *the template has no formatted report* | Add a formatted report to the template (control views with snapshots, color maps); the CSV is written anyway. |
+| No PDF after the measurement | The template has no formatted report: no error, the result is in PolyWorks (the piece, the Control Reviewer). Add a formatted report to the template for a PDF. |
+| *The report ... could not be exported to PDF* | The project property `VL report` names a report the template does not have, or the report folder cannot be written. The piece is kept. |
+| *The measurement plan ... failed* | PolyWorks stopped the plan (e.g. the alignment). The piece is kept for checking: open it in PolyWorks. |
 | The plan stops with a PolyWorks message (e.g. *the data alignment cannot be activated*) | The scan does not fit the plan (wrong part, too little data). Answer the message in PolyWorks; the piece is kept for checking. A station waits until someone answers it. |
 | Scenario B: no STL after AI Replay | Does VL Connector run (icon in the notification area)? Settings > page Network > Start now. |
 | Scenario B: *station offline* in the menu of the icon | Start the station (VL Station button) and check the shared folder on the station PC. |
 | Scenario B: *station paused* in the menu of the icon | The station window shows the reason (e.g. the Measurement Programs List); correct it, the station continues. |
 | Scenario B: *Scan not sent* | The scan could not be sent five times; the reason is in the notification and in `%LOCALAPPDATA%\VLConnector\outbox\failed`. Scan the part again once the cause is solved. |
-| Scenario B: no report arrives | The station is busy or stopped; the scan is evaluated as soon as it runs. |
+| Scenario B: no report arrives | The station is busy or stopped; the scan is measured as soon as it runs. A template without a formatted report sends no PDF. |
 | Scenario B: *not in the Measurement Programs List* | Add the VL program (the .vld4 name without extension) to the list (page Network > Edit list). |
 | VL does not react to VL Connector | VL must show its English user interface; close extra dialogs in VL. |
 
@@ -353,6 +360,6 @@ VL Connector, kept for 30 days.
 
 VL Connector is not official software. You can try contacting your local sales engineer, who can forward
 questions to the local technical team. Please attach the support ZIP: settings window > **Diagnostics** >
-**Create ZIP**. It holds the logs of the last 14 days (they name parts, verdicts, Windows users, computers and
+**Create ZIP**. It holds the logs of the last 14 days (they name parts, Windows users, computers and
 folders), the settings (yours and the administrator's), the status check and the versions - no scans, reports or
 PolyWorks data. Look into it before you send it.

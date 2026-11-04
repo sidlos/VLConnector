@@ -7,8 +7,8 @@ version "7.0"
 # The part template has these project properties (File > Project > Properties, Add):
 #   "VL program"   AI Replay program (.vld4) of this part (required)
 #   "VL options"   optional options for this part, e.g. -Mode Standard -AfterExport Minimize
-#   "VL reports"   optional folder for PDF and CSV (otherwise the VL Connector setting or <workspace>\Reports)
-#   "VL test STL"  optional: evaluate this STL instead of scanning (test without the scanner)
+#   "VL reports"   optional folder for the PDF (otherwise the VL Connector setting or <workspace>\Reports)
+#   "VL test STL"  optional: measure this STL instead of scanning (test without the scanner)
 #   "VL report"    optional: the formatted report exported to PDF when the template has several
 #   "VL piece template"  optional: the piece template new pieces are made from, when the template has several
 # Measured pieces of VL Connector 1.x are copies of the template with the property "VL template"; pressing
@@ -17,8 +17,9 @@ version "7.0"
 # Flow: opens the template (when a 1.x copy is open) -> asks about unsaved changes of the open piece -> AI
 #   Replay in VL (VLReplay.ps1, progress and Cancel here) -> VLC_Evaluate.pwmacro: a new piece of the template
 #   project (from its piece template, or from the open piece), the scan in its data object, the template's
-#   own plan (Play Inspection: alignment, measurement, report), verdict and CSV from its controls, PDF of its
-#   report -> opens the PDF (setting) -> the piece stays open with the Control Reviewer -> verdict.
+#   own plan (Play Inspection: alignment, measurement, report), PDF of its report -> opens the PDF (setting).
+# PolyWorks judges the part: what the operator sees afterwards is the template's (its report, the Control
+# Reviewer, its own macro steps). VL Connector gives no verdict; it shows a message only when something fails.
 #==============================================================================
 MACRO END_ON_ERROR ( "Off" )
 
@@ -41,9 +42,7 @@ DECLARE vUser ""
 DECLARE vUtc ""
 DECLARE vReportDir ""
 DECLARE vScanDir ""
-DECLARE vKeep "All"
 DECLARE vOpenPdf "1"
-DECLARE vScale "0.5"
 DECLARE vDevice ""
 DECLARE vMsg ""
 DECLARE vMarker ""
@@ -72,16 +71,9 @@ DECLARE vProgName "test STL"
 DECLARE vParams ""
 DECLARE vResult ""
 DECLARE vRState ""
-DECLARE vVerdict ""
-DECLARE vSummary ""
 DECLARE vPdf ""
-DECLARE vCsv ""
 DECLARE vPiece ""
-DECLARE vKept "1"
 DECLARE vRMsg ""
-DECLARE vIcon "Information"
-DECLARE vNote ""
-DECLARE vReportLine ""
 DECLARE vUnsaved ""
 DECLARE vCurPiece ""
 DECLARE vBtn 0
@@ -116,7 +108,7 @@ SYSTEM COMMAND EXEC SYNC ( "IF", { "EXIST", "${_QUOTES}${vCtx}${_QUOTES}", "DEL"
 SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Get-MacroContext.ps1${_QUOTES}", "-Out", "${_QUOTES}${vCtx}${_QUOTES}", "-Pwk", "${_QUOTES}${vPwk}${_QUOTES}", "-Project", "${_QUOTES}${vProj}${_QUOTES}" }, vCallId )
 DATA_FILE READ LINE_FIELD ( $vCtx, 1, 2, vCtxState, "=", "On" )
 IF "$vCtxState" != "OK"
-    DATA_FILE READ LINE_FIELD ( $vCtx, 12, 2, vMsg, "=", "On" )
+    DATA_FILE READ LINE_FIELD ( $vCtx, 10, 2, vMsg, "=", "On" )
     IF "$vMsg" == ""
         SET vMsg "PowerShell could not run ${vApp}\polyworks\Get-MacroContext.ps1."
     ENDIF
@@ -128,12 +120,10 @@ DATA_FILE READ LINE_FIELD ( $vCtx, 3, 2, vUser, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 4, 2, vUtc, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 5, 2, vReportDir, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vCtx, 6, 2, vScanDir, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 7, 2, vKeep, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 8, 2, vOpenPdf, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 9, 2, vScale, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 10, 2, vDevice, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 13, 2, vTimeoutMin, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vCtx, 14, 2, vUnsaved, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 7, 2, vOpenPdf, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 8, 2, vDevice, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 11, 2, vTimeoutMin, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vCtx, 12, 2, vUnsaved, "=", "On" )
 # the macro waits 5 min longer than VLReplay.ps1, which ends a scan itself after its time limit
 IF "$vTimeoutMin" != ""
     SET vTimeoutS EXPR ( $vTimeoutMin * 60 + 300 )
@@ -273,7 +263,7 @@ ELSE
     ENDIF
 ENDIF
 
-# --- 3) evaluation: VLC_Evaluate.pwmacro (parameters file -> result file) ------------------------------
+# --- 3) measurement: VLC_Evaluate.pwmacro (parameters file -> result file) -----------------------------
 SET vParams "${vScanDir}\vlc_${vRun}.params"
 SET vResult "${vScanDir}\vlc_${vRun}.result"
 DATA_FILE CREATE ( $vParams, "Unicode", "Yes" )
@@ -283,10 +273,7 @@ DATA_FILE APPEND LINE ( $vParams, { "STL=$vStl" } )
 DATA_FILE APPEND LINE ( $vParams, { "RUN=$vRun" } )
 DATA_FILE APPEND LINE ( $vParams, { "REPORT_DIR=$vReportDir" } )
 DATA_FILE APPEND LINE ( $vParams, { "OPERATOR=$vUser" } )
-DATA_FILE APPEND LINE ( $vParams, { "PROGRAM=$vProgName" } )
 DATA_FILE APPEND LINE ( $vParams, { "UTC=$vUtc" } )
-DATA_FILE APPEND LINE ( $vParams, { "KEEP_PIECES=$vKeep" } )
-DATA_FILE APPEND LINE ( $vParams, { "COLOR_SCALE=$vScale" } )
 DATA_FILE APPEND LINE ( $vParams, { "DEVICE=$vDevice" } )
 DATA_FILE APPEND LINE ( $vParams, { "RESULT=$vResult" } )
 DATA_FILE APPEND LINE ( $vParams, { "JOBID=" } )
@@ -296,46 +283,26 @@ MACRO EXEC ( "${vApp}\polyworks\VLC_Evaluate.pwmacro", $vParams )
 MACRO GET_ERROR_STATUS ( vSt, vErr )
 MACRO INTERACTIVITY ( "On" )
 DATA_FILE READ LINE_FIELD ( $vResult, 1, 2, vRState, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vResult, 2, 2, vVerdict, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vResult, 3, 2, vSummary, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vResult, 4, 2, vPdf, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vResult, 5, 2, vCsv, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vResult, 6, 2, vPiece, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vResult, 7, 2, vKept, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vResult, 8, 2, vRMsg, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 2, 2, vPdf, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 3, 2, vPiece, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vResult, 4, 2, vRMsg, "=", "On" )
 SYSTEM COMMAND EXEC SYNC ( "DEL", { "/Q", "${_QUOTES}${vParams}${_QUOTES}", "${_QUOTES}${vResult}${_QUOTES}" } )
 IF "$vRState" != "OK"
     IF "$vRMsg" == ""
         SET vRMsg "$vErr"
     ENDIF
-    MACRO INPUT ERROR_MESSAGE ( "Error", "The evaluation of $vTemplate failed.", "$vRMsg", "Scan: $vStl" )
-    MACRO END ( "Error", "Evaluation" )
+    SET vText "Scan: $vStl"
+    IF "$vPiece" != ""
+        SET vText "Scan: $vStl. The piece $vPiece is kept for checking."
+    ENDIF
+    MACRO INPUT ERROR_MESSAGE ( "Error", "The measurement of $vTemplate failed.", "$vRMsg", "$vText" )
+    MACRO END ( "Error", "Measurement" )
 ENDIF
 
-# --- 4) the measured piece stays open: the Control Reviewer shows its controls ------------------------
-# a piece that is not kept (setting "Keep measured pieces") is removed at the next measurement of this part
-WINDOW VIEW ( { "Control Reviewer" }, "On" )
-WINDOW CONTROL_REVIEWER SOURCE ( "All Controls" )
-IF "$vKept" == "0"
-    SET vNote "The piece is not kept: it is removed at the next measurement."
-ENDIF
-
-# --- 5) report and verdict -----------------------------------------------------------------------------
+# --- 4) the result is PolyWorks': the new piece stays open, the template's report opens (setting) --------
+# What the operator sees afterwards is the template's: its report, the Control Reviewer, its own macro steps.
+# VL Connector gives no verdict, and no message when all went well.
 IF "$vOpenPdf" == "1" AND "$vPdf" != ""
     SYSTEM COMMAND EXEC ASYNC ( "start", { "${_QUOTES}${_QUOTES}", "${_QUOTES}${vPdf}${_QUOTES}" }, vCallId )
 ENDIF
-IF "$vVerdict" != "OK"
-    SET vIcon "Warning"
-ENDIF
-IF "$vRMsg" != ""
-    SET vNote "Note: $vRMsg"
-ENDIF
-IF "$vNote" == ""
-    SET vNote "Table: $vCsv"
-ENDIF
-SET vReportLine "Report: $vPdf"
-IF "$vPdf" == ""
-    SET vReportLine "Table: $vCsv"
-ENDIF
-MACRO ECHO ( "VL Connector: $vPiece: $vVerdict - $vSummary. Report $vPdf" )
-MACRO INPUT ERROR_MESSAGE ( $vIcon, "Part $vPiece: $vVerdict - $vSummary.", "$vReportLine", "$vNote" )
+MACRO ECHO ( "VL Connector: $vPiece measured. $vRMsg $vPdf" )

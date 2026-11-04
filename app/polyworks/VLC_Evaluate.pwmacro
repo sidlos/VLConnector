@@ -1,42 +1,35 @@
 version "7.0"
 #==============================================================================
-# VLC_Evaluate - VL Connector for PolyWorks: evaluates one scan (STL) by the plan of the part template.
+# VLC_Evaluate - VL Connector for PolyWorks: measures one scan (STL) by the plan of the part template.
 # Used by the Measure button (VLC_Measure.pwmacro) and by the PolyWorks station. Shows no dialog.
 #
 #   $1 = parameters file, one KEY=value per line in this order (see docs\Protocol.md):
 #         1 PWK          workspace file of the template
 #         2 TEMPLATE     template project name
-#         3 STL          scan to evaluate
-#         4 RUN          run name (date_time), used for the piece name and the report file names
-#         5 REPORT_DIR   folder for the PDF and CSV
+#         3 STL          scan to measure
+#         4 RUN          run name (date_time), used for the piece name and the PDF file name
+#         5 REPORT_DIR   folder for the PDF
 #         6 OPERATOR     operator name (piece property)
-#         7 PROGRAM      VL program file name for the CSV
-#         8 UTC          measurement time (ISO 8601, UTC) for the piece date
-#         9 KEEP_PIECES  All | Nok | None
-#        10 COLOR_SCALE  not used since 2.0: the color map belongs to the template's plan
-#        11 DEVICE       device text (piece property)
-#        12 RESULT       result file to write
-#        13 JOBID        job id (network scenario) or empty
-#        14 APP          VL Connector app folder (for Complete-Evaluation.ps1)
-#        15 STL_SHA256   SHA-256 of the STL when it was made (empty: not known, e.g. a test STL)
-#   Result file (written last): STATE, VERDICT, SUMMARY, PDF, CSV, PIECE, PIECE_KEPT, MESSAGE.
+#         7 UTC          measurement time (ISO 8601, UTC) for the piece date
+#         8 DEVICE       device text (piece property)
+#         9 RESULT       result file to write
+#        10 JOBID        job id (network scenario) or empty
+#        11 APP          VL Connector app folder (for Test-ScanFile.ps1)
+#        12 STL_SHA256   SHA-256 of the STL when it was made (empty: not known, e.g. a test STL)
+#   Result file (written last): STATE (OK: the plan was played; ERROR: something went wrong), PDF, PIECE, MESSAGE.
 #
-# The template is the customer's plan; VL Connector only supplies the scan. The template has
+# The template is the customer's plan, and PolyWorks judges the part: VL Connector supplies the scan, plays the
+# plan and exports the template's report; it reads no controls and gives no verdict of its own. The template has
 #   - a measurement sequence (the active one, played by Play Inspection) for the alignment and the
 #     measurement, without a step that acquires data itself (removed or ignored),
 #   - exactly one data object, which receives the scan,
-#   - its controls (the verdict) and, optionally, a formatted report (the PDF; project property "VL report"
-#     names it when the template has several),
+#   - optionally a formatted report (the PDF; project property "VL report" names it when there are several),
 #   - recommended by PolyWorks: a piece template made from the first inspected piece (project property
 #     "VL piece template" names it when there are several).
 # Every scan becomes a new piece of the template project (PIECE NEW), named <template>_<run>: made from the
 # piece template and linked to it, or, without a piece template, from the open piece. Each piece holds its own
-# copy of the plan; a new piece starts without data and measurements. The project is saved. A piece that is
-# not kept (setting "Keep measured pieces") is marked "VL remove" and removed at the next evaluation, so it can
-# still be reviewed in PolyWorks.
-# The verdict and the CSV come from Complete-Evaluation.ps1, which is fail-closed (only PolyWorks' documented
-# results inside the tolerance count as OK). Without a verdict (the plan failed, data inconsistent) the result
-# is STATE=ERROR and the piece is kept.
+# copy of the plan; a new piece starts without data and measurements. The piece is always kept, and the project
+# is saved.
 #==============================================================================
 MACRO END_ON_ERROR ( "Off" )
 MACRO INTERACTIVITY ( "Off" )
@@ -48,10 +41,7 @@ DECLARE vStl ""
 DECLARE vRun ""
 DECLARE vReportDir ""
 DECLARE vUser ""
-DECLARE vProgram ""
 DECLARE vUtc ""
-DECLARE vKeep "All"
-DECLARE vScale ""
 DECLARE vDevice ""
 DECLARE vResult ""
 DECLARE vJobId ""
@@ -61,6 +51,7 @@ DECLARE vProj ""
 DECLARE vPiece ""
 DECLARE vPieceMade 0
 DECLARE vFail ""
+DECLARE vNote ""
 DECLARE vSt
 DECLARE vErr
 DECLARE vPlan ""
@@ -74,16 +65,11 @@ DECLARE vOptLink ""
 DECLARE vOptReports ""
 DECLARE vOptConfirm ""
 DECLARE vOptUi ""
-DECLARE vPieces
-DECLARE vOld ""
-DECLARE vRemove ""
-DECLARE vProps
 DECLARE vTpls
 DECLARE vWantTpl ""
 DECLARE vSrcTpl ""
 DECLARE vPrev ""
 DECLARE vLinked ""
-DECLARE vLinkErr ""
 DECLARE vIgn ""
 DECLARE vAutoWas ""
 DECLARE vPlanSt ""
@@ -91,39 +77,15 @@ DECLARE vPlanErr ""
 DECLARE vFr ""
 DECLARE vNfr 0
 DECLARE vPdf ""
-DECLARE vCsv ""
-DECLARE vRepErr ""
-DECLARE vN 0
 DECLARE vI 0
-DECLARE vJ 0
-DECLARE vObj ""
-DECLARE vPass 1
-DECLARE vNc 0
-DECLARE vCtrls
-DECLARE vNom
-DECLARE vMeas
-DECLARE vDev
-DECLARE vUt
-DECLARE vUw
-DECLARE vLw
-DECLARE vLt
-DECLARE vRes
-DECLARE vCount 0
-DECLARE vSummary ""
-DECLARE vVerdictAll ""
-DECLARE vDetail ""
-DECLARE vKept 1
-DECLARE vCtl ""
-DECLARE vVer ""
 DECLARE vCallId
-DECLARE vEState ""
-DECLARE vECount ""
-DECLARE vERun ""
-DECLARE vEJob ""
-DECLARE vECsv ""
-DECLARE vEMsg ""
+DECLARE vCheck ""
+DECLARE vCheckState ""
+DECLARE vCheckMsg ""
 DECLARE vSysRoot ""
 DECLARE vPs ""
+DECLARE vState "ERROR"
+DECLARE vMessage ""
 
 DATA_FILE READ LINE_FIELD ( $vParams, 1, 2, vPwk, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 2, 2, vTemplate, "=", "On" )
@@ -131,35 +93,51 @@ DATA_FILE READ LINE_FIELD ( $vParams, 3, 2, vStl, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 4, 2, vRun, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 5, 2, vReportDir, "=", "On" )
 DATA_FILE READ LINE_FIELD ( $vParams, 6, 2, vUser, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 7, 2, vProgram, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 8, 2, vUtc, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 9, 2, vKeep, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 10, 2, vScale, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 11, 2, vDevice, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 12, 2, vResult, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 13, 2, vJobId, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 14, 2, vApp, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vParams, 15, 2, vStlHash, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 7, 2, vUtc, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 8, 2, vDevice, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 9, 2, vResult, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 10, 2, vJobId, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 11, 2, vApp, "=", "On" )
+DATA_FILE READ LINE_FIELD ( $vParams, 12, 2, vStlHash, "=", "On" )
 MACRO GET_ERROR_STATUS ( vSt, vErr )
 IF "$vResult" == ""
     MACRO END ( "Error", "VLC_Evaluate: the parameters file $vParams could not be read." )
 ENDIF
 SET vPiece "${vTemplate}_${vRun}"
-SET vPdf "${vReportDir}\${vPiece}.pdf"
-SET vCsv "${vReportDir}\${vPiece}.csv"
+# Windows PowerShell by its full path, never a powershell.exe found first on the search path
+SYSTEM ENVIRONMENT_VARIABLE GET ( "SystemRoot", vSysRoot )
+SET vPs "${vSysRoot}\System32\WindowsPowerShell\v1.0\powershell.exe"
 SYSTEM COMMAND EXEC SYNC ( "IF", { "NOT", "EXIST", "${_QUOTES}${vReportDir}${_QUOTES}", "MKDIR", "${_QUOTES}${vReportDir}${_QUOTES}" } )
 
-# --- 1) the template project ------------------------------------------------------------------------
-PROJECT PROPERTIES NAME GET ( vProj )
-IF "$vProj" != "$vTemplate"
-    FILE OPEN_PROJECT_IN_PWK ( $vPwk, $vTemplate )
-    MACRO GET_ERROR_STATUS ( vSt, vErr )
-    IF $vSt == "Error"
-        SET vFail "The template $vTemplate could not be opened: $vErr"
+# --- 1) the scan is the one VL Connector exported (its SHA-256 was recorded when it was made) --------------
+IF "$vStlHash" != ""
+    SET vCheck "${vResult}.check"
+    DATA_FILE CREATE ( $vCheck, "Ascii", "Yes" )
+    SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Test-ScanFile.ps1${_QUOTES}", "-Stl", "${_QUOTES}${vStl}${_QUOTES}", "-Sha256", $vStlHash, "-Out", "${_QUOTES}${vCheck}${_QUOTES}" }, vCallId )
+    DATA_FILE READ LINE_FIELD ( $vCheck, 1, 2, vCheckState, "=", "On" )
+    DATA_FILE READ LINE_FIELD ( $vCheck, 2, 2, vCheckMsg, "=", "On" )
+    SYSTEM COMMAND EXEC SYNC ( "DEL", { "/Q", "${_QUOTES}${vCheck}${_QUOTES}" } )
+    IF "$vCheckState" != "OK"
+        SET vFail "$vCheckMsg"
+        IF "$vFail" == ""
+            SET vFail "PowerShell could not run ${vApp}\polyworks\Test-ScanFile.ps1."
+        ENDIF
     ENDIF
 ENDIF
 
-# --- 2) the source of the new piece -------------------------------------------------------------------
+# --- 2) the template project ------------------------------------------------------------------------
+IF "$vFail" == ""
+    PROJECT PROPERTIES NAME GET ( vProj )
+    IF "$vProj" != "$vTemplate"
+        FILE OPEN_PROJECT_IN_PWK ( $vPwk, $vTemplate )
+        MACRO GET_ERROR_STATUS ( vSt, vErr )
+        IF $vSt == "Error"
+            SET vFail "The template $vTemplate could not be opened: $vErr"
+        ENDIF
+    ENDIF
+ENDIF
+
+# --- 3) the source of the new piece -------------------------------------------------------------------
 # PolyWorks recommends making new pieces from a piece template (made from the first inspected piece): the
 # project property "VL piece template" names it when there are several, otherwise the first one is used.
 # Without a piece template the new piece is a copy of the open piece, as PolyWorks' New Piece makes it.
@@ -185,7 +163,7 @@ IF "$vFail" == ""
     ENDIF
 ENDIF
 
-# --- 3) the new piece -------------------------------------------------------------------------------
+# --- 4) the new piece -------------------------------------------------------------------------------
 # PolyWorks asks about these on a new piece unless they are set; the user's choices are restored at once.
 # Unsaved changes of the open piece are saved by PolyWorks first (the Measure button asks before the scan).
 IF "$vFail" == ""
@@ -217,7 +195,7 @@ IF "$vFail" == ""
     ENDIF
 ENDIF
 
-# --- 4) the plan of the new piece: the active measurement sequence and the data object it measures ----
+# --- 5) the plan of the new piece: the active measurement sequence and the data object it measures ----
 IF "$vFail" == ""
     SEQUENCE ACTIVE GET ( vPlan )
     SET vNs 0
@@ -267,7 +245,7 @@ IF "$vFail" != "" AND $vPieceMade == 1
     ENDIF
 ENDIF
 
-# --- 5) the new piece: linked to its piece template, cleaned, labelled ---------------------------------
+# --- 6) the new piece: linked to its piece template, labelled ---------------------------------------
 IF "$vFail" == ""
     # Play Inspection and linking need PolyWorks' automatic project update, which each piece keeps as its own
     # setting: switched on for the new piece when it is off, and switched off again right after the plan
@@ -289,33 +267,9 @@ IF "$vFail" == ""
         SET vLinked ""
         PIECE LINKED_TEMPLATE NAME GET ( , vLinked )
         IF "$vLinked" != "$vSrcTpl"
-            SET vLinkErr "The piece $vPiece is not linked to the piece template $vSrcTpl: $vErr"
+            SET vNote "The piece $vPiece is not linked to the piece template $vSrcTpl: $vErr"
         ENDIF
     ENDIF
-    # a new piece takes over the customizable properties of the piece it is made from, also the mark of a
-    # piece that is not kept: the new piece starts without it
-    PIECE PROPERTIES CUSTOMIZABLE NAME ALL GET ( , vProps )
-    SET vI 1
-    WHILE $vI <= SIZE(vProps)
-        IF "$vProps[$vI]" == "VL remove"
-            PIECE PROPERTIES CUSTOMIZABLE REMOVE ( , { "VL remove" } )
-        ENDIF
-        ++ vI
-    ENDWHILE
-    # pieces the previous evaluations did not keep
-    PIECE NAME ALL GET ( vPieces )
-    SET vI 1
-    WHILE $vI <= SIZE(vPieces)
-        SET vOld $vPieces[$vI]
-        ++ vI
-        IF "$vOld" != "$vPiece"
-            SET vRemove ""
-            PIECE PROPERTIES CUSTOMIZABLE GET ( $vOld, "VL remove", vRemove )
-            IF "$vRemove" == "1"
-                PIECE DELETE ( { $vOld } )
-            ENDIF
-        ENDIF
-    ENDWHILE
     # report header: measurement date and time, serial number, operator, device
     IF "$vUtc" != ""
         PIECE PROPERTIES DATE_TIME_UTC ( , $vUtc )
@@ -323,7 +277,7 @@ IF "$vFail" == ""
     PIECE PROPERTIES CUSTOMIZABLE ( , { "Serial number", "Operator name", "Device" }, { $vPiece, $vUser, $vDevice } )
 ENDIF
 
-# --- 6) the scan replaces the data of the plan's data object ----------------------------------------
+# --- 7) the scan replaces the data of the plan's data object ----------------------------------------
 IF "$vFail" == ""
     DATA REPLACE OPTIONS ALIGNMENT_GROUP CONFIRM_AT_REPLACEMENT GET ( vOptConfirm )
     DATA REPLACE OPTIONS ALIGNMENT_GROUP CONFIRM_AT_REPLACEMENT ( "Off" )
@@ -343,7 +297,7 @@ IF "$vFail" == ""
     ENDIF
 ENDIF
 
-# --- 7) the plan: alignment and measurement as the template defines them ----------------------------
+# --- 8) the plan: alignment, measurement and report as the template defines them --------------------
 IF "$vFail" == ""
     PIECE PLAY_INSPECTION OPTIONS DISABLE_INTERFACE GET ( vOptUi )
     PIECE PLAY_INSPECTION OPTIONS DISABLE_INTERFACE ( "On" )
@@ -353,202 +307,61 @@ IF "$vFail" == ""
         PIECE PLAY_INSPECTION OPTIONS DISABLE_INTERFACE ( $vOptUi )
     ENDIF
     TREEVIEW OBJECT SELECT NONE
+    IF $vPlanSt == "Error"
+        SET vFail "The measurement plan $vPlan of the template $vTemplate failed: $vPlanErr"
+    ENDIF
 ENDIF
 IF "$vAutoWas" == "Off"
     PROJECT UPDATE AUTO_UPDATE ( "Off" )
 ENDIF
 
-# --- no plan or no piece: an error result, no verdict ------------------------------------------------
-IF "$vFail" != ""
-    IF $vPieceMade == 1
-        FILE SAVE_PROJECT
-    ELSE
-        SET vPiece ""
-    ENDIF
-    # PolyWorks' messages can have several lines; the result file has one line per value
-    MACRO STRING REPLACE ( $vFail, "${_NEWLINE}", " ", , , vFail )
-    DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
-    DATA_FILE APPEND LINE ( $vResult, { "STATE=ERROR" } )
-    DATA_FILE APPEND LINE ( $vResult, { "VERDICT=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PDF=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "CSV=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PIECE=$vPiece" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=$vPieceMade" } )
-    DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=$vFail" } )
-    MACRO END ( "Error", "VLC_Evaluate" )
-ENDIF
-
-# --- 8) verdict: the raw control data -> Complete-Evaluation.ps1 (verdict and CSV) ------------------
-# Windows PowerShell by its full path, never a powershell.exe found first on the search path
-SYSTEM ENVIRONMENT_VARIABLE GET ( "SystemRoot", vSysRoot )
-SET vPs "${vSysRoot}\System32\WindowsPowerShell\v1.0\powershell.exe"
-SET vCtl "${vResult}.controls"
-SET vVer "${vResult}.verdict"
-DATA_FILE CREATE ( $vCtl, "Unicode", "Yes" )
-DATA_FILE APPEND LINE ( $vCtl, { "FORMAT=VLC-CONTROLS-2" } )
-DATA_FILE APPEND LINE ( $vCtl, { "RUN=$vRun" } )
-DATA_FILE APPEND LINE ( $vCtl, { "JOBID=$vJobId" } )
-DATA_FILE APPEND LINE ( $vCtl, { "PIECE=$vPiece" } )
-DATA_FILE APPEND LINE ( $vCtl, { "TEMPLATE=$vTemplate" } )
-DATA_FILE APPEND LINE ( $vCtl, { "PROGRAM=$vProgram" } )
-DATA_FILE APPEND LINE ( $vCtl, { "OPERATOR=$vUser" } )
-DATA_FILE APPEND LINE ( $vCtl, { "STL=$vStl" } )
-DATA_FILE APPEND LINE ( $vCtl, { "STL_SHA256=$vStlHash" } )
-DATA_FILE APPEND LINE ( $vCtl, { "REPORT_DIR=$vReportDir" } )
-DATA_FILE APPEND LINE ( $vCtl, { "CSV=$vCsv" } )
-DATA_FILE APPEND LINE ( $vCtl, { "PLAN=$vPlan" } )
-DATA_FILE APPEND LINE ( $vCtl, { "PLAN_STATUS=$vPlanSt" } )
-IF "$vPlanErr" != ""
-    MACRO STRING REPLACE ( $vPlanErr, "${_NEWLINE}", " ", , , vPlanErr )
-ENDIF
-DATA_FILE APPEND LINE ( $vCtl, { "PLAN_ERROR=$vPlanErr" } )
-# pass 1 = features, pass 2 = comparison points; objects without controls (e.g. datums) are skipped
-SET vPass 1
-WHILE $vPass <= 2
-  IF $vPass == 1
-    TREEVIEW FEATURE COUNT GET ( vN )
-  ELSE
-    TREEVIEW COMPARISON_POINT COUNT GET ( vN )
-  ENDIF
-  SET vI 1
-  WHILE $vI <= $vN
-    IF $vPass == 1
-        TREEVIEW FEATURE NAME GET ( $vI, vObj )
-    ELSE
-        TREEVIEW COMPARISON_POINT NAME GET ( $vI, vObj )
-    ENDIF
-    ++ vI
-    SET vNc 0
-    MEASURE CONTROL COUNT GET ( vNc, { $vObj } )
-    IF $vNc > 0
-      MEASURE CONTROL NAME ALL GET ( vCtrls, $vObj )
-    ENDIF
-    SET vJ 1
-    WHILE $vJ <= $vNc
-        IF "$vCtrls[$vJ]" != ""
-            SET vNom ""
-            SET vMeas ""
-            SET vDev ""
-            SET vUt ""
-            SET vLt ""
-            SET vRes ""
-            MEASURE CONTROL NOMINAL GET ( $vCtrls[$vJ], vNom, $vObj )
-            MEASURE CONTROL MEASURED GET ( $vCtrls[$vJ], vMeas, $vObj )
-            MEASURE CONTROL DEVIATION GET ( $vCtrls[$vJ], vDev, $vObj )
-            MEASURE CONTROL TOLERANCE_ZONE LIMITS GET ( $vCtrls[$vJ], vUt, vUw, vLw, vLt, $vObj )
-            MEASURE CONTROL TEST TOLERANCE_ZONE_RESULT GET ( $vCtrls[$vJ], vRes, $vObj )
-            ++ vCount
-            DATA_FILE APPEND LINE ( $vCtl, { "CONTROL=$vObj" } )
-            DATA_FILE APPEND LINE ( $vCtl, { "NAME=$vCtrls[$vJ]" } )
-            DATA_FILE APPEND LINE ( $vCtl, { "NOMINAL=$vNom" } )
-            DATA_FILE APPEND LINE ( $vCtl, { "MEASURED=$vMeas" } )
-            DATA_FILE APPEND LINE ( $vCtl, { "DEVIATION=$vDev" } )
-            DATA_FILE APPEND LINE ( $vCtl, { "UPPER_TOL=$vUt" } )
-            DATA_FILE APPEND LINE ( $vCtl, { "UPPER_WARN=$vUw" } )
-            DATA_FILE APPEND LINE ( $vCtl, { "LOWER_WARN=$vLw" } )
-            DATA_FILE APPEND LINE ( $vCtl, { "LOWER_TOL=$vLt" } )
-            DATA_FILE APPEND LINE ( $vCtl, { "RESULT=$vRes" } )
-        ENDIF
-        ++ vJ
-    ENDWHILE
-  ENDWHILE
-  ++ vPass
-ENDWHILE
-DATA_FILE APPEND LINE ( $vCtl, { "END=$vCount" } )
-# the verdict file is emptied first: a verdict of an earlier piece can never be read
-DATA_FILE CREATE ( $vVer, "Ascii", "Yes" )
-SYSTEM COMMAND EXEC SYNC ( $vPs, { "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-WindowStyle", "Hidden", "-File", "${_QUOTES}${vApp}\polyworks\Complete-Evaluation.ps1${_QUOTES}", "-Controls", "${_QUOTES}${vCtl}${_QUOTES}", "-Out", "${_QUOTES}${vVer}${_QUOTES}" }, vCallId )
-DATA_FILE READ LINE_FIELD ( $vVer, 1, 2, vEState, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vVer, 2, 2, vVerdictAll, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vVer, 3, 2, vDetail, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vVer, 4, 2, vECount, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vVer, 5, 2, vERun, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vVer, 6, 2, vEJob, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vVer, 7, 2, vECsv, "=", "On" )
-DATA_FILE READ LINE_FIELD ( $vVer, 8, 2, vEMsg, "=", "On" )
-SYSTEM COMMAND EXEC SYNC ( "DEL", { "/Q", "${_QUOTES}${vCtl}${_QUOTES}", "${_QUOTES}${vVer}${_QUOTES}" } )
-# the verdict must be the one of this piece
-IF "$vEState" == "OK"
-    IF "$vERun" != "$vRun" OR "$vEJob" != "$vJobId" OR "$vECount" != "$vCount"
-        SET vEState "ERROR"
-        SET vEMsg "The verdict does not belong to this piece (run $vERun, job $vEJob, $vECount controls)."
-    ENDIF
-ENDIF
-IF "$vEState" != "OK"
-    IF "$vEMsg" == ""
-        SET vEMsg "PowerShell could not run ${vApp}\polyworks\Complete-Evaluation.ps1."
-    ENDIF
-    # no verdict: the piece is kept for checking
-    FILE SAVE_PROJECT
-    DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
-    DATA_FILE APPEND LINE ( $vResult, { "STATE=ERROR" } )
-    DATA_FILE APPEND LINE ( $vResult, { "VERDICT=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PDF=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "CSV=" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PIECE=$vPiece" } )
-    DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=1" } )
-    DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=$vEMsg (No verdict; the piece $vPiece is kept for checking.)" } )
-    MACRO END ( "Error", "Verdict" )
-ENDIF
-SET vSummary "$vVerdictAll - $vDetail"
-
 # --- 9) PDF: the template's own formatted report, updated by the plan -------------------------------
-# VL Connector builds no report of its own; without a formatted report in the template there is no PDF.
-PROJECT PROPERTIES CUSTOMIZABLE GET ( "VL report", vFr )
-TREEVIEW FORMATTED_REPORT COUNT GET ( vNfr )
-IF "$vFr" == "" AND $vNfr > 0
-    TREEVIEW FORMATTED_REPORT NAME GET ( 1, vFr )
+# A template without a formatted report has no PDF; that is no error.
+IF "$vFail" == ""
+    PROJECT PROPERTIES CUSTOMIZABLE GET ( "VL report", vFr )
+    TREEVIEW FORMATTED_REPORT COUNT GET ( vNfr )
+    IF "$vFr" == "" AND $vNfr > 0
+        TREEVIEW FORMATTED_REPORT NAME GET ( 1, vFr )
+    ENDIF
+    IF "$vFr" != ""
+        SET vPdf "${vReportDir}\${vPiece}.pdf"
+        FILE EXPORT_FORMATTED_REPORT PDF ( $vPdf, "Off", $vFr )
+        MACRO GET_ERROR_STATUS ( vSt, vErr )
+        IF $vSt == "Error"
+            SET vFail "The report $vFr could not be exported to PDF: $vErr"
+            SET vPdf ""
+        ENDIF
+    ENDIF
 ENDIF
-IF "$vFr" != ""
-    FILE EXPORT_FORMATTED_REPORT PDF ( $vPdf, "Off", $vFr )
+
+# --- 10) the piece is kept: the project is saved ----------------------------------------------------
+IF $vPieceMade == 1
+    FILE SAVE_PROJECT
     MACRO GET_ERROR_STATUS ( vSt, vErr )
-    IF $vSt == "Error"
-        SET vRepErr "The report $vFr could not be exported to PDF: $vErr"
-        SET vPdf ""
+    IF $vSt == "Error" AND "$vFail" == ""
+        SET vFail "The template project could not be saved: $vErr"
     ENDIF
 ELSE
-    SET vRepErr "The template has no formatted report, so there is no PDF."
-    SET vPdf ""
-ENDIF
-
-# --- 10) keep the piece or mark it for removal at the next evaluation --------------------------------
-# All: always; Nok: only NOK pieces; None: never
-SET vKept 1
-IF "$vKeep" == "None"
-    SET vKept 0
-ENDIF
-IF "$vKeep" == "Nok" AND "$vVerdictAll" == "OK"
-    SET vKept 0
-ENDIF
-IF $vKept == 0
-    PIECE PROPERTIES CUSTOMIZABLE ADD ( , { "VL remove" }, { "1" } )
-ENDIF
-FILE SAVE_PROJECT
-MACRO GET_ERROR_STATUS ( vSt, vErr )
-IF $vSt == "Error"
-    SET vRepErr "The template project could not be saved: $vErr"
+    SET vPiece ""
 ENDIF
 
 # --- 11) result for the caller ----------------------------------------------------------------------
-IF "$vLinkErr" != ""
-    IF "$vRepErr" == ""
-        SET vRepErr "$vLinkErr"
-    ELSE
-        SET vRepErr "$vRepErr $vLinkErr"
-    ENDIF
+SET vMessage "$vNote"
+IF "$vFail" == ""
+    SET vState "OK"
+ELSE
+    SET vMessage "$vFail"
+ENDIF
+# PolyWorks' messages can have several lines; the result file has one line per value
+IF "$vMessage" != ""
+    MACRO STRING REPLACE ( $vMessage, "${_NEWLINE}", " ", , , vMessage )
 ENDIF
 DATA_FILE CREATE ( $vResult, "Unicode", "Yes" )
-DATA_FILE APPEND LINE ( $vResult, { "STATE=OK" } )
-DATA_FILE APPEND LINE ( $vResult, { "VERDICT=$vVerdictAll" } )
-DATA_FILE APPEND LINE ( $vResult, { "SUMMARY=$vDetail" } )
+DATA_FILE APPEND LINE ( $vResult, { "STATE=$vState" } )
 DATA_FILE APPEND LINE ( $vResult, { "PDF=$vPdf" } )
-DATA_FILE APPEND LINE ( $vResult, { "CSV=$vECsv" } )
 DATA_FILE APPEND LINE ( $vResult, { "PIECE=$vPiece" } )
-DATA_FILE APPEND LINE ( $vResult, { "PIECE_KEPT=$vKept" } )
-IF "$vRepErr" != ""
-    MACRO STRING REPLACE ( $vRepErr, "${_NEWLINE}", " ", , , vRepErr )
+DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=$vMessage" } )
+MACRO ECHO ( "VLC_Evaluate: $vPiece: $vState $vMessage $vPdf" )
+IF "$vState" != "OK"
+    MACRO END ( "Error", "VLC_Evaluate" )
 ENDIF
-DATA_FILE APPEND LINE ( $vResult, { "MESSAGE=$vRepErr" } )
-MACRO ECHO ( "VLC_Evaluate: $vPiece: $vSummary. Report $vPdf" )

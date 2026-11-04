@@ -69,7 +69,7 @@
                                         </Border>
                                         <TextBlock Text="PolyWorks on this PC" FontSize="15" FontWeight="SemiBold" Margin="0,12,0,4"/>
                                         <TextBlock Style="{StaticResource CaptionText}" FontSize="13"
-                                                   Text="VL and PolyWorks run on this computer. The Measure button in PolyWorks starts the scan, evaluates it and creates the report."/>
+                                                   Text="VL and PolyWorks run on this computer. The Measure button in PolyWorks starts the scan and measures it with the template's measurement plan."/>
                                     </StackPanel>
                                 </RadioButton>
                                 <RadioButton x:Name="ScenarioNetwork" GroupName="Scenario" Style="{StaticResource ChoiceCard}" Margin="6,0,0,0">
@@ -79,7 +79,7 @@
                                         </Border>
                                         <TextBlock Text="PolyWorks on another PC" FontSize="15" FontWeight="SemiBold" Margin="0,12,0,4"/>
                                         <TextBlock Style="{StaticResource CaptionText}" FontSize="13"
-                                                   Text="Scans go to a shared network folder. A PolyWorks station evaluates them and the PDF report comes back to this PC."/>
+                                                   Text="Scans go to a shared network folder. A PolyWorks station measures them and the PDF report comes back to this PC."/>
                                     </StackPanel>
                                 </RadioButton>
                             </UniformGrid>
@@ -94,7 +94,7 @@
                                     <TextBlock Text="&#xE7EE;" Style="{StaticResource IconText}"/>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="This PC is" Style="{StaticResource BodyText}"/>
-                                        <TextBlock Text="The scanner PC starts scans. The PolyWorks station evaluates them." Style="{StaticResource CaptionText}"/>
+                                        <TextBlock Text="The scanner PC starts scans. The PolyWorks station measures them." Style="{StaticResource CaptionText}"/>
                                     </StackPanel>
                                     <Border Grid.Column="2" Style="{StaticResource SegmentHost}" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal">
@@ -281,28 +281,9 @@
                         <!-- ===== PolyWorks ===== -->
                         <StackPanel x:Name="PagePolyWorks" Visibility="Collapsed">
                             <TextBlock Text="PolyWorks" Style="{StaticResource TitleText}"/>
-                            <TextBlock Text="Measured pieces, the PDF report and the Measure button." Style="{StaticResource CaptionText}" FontSize="14" Margin="0,4,0,8"/>
+                            <TextBlock Text="The PDF report and the Measure button. Every measured part stays a piece of the template project; PolyWorks judges it (the template's report, the Control Reviewer)." Style="{StaticResource CaptionText}" FontSize="14" Margin="0,4,0,8" TextWrapping="Wrap"/>
 
-                            <TextBlock Text="Results" Style="{StaticResource SectionText}"/>
-                            <Border Style="{StaticResource Card}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="44"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="&#xE74E;" Style="{StaticResource IconText}"/>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
-                                        <TextBlock Text="Keep measured pieces" Style="{StaticResource BodyText}"/>
-                                        <TextBlock Text="Saved pieces can be reopened in PolyWorks later. The PDF and CSV are always kept." Style="{StaticResource CaptionText}"/>
-                                    </StackPanel>
-                                    <ComboBox x:Name="KeepPieces" Grid.Column="2" Width="240" VerticalAlignment="Center">
-                                        <ComboBoxItem Content="Every piece" Tag="All"/>
-                                        <ComboBoxItem Content="Only NOK pieces" Tag="Nok"/>
-                                        <ComboBoxItem Content="None (PDF and CSV only)" Tag="None"/>
-                                    </ComboBox>
-                                </Grid>
-                            </Border>
+                            <TextBlock Text="After the measurement" Style="{StaticResource SectionText}"/>
                             <Border Style="{StaticResource Card}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -312,8 +293,8 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="&#xE8E5;" Style="{StaticResource IconText}"/>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
-                                        <TextBlock Text="Open the PDF report after the evaluation" Style="{StaticResource BodyText}"/>
-                                        <TextBlock Text="Opens in your default PDF viewer." Style="{StaticResource CaptionText}"/>
+                                        <TextBlock Text="Open the PDF report after the measurement" Style="{StaticResource BodyText}"/>
+                                        <TextBlock Text="When the template has a formatted report. Opens in your default PDF viewer." Style="{StaticResource CaptionText}"/>
                                     </StackPanel>
                                     <CheckBox x:Name="OpenPdf" Grid.Column="2" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
                                 </Grid>
@@ -466,7 +447,7 @@
                                     <TextBlock Text="&#xE7B8;" Style="{StaticResource IconText}"/>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
                                         <TextBlock Text="Collect diagnostics" Style="{StaticResource BodyText}"/>
-                                        <TextBlock Text="Creates a ZIP on your desktop: the logs of the last 14 days (they name parts, verdicts, Windows users, computers and folders), the settings (yours and the administrator's), the status check and the versions. No scans, reports or PolyWorks data. Look into it before you send it." Style="{StaticResource CaptionText}"/>
+                                        <TextBlock Text="Creates a ZIP on your desktop: the logs of the last 14 days (they name parts, Windows users, computers and folders), the settings (yours and the administrator's), the status check and the versions. No scans, reports or PolyWorks data. Look into it before you send it." Style="{StaticResource CaptionText}"/>
                                     </StackPanel>
                                     <Button x:Name="CollectDiagnostics" Style="{StaticResource AccentButton}" Grid.Column="2" Content="Create ZIP" VerticalAlignment="Center"/>
                                 </Grid>

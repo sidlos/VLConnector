@@ -234,7 +234,7 @@ Describe 'VL Connector processes' {
             [pscustomobject]@{ ProcessId = 3; SessionId = 2; CommandLine = "powershell.exe -File `"$dir\app\VLReplay.ps1`" -LaunchFile `"x`"" }
             [pscustomobject]@{ ProcessId = 4; SessionId = 1; CommandLine = "powershell.exe -File `"$dir\app\polyworks\Station-Step.ps1`" -Action Next" }
             [pscustomobject]@{ ProcessId = 5; SessionId = 3; CommandLine = "powershell.exe -STA -File `"$dir\app\VLConnector.ps1`" -Show Wizard" }
-            [pscustomobject]@{ ProcessId = 6; SessionId = 1; CommandLine = "powershell.exe -File `"$dir\app\polyworks\Complete-Evaluation.ps1`"" }
+            [pscustomobject]@{ ProcessId = 6; SessionId = 1; CommandLine = "powershell.exe -File `"$dir\app\polyworks\Test-ScanFile.ps1`"" }
             [pscustomobject]@{ ProcessId = 7; SessionId = 1; CommandLine = "powershell.exe -File `"C:\Other\app\Agent.ps1`"" }
             [pscustomobject]@{ ProcessId = 8; SessionId = 1; CommandLine = $null })
         $found = @(Get-VlcProcesses @($dir, 'C:\ProgramData\VLConnector') $fake)
@@ -327,7 +327,7 @@ Describe 'installation, update and removal on temporary folders (no administrato
     $outside = Join-Path $root 'outside'
     New-TestTree $outside @{ 'keep.txt' = 'keep' }
     New-TestTree $legacy @{ 'VERSION' = '1.0.0-rc10'; 'app\VLReplay.ps1' = '#'
-        'machine.json' = '{ "polyworks": { "keepPieces": "Nok" }, "vl": { "confirmStageMotion": true, "exe": "C:\\Tools\\other.exe" } }' }
+        'machine.json' = '{ "polyworks": { "openPdf": false }, "vl": { "confirmStageMotion": true, "exe": "C:\\Tools\\other.exe" } }' }
     New-Junction (Join-Path $legacy 'link') $outside
     $lines = New-Object Collections.Generic.List[string]
     $say = { param([string]$Text, [string]$Color) $lines.Add($Text) }.GetNewClosure()
@@ -345,7 +345,7 @@ Describe 'installation, update and removal on temporary folders (no administrato
         [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $target 'bin\VLConnector.Interop.dll')).Comments | Should Be "SourceSha256 $sourceHash"
         [IO.File]::ReadAllText((Join-Path $target 'VLC_Station_Button.pwmacro')) | Should Match ([regex]::Escape("MACRO EXEC ( `"$target\app\polyworks\VLC_Station.pwmacro`", `"$target\app`" )"))
         $machine = [IO.File]::ReadAllText((Join-Path $target 'machine.json')) | ConvertFrom-Json
-        $machine.defaults.polyworks.keepPieces | Should Be 'Nok'
+        $machine.defaults.polyworks.openPdf | Should Be $false
         $machine.policy.vl.confirmStageMotion | Should Be $false
         $machine.defaults.vl | Should Be $null
         ($lines -join "`n") | Should Match 'Not taken over .*vl\.confirmStageMotion'
@@ -360,7 +360,7 @@ Describe 'installation, update and removal on temporary folders (no administrato
         $r = Install-VlcMachine -Source $pkg -Target $target -LegacyDir $legacy -MenuRoot $menuRoot -SkipAcl -Say $say
         $r.ExitCode | Should Be 0
         Test-Path -LiteralPath (Join-Path "$target.old" 'install-info.txt') | Should Be $true
-        ([IO.File]::ReadAllText((Join-Path $target 'machine.json')) | ConvertFrom-Json).defaults.polyworks.keepPieces | Should Be 'Nok'
+        ([IO.File]::ReadAllText((Join-Path $target 'machine.json')) | ConvertFrom-Json).defaults.polyworks.openPdf | Should Be $false
         (Test-VlcPackageTree $target (Read-VlcManifest $target) $script:VlcGeneratedFiles -Strict).Ok | Should Be $true
     }
     It 'refuses machine settings that are not allowed, before anything is changed' {
