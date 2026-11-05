@@ -7,6 +7,8 @@ Reviewer show the result. VL Connector gives no verdict of its own; it only tell
 > **Unofficial tool.** It is not an official KEYENCE or InnovMetric product and is not covered by their
 > warranty or support. KEYENCE, VL-800 and PolyWorks are trademarks of their respective owners.
 
+![Setup wizard, first step: PolyWorks on this PC, a scanner PC with PolyWorks on another PC, or a PolyWorks station for the scanner PCs](docs/images/wizard-scenario.png)
+
 ## Two ways to work
 
 | | Scenario A: PolyWorks on the scanner PC | Scenario B: PolyWorks on another PC |
@@ -22,6 +24,23 @@ template. VL Connector adds every scan as a new piece of the template (from the 
 its data object and lets PolyWorks play the plan (Play Inspection). PolyWorks judges the part, as the template is
 designed (its report, the Control Reviewer); the PDF is the template's own report. VL Connector adds no alignment,
 measurement, report or verdict of its own.
+
+## Screenshots
+
+**Setup wizard** - adds the VL Connector tab with the Measure button to PolyWorks|Inspector (the PolyWorks layout
+is saved first):
+
+![Setup wizard, PolyWorks step: Add to PolyWorks](docs/images/wizard-polyworks.png)
+
+**Settings window** - how AI Replay runs in VL and what happens after the STL export; further pages for PolyWorks,
+the network folder and diagnostics:
+
+![Settings window, Scanning page](docs/images/settings-scanning.png)
+
+**Stage warning** - shown with a sound before VL Connector confirms a stage rotation itself (only when an
+administrator has switched this on for the PC):
+
+![Warning window: The stage rotates - keep clear of the scanner](docs/images/stage-warning.png)
 
 ## Requirements
 

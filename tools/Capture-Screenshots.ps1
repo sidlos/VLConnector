@@ -1,12 +1,21 @@
 <#
   Development tool: renders the windows offscreen with sample values and saves PNG screenshots for
-  the documentation (docs\images). Nothing is shown on screen. Run with powershell.exe -STA.
+  the documentation and the README (docs\images). Nothing is shown on screen. Run with powershell.exe -STA.
 #>
 param([string]$OutDir = (Join-Path (Split-Path $PSScriptRoot) 'docs\images'))
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path (Split-Path $PSScriptRoot) 'app\lib\Ui.ps1')
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+
+# Save-WindowImage renders a window's content without the window: the content takes the window's background
+# and text settings here, which it inherits only inside the window
+function Set-ContentLook($Window) {
+    $root = $Window.Content
+    if (-not $root.Background) { $root.Background = $Window.Background }
+    foreach ($p in [System.Windows.Documents.TextElement]::FontFamilyProperty, [System.Windows.Documents.TextElement]::FontSizeProperty,
+        [System.Windows.Documents.TextElement]::ForegroundProperty) { $root.SetValue($p, $Window.GetValue($p)) }
+}
 
 $ui = Import-Window 'SettingsWindow.xaml'
 $c = $ui.Controls
@@ -43,12 +52,33 @@ $c.StatusList.ItemsSource = @(
     [pscustomobject]@{ Id = 'button'; Title = 'Measure button in PolyWorks'; Detail = 'Not found in your PolyWorks ribbon yet.'; Glyph = $alert; Fore = $warn; Back = $warnBack; Action = 'Show me how'; ActionVisibility = 'Visible' }
 )
 
+Set-ContentLook $ui.Window
 $pages = 'Setup', 'Scanning', 'PolyWorks', 'Network', 'Diagnostics', 'About'
 foreach ($p in $pages) {
     foreach ($q in $pages) { $c["Page$q"].Visibility = if ($q -eq $p) { 'Visible' } else { 'Collapsed' } }
     $c["Nav$p"].IsChecked = $true
     $file = Join-Path $OutDir ("settings-{0}.png" -f $p.ToLower())
     Save-WindowImage $ui.Window $file
+    $file
+}
+
+# the setup wizard (ui\WizardForm.ps1) for PolyWorks on this PC: the first step, and the step that adds the
+# VL Connector tab with the Measure button to PolyWorks
+$ui = Import-Window 'WizardWindow.xaml'
+$c = $ui.Controls
+$c.AppIcon.Source = Get-AppImage 'VLC_icon_256.png'
+$c.ChooseLocal.IsChecked = $true
+$c.PwBar.Style = $ui.Window.FindResource('SuccessBar')
+$c.PwText.Text = 'PolyWorks MS 2026 (Inspector 26.5) found. PolyWorks|Inspector is open.'
+$c.TabTitle.Text = 'VL Connector tab with the Measure button in PolyWorks'
+Set-ContentLook $ui.Window
+$steps = [ordered]@{ Scenario = 'Step 1 of 4: Scenario'; PolyWorks = 'Step 3 of 4: PolyWorks' }
+foreach ($p in $steps.Keys) {
+    foreach ($q in 'Scenario', 'Scanning', 'PolyWorks', 'Network', 'Done') { $c["Page$q"].Visibility = if ($q -eq $p) { 'Visible' } else { 'Collapsed' } }
+    $c.StepText.Text = $steps[$p]
+    $c.BackButton.IsEnabled = $p -ne 'Scenario'
+    $file = Join-Path $OutDir ("wizard-{0}.png" -f $p.ToLower())
+    Save-WindowImage $ui.Window $file 860 680
     $file
 }
 
