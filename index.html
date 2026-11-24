@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VL Connector for PolyWorks - KEYENCE VL-800 scans measured in PolyWorks|Inspector</title>
+<meta name="description" content="VL Connector links KEYENCE VL-800 AI Replay scans with PolyWorks|Inspector: one Measure button, the STL is exported automatically and PolyWorks measures it by the part template. Free, open source (MIT), unofficial.">
+<meta name="keywords" content="KEYENCE VL-800, VL-800, VL Application, AI Replay, PolyWorks, PolyWorks Inspector, PolyWorks Metrology Suite, 3D scanner, STL export, inspection automation, metrology">
+<link rel="canonical" href="https://sidlos.github.io/VLConnector/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="VL Connector for PolyWorks">
+<meta property="og:description" content="KEYENCE VL-800 AI Replay scans measured automatically in PolyWorks|Inspector, by the part template.">
+<meta property="og:url" content="https://sidlos.github.io/VLConnector/">
+<meta property="og:image" content="https://sidlos.github.io/VLConnector/docs/images/wizard-scenario.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "VL Connector for PolyWorks",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Windows 10, Windows 11",
+  "softwareVersion": "3.0.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "description": "Links KEYENCE VL-800 AI Replay scans with PolyWorks|Inspector: the scan becomes a new piece of the part template and PolyWorks plays its measurement sequence.",
+  "url": "https://sidlos.github.io/VLConnector/",
+  "downloadUrl": "https://github.com/sidlos/VLConnector/releases/latest",
+  "codeRepository": "https://github.com/sidlos/VLConnector"
+}
+</script>
+<style>
+body { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-size: 15px; line-height: 1.55; color: #1b1b1b;
+       background: #f3f3f3; margin: 0; }
+main { max-width: 920px; margin: 28px auto; background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 32px 44px 44px; }
+h1 { font-size: 30px; font-weight: 600; margin: 0 0 6px; }
+.lead { font-size: 17px; color: #333; margin: 0 0 18px; }
+h2 { font-size: 21px; font-weight: 600; margin: 34px 0 10px; padding-top: 6px; border-top: 1px solid #ececec; }
+a { color: #0f6cbd; text-decoration: none; } a:hover { text-decoration: underline; }
+code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; background: #f3f3f3; padding: 1px 5px; border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+th, td { border: 1px solid #e3e3e3; padding: 7px 10px; text-align: left; vertical-align: top; }
+th { background: #f7f7f7; font-weight: 600; }
+blockquote { margin: 14px 0; padding: 10px 16px; background: #fff4ce; border-left: 4px solid #9d5d00; border-radius: 4px; }
+img { max-width: 100%; border: 1px solid #e5e5e5; border-radius: 6px; margin: 8px 0; }
+figure { margin: 18px 0; } figcaption { font-size: 13px; color: #555; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 8px; }
+.btn { display: inline-block; padding: 8px 16px; border-radius: 6px; border: 1px solid #0f6cbd; font-weight: 600; }
+.btn.primary { background: #0f6cbd; color: #fff; }
+.btn:hover { text-decoration: none; filter: brightness(0.95); }
+footer { max-width: 920px; margin: 0 auto 28px; color: #666; font-size: 12px; text-align: center; }
+@media (max-width: 640px) { main { margin: 0; border-radius: 0; padding: 22px 18px 30px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>VL Connector for PolyWorks</h1>
+<p class="lead">Measure <strong>KEYENCE VL-800</strong> scans in <strong>PolyWorks|Inspector</strong> with one button.
+Scan the part in the VL Application with <strong>AI Replay</strong> as usual; the STL is exported automatically and
+PolyWorks measures it by the part's template - its report (PDF) and its Control Reviewer show the result.</p>
+
+<div class="actions">
+  <a class="btn primary" href="https://github.com/sidlos/VLConnector/releases/latest">Download the latest release</a>
+  <a class="btn" href="https://github.com/sidlos/VLConnector">Source code on GitHub</a>
+  <a class="btn" href="docs/User-Guide.html">User guide</a>
+</div>
+
+<blockquote><strong>Unofficial tool.</strong> It is not an official KEYENCE or InnovMetric product and is not covered by
+their warranty or support. KEYENCE, VL-800 and PolyWorks are trademarks of their respective owners.</blockquote>
+
+<figure>
+  <img src="docs/images/wizard-scenario.png" alt="VL Connector setup wizard: PolyWorks on this PC, a scanner PC with PolyWorks on another PC, or a PolyWorks station for the scanner PCs" width="920">
+  <figcaption>The setup wizard picks the scenario: PolyWorks on the scanner PC, or a PolyWorks station on another PC.</figcaption>
+</figure>
+
+<h2>What it does</h2>
+<p>For each part, a PolyWorks template is the measurement plan: the CAD, one data object for the scan, the controls,
+a measurement sequence (alignment and measurement), optionally the report and a piece template. VL Connector adds
+every scan as a new piece of the template, puts the scan into its data object and lets PolyWorks play the plan
+(Play Inspection). <strong>PolyWorks judges the part</strong>, as the template is designed; VL Connector adds no
+alignment, measurement, report or verdict of its own and only speaks up when something fails.</p>
+
+<h2>Two ways to work</h2>
+<table>
+<tr><th></th><th>Scenario A: PolyWorks on the scanner PC</th><th>Scenario B: PolyWorks on another PC</th></tr>
+<tr><td>Start</td><td><strong>Measure</strong> button in PolyWorks (the template knows its VL program)</td><td>AI Replay in VL as usual - VL Connector waits in the notification area</td></tr>
+<tr><td>Scan</td><td>AI Replay in VL, STL exported automatically</td><td>the same; the STL is named after the .vld4 program plus date and time</td></tr>
+<tr><td>Measurement</td><td>in the same PolyWorks</td><td>a PolyWorks <strong>station</strong> takes the STL from a shared network folder and picks the template by the VL program</td></tr>
+<tr><td>Result</td><td>the template's report as PDF, opened automatically; the piece stays open in PolyWorks</td><td>the PDF comes back and opens only on the PC that scanned the part</td></tr>
+</table>
+
+<h2>Screenshots</h2>
+<figure>
+  <img src="docs/images/wizard-polyworks.png" alt="Setup wizard, PolyWorks step: adds the VL Connector tab with the Measure button to PolyWorks|Inspector" width="920" loading="lazy">
+  <figcaption>The setup wizard adds the VL Connector tab with the Measure button to PolyWorks|Inspector.</figcaption>
+</figure>
+<figure>
+  <img src="docs/images/settings-scanning.png" alt="Settings window, Scanning page: how AI Replay runs in the KEYENCE VL Application" width="920" loading="lazy">
+  <figcaption>Settings: how AI Replay runs in VL and what happens after the STL export.</figcaption>
+</figure>
+
+<h2>Requirements</h2>
+<ul>
+  <li>Windows 10 or 11, Windows PowerShell 5.1.</li>
+  <li>KEYENCE VL-800 with VL Application 4.6 (tested: 4.6.1.6002), English user interface.</li>
+  <li>PolyWorks Metrology Suite 2026 (Inspector) on the evaluating PC.</li>
+  <li>Scenario B: a shared network folder.</li>
+  <li>Administrator rights for the installation, not for using it. Nothing is copied into the program folders of VL or PolyWorks.</li>
+</ul>
+
+<h2>Install</h2>
+<ol>
+  <li>Download the ZIP from the <a href="https://github.com/sidlos/VLConnector/releases/latest">latest release</a> and check its SHA-256 against <code>SHA256SUMS.txt</code>.</li>
+  <li>Extract it and run <strong>Install.cmd</strong> (installs to <code>C:\Program Files\VLConnector</code>).</li>
+  <li>The setup wizard asks for the scenario and adds the VL Connector tab to PolyWorks|Inspector.</li>
+</ol>
+
+<h2>Documents</h2>
+<ul>
+  <li><a href="docs/User-Guide.html">User guide</a>: setup, part templates, the Measure button, the network scenario, troubleshooting.</li>
+  <li><a href="docs/IT-Review.html">Notes for IT</a>: what runs, which Windows interfaces are used and why, files, permissions.</li>
+  <li><a href="docs/Protocol.html">Protocol</a>: files exchanged between VL Connector, PolyWorks and the station.</li>
+  <li><a href="docs/Acceptance-Checklist.html">Acceptance checklist</a>: tests at the scanner before production use.</li>
+  <li><a href="https://github.com/sidlos/VLConnector/blob/main/CHANGELOG.md">Changelog</a></li>
+</ul>
+
+<h2>License</h2>
+<p>Free and open source under the <a href="https://github.com/sidlos/VLConnector/blob/main/LICENSE">MIT license</a>.
+Everything is plain, readable PowerShell, PolyWorks macro (MSCL), XAML, JSON and C# source.</p>
+</main>
+<footer>VL Connector for PolyWorks - <a href="https://github.com/sidlos/VLConnector">github.com/sidlos/VLConnector</a></footer>
+</body>
+</html>
